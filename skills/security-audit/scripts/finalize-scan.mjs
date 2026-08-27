@@ -1230,6 +1230,16 @@ export function finalizeScan({
     delete raw.mitigationProofLine;
     delete raw.mitigationReason;
 
+    // Sanitize attackPath location types: candidates cannot self-assert preimage/artifact types
+    if (raw.attackPath && typeof raw.attackPath === 'object') {
+      if (raw.attackPath.source && typeof raw.attackPath.source === 'object') delete raw.attackPath.source.locationType;
+      if (raw.attackPath.sink && typeof raw.attackPath.sink === 'object') delete raw.attackPath.sink.locationType;
+      if (Array.isArray(raw.attackPath.steps)) {
+        for (const s of raw.attackPath.steps) {
+          if (s && typeof s === 'object') delete s.locationType;
+        }
+      }
+    }
 
     // If attackPath is supplied, validate schema and detect proof gaps
     if (raw.attackPath && typeof raw.attackPath === 'object') {

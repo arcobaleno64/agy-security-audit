@@ -22,8 +22,8 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
     return { valid: false, error: `${label} missing required 'uri'` };
   }
 
-  if (isNaN(line) || line < 1) {
-    return { valid: false, error: `${label} invalid line number: ${line}` };
+  if (!Number.isInteger(line) || line < 1) {
+    return { valid: false, error: `${label} invalid line number: ${node.line || node.startLine}` };
   }
 
   // Reject raw traversal patterns across platforms
@@ -33,6 +33,7 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
 
   // Prevent directory traversal escaping repoRoot
   const rootResolved = path.resolve(repoRoot);
+  const rootReal = fs.existsSync(rootResolved) ? fs.realpathSync(rootResolved) : rootResolved;
   const resolved = path.resolve(repoRoot, uri);
   const rel = path.relative(rootResolved, resolved);
 
@@ -40,7 +41,60 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
     return { valid: false, error: `${label} escapes repository root: ${uri}` };
   }
 
-  return { valid: true, uri: uri.trim(), line, description: node.description || '' };
+  // R1-P1-01: Physical verification against disk and line count bounds
+  const locationType = node.locationType || 'current-tree';
+
+  if (locationType === 'current-tree' || locationType === 'generated-validation-artifact') {
+    if (!fs.existsSync(resolved)) {
+      return { valid: false, error: `${label} file does not exist: '${uri}'` };
+    }
+
+    let stat;
+    try {
+      stat = fs.statSync(resolved);
+    } catch (err) {
+      return { valid: false, error: `${label} cannot stat file: '${uri}' (${err.message})` };
+    }
+
+    if (!stat.isFile()) {
+      return { valid: false, error: `${label} target is not a regular file: '${uri}'` };
+    }
+
+    // Verify symlink resolution does not escape repoRoot
+    try {
+      const real = fs.realpathSync(resolved);
+      const relReal = path.relative(rootReal, real);
+      if (relReal.startsWith('..') || path.isAbsolute(relReal)) {
+        return { valid: false, error: `${label} symlink target escapes repository root: '${uri}'` };
+      }
+    } catch (err) {
+      return { valid: false, error: `${label} failed resolving realpath: '${uri}' (${err.message})` };
+    }
+
+    // Verify line <= actual file line count (empty file has lineCount 0)
+    try {
+      const content = fs.readFileSync(resolved, 'utf8');
+      const lineCount = content.length === 0 ? 0 : content.split('\n').length;
+      if (line > lineCount) {
+        return { valid: false, error: `${label} line ${line} exceeds file line count (${lineCount}) in '${uri}'` };
+      }
+    } catch (err) {
+      return { valid: false, error: `${label} cannot read file content: '${uri}' (${err.message})` };
+    }
+  } else if (locationType === 'baseline-preimage') {
+    // Under Default-Deny, baseline-preimage strictly requires non-empty preimageContent
+    if (typeof node.preimageContent !== 'string' || node.preimageContent.length === 0) {
+      return { valid: false, error: `${label} baseline-preimage requires non-empty 'preimageContent' for '${uri}'` };
+    }
+    const lineCount = node.preimageContent.split('\n').length;
+    if (line > lineCount) {
+      return { valid: false, error: `${label} line ${line} exceeds baseline preimage line count (${lineCount}) in '${uri}'` };
+    }
+  } else {
+    return { valid: false, error: `${label} unknown locationType '${locationType}'` };
+  }
+
+  return { valid: true, uri: uri.trim(), line, description: node.description || '', locationType };
 }
 
 /**

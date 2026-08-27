@@ -1821,7 +1821,160 @@ export function runTests() {
   }
   console.log('✔ 61. R1-P0-02 Invariant: verifyRemediation strictly mandates valid evidence bindings across all 3 lenses.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (61/61).');
+  // 62. R1-P1-01 Invariant: Attack Path Schema physically verifies file existence, regular file, line bounds, and symlink containment
+  // Case 1: Nonexistent source file -> REJECTED
+  const apNonexistentSource = {
+    attackPathId: 'AP-FAIL-1',
+    source: { uri: 'nope-source.js', line: 999, description: 'HTTP user input' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'executes command' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApNonexistent = validateAttackPath(apNonexistentSource, process.cwd());
+  if (resApNonexistent.valid || !resApNonexistent.error.includes('file does not exist')) {
+    throw new Error(`R1-P1-01 VIOLATION: Attack path with nonexistent file was accepted: ${JSON.stringify(resApNonexistent)}`);
+  }
+
+  // Case 2: Line beyond EOF in sink -> REJECTED
+  const apBeyondEof = {
+    attackPathId: 'AP-FAIL-2',
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Input' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 999999, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApBeyondEof = validateAttackPath(apBeyondEof, process.cwd());
+  if (resApBeyondEof.valid || !resApBeyondEof.error.includes('exceeds file line count')) {
+    throw new Error(`R1-P1-01 VIOLATION: Attack path with line beyond EOF was accepted: ${JSON.stringify(resApBeyondEof)}`);
+  }
+
+  // Case 3: Target is directory, not regular file -> REJECTED
+  const apTargetDir = {
+    attackPathId: 'AP-FAIL-3',
+    source: { uri: 'skills/security-audit/scripts', line: 1, description: 'Directory as file' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApTargetDir = validateAttackPath(apTargetDir, process.cwd());
+  if (resApTargetDir.valid || !resApTargetDir.error.includes('not a regular file')) {
+    throw new Error(`R1-P1-01 VIOLATION: Directory target in attack path was accepted: ${JSON.stringify(resApTargetDir)}`);
+  }
+
+  // Case 4: Baseline preimage locationType -> valid with preimageContent line bounds
+  const apBaselinePreimage = {
+    attackPathId: 'AP-PASS-PREIMAGE',
+    source: {
+      uri: 'deleted-file.js',
+      line: 5,
+      description: 'Historical deleted source',
+      locationType: 'baseline-preimage',
+      preimageContent: 'line1\nline2\nline3\nline4\nline5\nline6\n'
+    },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApPreimage = validateAttackPath(apBaselinePreimage, process.cwd());
+  if (!resApPreimage.valid) {
+    throw new Error(`R1-P1-01 VIOLATION: Valid baseline preimage attack path was rejected: ${JSON.stringify(resApPreimage)}`);
+  }
+
+  // Case 4b: Baseline preimage with missing preimageContent -> REJECTED
+  const apPreimageNoContent = {
+    attackPathId: 'AP-FAIL-NO-PREIMAGE',
+    source: {
+      uri: 'deleted-file.js',
+      line: 5,
+      description: 'Historical deleted source',
+      locationType: 'baseline-preimage'
+    },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApPreimageNoContent = validateAttackPath(apPreimageNoContent, process.cwd());
+  if (resApPreimageNoContent.valid || !resApPreimageNoContent.error.includes('requires non-empty \'preimageContent\'')) {
+    throw new Error(`R1-P1-01 VIOLATION: Preimage without content was accepted: ${JSON.stringify(resApPreimageNoContent)}`);
+  }
+
+  // Case 4c: Baseline preimage with line exceeding line count -> REJECTED
+  const apPreimageBeyondEof = {
+    attackPathId: 'AP-FAIL-PREIMAGE-EOF',
+    source: {
+      uri: 'deleted-file.js',
+      line: 999,
+      description: 'Historical deleted source',
+      locationType: 'baseline-preimage',
+      preimageContent: 'line1\nline2\n'
+    },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApPreimageBeyondEof = validateAttackPath(apPreimageBeyondEof, process.cwd());
+  if (resApPreimageBeyondEof.valid || !resApPreimageBeyondEof.error.includes('exceeds baseline preimage line count')) {
+    throw new Error(`R1-P1-01 VIOLATION: Preimage with out-of-bounds line was accepted: ${JSON.stringify(resApPreimageBeyondEof)}`);
+  }
+
+  // Case 4d: Nonexistent generated-validation-artifact -> REJECTED
+  const apArtifactNonexistent = {
+    attackPathId: 'AP-FAIL-ARTIFACT',
+    source: {
+      uri: 'nonexistent/artifact.json',
+      line: 1,
+      locationType: 'generated-validation-artifact'
+    },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApArtifactNonexistent = validateAttackPath(apArtifactNonexistent, process.cwd());
+  if (resApArtifactNonexistent.valid || !resApArtifactNonexistent.error.includes('file does not exist')) {
+    throw new Error(`R1-P1-01 VIOLATION: Nonexistent artifact was accepted: ${JSON.stringify(resApArtifactNonexistent)}`);
+  }
+
+  // Case 4e: Float line number -> REJECTED
+  const apFloatLine = {
+    attackPathId: 'AP-FAIL-FLOAT',
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1.5, description: 'Float line' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApFloatLine = validateAttackPath(apFloatLine, process.cwd());
+  if (resApFloatLine.valid || !resApFloatLine.error.includes('invalid line number')) {
+    throw new Error(`R1-P1-01 VIOLATION: Float line number was accepted: ${JSON.stringify(resApFloatLine)}`);
+  }
+
+  // Case 4f: Nonexistent step file -> REJECTED
+  const apNonexistentStep = {
+    attackPathId: 'AP-FAIL-STEP',
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Input' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    steps: [{ uri: 'nonexistent/step.js', line: 1, description: 'Hop' }],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApNonexistentStep = validateAttackPath(apNonexistentStep, process.cwd());
+  if (resApNonexistentStep.valid || !resApNonexistentStep.error.includes('file does not exist')) {
+    throw new Error(`R1-P1-01 VIOLATION: Nonexistent step file was accepted: ${JSON.stringify(resApNonexistentStep)}`);
+  }
+
+  // Case 5: Valid current-tree attack path -> VALID
+  const apValid = {
+    attackPathId: 'AP-PASS-VALID',
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Controllable input' },
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Process execution' },
+    steps: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 20, description: 'Step' }],
+    unmitigatedInvariant: 'No sanitizer exists'
+  };
+  const resApValid = validateAttackPath(apValid, process.cwd());
+  if (!resApValid.valid) {
+    throw new Error(`R1-P1-01 VIOLATION: Valid current-tree attack path was rejected: ${JSON.stringify(resApValid)}`);
+  }
+  console.log('✔ 62. R1-P1-01 Invariant: Attack Path Schema physically verifies file existence, regular file, line bounds, and symlink containment.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (62/62).');
 
   } finally {
     gitFixture.cleanup();
