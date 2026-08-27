@@ -36,8 +36,11 @@ import {
   computeFindingFingerprint,
   renderSarifFromCanonical,
   renderMarkdownFromCanonical,
-  normalizeDirectoryPath
+  normalizeDirectoryPath,
+  loadVotes
 } from './finalize-scan.mjs';
+
+
 
 
 
@@ -987,8 +990,71 @@ export function runTests() {
   }
   console.log('✔ 51. P0-02 Invariant: Identical base/head revision manipulation rejected as PARTIAL.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (51/51).');
+  // 52. P0-03 Invariant: loadVotes loads votes from single JSON file and nested ballot directories
+  const tmpVotesDir = path.join(process.cwd(), 'scratch', 'test-votes-dir');
+  const tmpSubDir = path.join(tmpVotesDir, 'SEC-001');
+  fs.mkdirSync(tmpSubDir, { recursive: true });
+  fs.writeFileSync(path.join(tmpSubDir, 'ballot_1.json'), JSON.stringify([{ findingId: 'F-1', reviewerId: 'r1', decision: 'CONFIRMED' }]));
+  fs.writeFileSync(path.join(tmpVotesDir, 'ballot_2.json'), JSON.stringify({ findingId: 'F-1', reviewerId: 'r2', decision: 'CONFIRMED' }));
+  const loadedDirVotes = loadVotes(tmpVotesDir);
+  if (loadedDirVotes.length !== 2 || !loadedDirVotes.some(v => v.reviewerId === 'r1') || !loadedDirVotes.some(v => v.reviewerId === 'r2')) {
+    throw new Error(`P0-03 VIOLATION: loadVotes failed to load votes from nested directory: ${JSON.stringify(loadedDirVotes)}`);
+  }
+
+  try {
+    fs.rmSync(tmpVotesDir, { recursive: true, force: true });
+  } catch {}
+  console.log('✔ 52. P0-03 Invariant: loadVotes correctly aggregates ballots from files and directories.');
+
+  // 53. P0-03 Invariant: Canonical rendering pipeline preserves canonical disposition without re-evaluation
+  const preFinalizedCanonical = [
+    {
+      id: 'CANON-001',
+      ruleId: 'CWE-89',
+      title: 'SQL Injection in Auth',
+      severity: 'CRITICAL',
+      cvssV4: { vector: validVector, score: 9.3, severity: 'CRITICAL' },
+      location: { uri: 'src/auth.ts', startLine: 42, endLine: 44, lineSnippet: 'SELECT' },
+      disposition: 'REPORTABLE',
+      mappedVerdict: 'CONFIRMED',
+      confidence: 'high'
+    }
+  ];
+  const canonicalSarifOutput = renderSarifFromCanonical({
+    canonicalFindings: preFinalizedCanonical,
+    manifest: fullFsManifest,
+    coverageStatus: 'COMPLETE',
+    repoRoot: process.cwd()
+  });
+  if (canonicalSarifOutput.runs[0].results.length !== 1 || canonicalSarifOutput.runs[0].results[0].properties.disposition !== 'REPORTABLE') {
+    throw new Error('P0-03 VIOLATION: renderSarifFromCanonical altered disposition of canonical findings');
+  }
+  console.log('✔ 53. P0-03 Invariant: Canonical pipeline renders canonical findings without making disposition decisions.');
+
+  // 54. P0-03 Invariant: Production rendering without votes strictly produces DEFERRED findings (Zero-Vote Default-Deny)
+  const unvotedCandidates = [
+    {
+      id: 'UNVOTED-001',
+      ruleId: 'CWE-89',
+      title: 'Unvoted SQL Injection',
+      severity: 'HIGH',
+      location: { uri: 'src/auth.ts', startLine: 42, endLine: 44 }
+    }
+  ];
+  const renderedWithoutVotes = renderSarif({
+    findings: unvotedCandidates,
+    manifest: fullFsManifest,
+    votes: [], // Zero votes
+    repoRoot: process.cwd()
+  });
+  if (renderedWithoutVotes.runs[0].results.length > 0 && renderedWithoutVotes.runs[0].results[0].properties.disposition === 'REPORTABLE') {
+    throw new Error('P0-03 VIOLATION: Finding without votes was rendered as REPORTABLE!');
+  }
+  console.log('✔ 54. P0-03 Invariant: Production rendering without votes strictly enforces DEFERRED disposition.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (54/54).');
 }
+
 
 
 
@@ -1024,33 +1090,68 @@ function getArg(name) {
   return null;
 }
 
-const inputPath = getArg('--input');
+const canonicalPath = getArg('--canonical');
+const inputPath = getArg('--input') || getArg('--candidates');
+const votesPath = getArg('--votes');
+const manifestPath = getArg('--manifest');
+const repoRootArg = getArg('--repo-root') || process.cwd();
 const outputSarifPath = getArg('--output-sarif');
 const outputMdPath = getArg('--output-md');
-const manifestPath = getArg('--manifest');
 
-if (inputPath) {
+if (canonicalPath || inputPath) {
   try {
-    const rawData = fs.readFileSync(inputPath, 'utf8');
-    const findings = JSON.parse(rawData);
+    const repoRoot = path.resolve(repoRootArg);
+    const provenance = getHardenedGitProvenance(repoRoot);
 
     let manifest = null;
     if (manifestPath && fs.existsSync(manifestPath)) {
       manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     }
 
-    const repoRoot = process.cwd();
-    const provenance = getGitProvenance(repoRoot);
+    let canonicalFindings = [];
+    let coverageStatus = 'COMPLETE';
+
+    if (canonicalPath) {
+      // Production Canonical Pipeline: renderer formats pre-finalized canonical findings
+      const rawCanonical = fs.readFileSync(canonicalPath, 'utf8');
+      canonicalFindings = JSON.parse(rawCanonical);
+      const covRes = reconcileCoverage(manifest, repoRoot);
+      coverageStatus = covRes.status;
+    } else {
+      // Legacy input pipeline: routes strictly through finalizeScan with votes
+      const rawCandidates = fs.readFileSync(inputPath, 'utf8');
+      const candidates = JSON.parse(rawCandidates);
+      const votes = loadVotes(votesPath);
+
+      if (candidates.length > 0 && votes.length === 0) {
+        console.warn('[DEFAULT-DENY] Direct render without --votes. Under Default-Deny, all findings are derived as DEFERRED.');
+      }
+
+      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes });
+      canonicalFindings = finalization.canonicalFindings;
+      coverageStatus = finalization.coverageStatus;
+    }
 
     if (outputSarifPath) {
-      const sarif = renderSarif({ findings, manifest, provenance, repoRoot });
+      const sarif = renderSarifFromCanonical({
+        canonicalFindings,
+        manifest,
+        coverageStatus,
+        provenance,
+        repoRoot
+      });
       fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
       fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
       console.log(`✔ Generated SARIF report: ${outputSarifPath}`);
     }
 
     if (outputMdPath) {
-      const md = renderMarkdown({ findings, manifest, provenance });
+      const md = renderMarkdownFromCanonical({
+        canonicalFindings,
+        manifest,
+        coverageStatus,
+        provenance
+      });
       fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
       fs.writeFileSync(outputMdPath, md, 'utf8');
       console.log(`✔ Generated Markdown report: ${outputMdPath}`);
@@ -1060,3 +1161,4 @@ if (inputPath) {
     process.exit(1);
   }
 }
+

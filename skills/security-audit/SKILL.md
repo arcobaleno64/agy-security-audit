@@ -113,17 +113,31 @@ When launched, the skill inspects explicit user flags or prompts for customizati
    - `NEEDS_MANUAL_REVIEW`: Default verdict for any disputed, unproven, or timed-out finding.
 
 ### Stage 4: Reporting & Artifact Generation
-1. Execute `render-sarif.mjs` to produce standardized outputs:
-   ```bash
-   node skills/security-audit/scripts/render-sarif.mjs \
-     --input scratch/verified-findings.json \
-     --manifest scratch/directory-manifest.json \
-     --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
-     --output-md scratch/AGY-SECURITY-RESULTS.md
-   ```
+1. Enforce Two-Stage Canonical Authority Pipeline:
+   - **Step 1: Deterministic Finalization with Verifier Votes**
+     Transform candidate findings into authoritative canonical findings using verifier ballots under Default-Deny:
+     ```bash
+     node skills/security-audit/scripts/finalize-scan.mjs \
+       --candidates scratch/candidate-findings.json \
+       --votes scratch/verifier-votes.json \
+       --manifest scratch/directory-manifest.json \
+       --repo-root . \
+       --output scratch/canonical-findings.json
+     ```
+   - **Step 2: Canonical Rendering (SARIF & Markdown)**
+     Render reports strictly from canonical findings (renderer does not derive security verdicts):
+     ```bash
+     node skills/security-audit/scripts/render-sarif.mjs \
+       --canonical scratch/canonical-findings.json \
+       --manifest scratch/directory-manifest.json \
+       --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
+       --output-md scratch/AGY-SECURITY-RESULTS.md
+     ```
+   *(Alternatively, `finalize-scan.mjs` can directly emit `--output-sarif` and `--output-md` alongside `--output` in a single command).*
 
 2. Save the Markdown report as a **Brain Artifact** in `<appDataDir>\brain\<conversation-id>\AGY-SECURITY-RESULTS.md` via `write_to_file`.
 3. If remediation patches were requested, review [patching-jail.md](./references/patching-jail.md) and produce dual-track outputs in `scratch/patches/` with `git apply --check` validation.
+
 
 ---
 

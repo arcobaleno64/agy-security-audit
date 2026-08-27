@@ -1287,6 +1287,43 @@ export function renderMarkdownFromCanonical({
 // -----------------------------------------------------------------------------
 // CLI Dispatch
 // -----------------------------------------------------------------------------
+/**
+ * Loads and aggregates verifier votes from a file or directory (supports nested subdirectories).
+ */
+export function loadVotes(votesPath) {
+  if (!votesPath || !fs.existsSync(votesPath)) return [];
+  try {
+    const stat = fs.statSync(votesPath);
+    if (stat.isDirectory()) {
+      const votes = [];
+      const files = fs.readdirSync(votesPath, { recursive: true });
+      for (const file of files) {
+        const filePath = typeof file === 'string' ? file : file.name;
+        if (filePath.endsWith('.json')) {
+          try {
+            const content = JSON.parse(fs.readFileSync(path.join(votesPath, filePath), 'utf8'));
+            if (Array.isArray(content)) {
+              votes.push(...content);
+            } else if (content && typeof content === 'object') {
+              votes.push(content);
+            }
+          } catch {}
+        }
+      }
+      return votes;
+    } else {
+      const content = JSON.parse(fs.readFileSync(votesPath, 'utf8'));
+      return Array.isArray(content) ? content : [content];
+    }
+  } catch {
+    return [];
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// CLI Dispatch
+// -----------------------------------------------------------------------------
 const isDirectExecution = process.argv[1] && process.argv[1].endsWith('finalize-scan.mjs');
 
 if (isDirectExecution) {
@@ -1299,81 +1336,82 @@ if (isDirectExecution) {
     return null;
   }
 
-  const inputPath = getArg('--input');
+  const inputPath = getArg('--candidates') || getArg('--input');
+  const votesPath = getArg('--votes');
+  const manifestPath = getArg('--manifest');
+  const repoRootArg = getArg('--repo-root') || process.cwd();
+  const outputJsonPath = getArg('--output') || getArg('--output-json');
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
-  const outputJsonPath = getArg('--output-json');
-  const manifestPath = getArg('--manifest');
-  const votesPath = getArg('--votes');
+  const outputCoveragePath = getArg('--output-coverage');
 
   if (inputPath) {
-  try {
-    const rawData = fs.readFileSync(inputPath, 'utf8');
-    const candidates = JSON.parse(rawData);
+    try {
+      const rawData = fs.readFileSync(inputPath, 'utf8');
+      const candidates = JSON.parse(rawData);
 
-    let manifest = null;
-    if (manifestPath && fs.existsSync(manifestPath)) {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      let manifest = null;
+      if (manifestPath && fs.existsSync(manifestPath)) {
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      }
+
+      const votes = loadVotes(votesPath);
+      if (candidates.length > 0 && votes.length === 0) {
+        console.warn('[DEFAULT-DENY] No verifier votes provided via --votes. All candidates will be derived as DEFERRED under Default-Deny.');
+      }
+
+      const repoRoot = path.resolve(repoRootArg);
+      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes });
+
+      if (outputJsonPath) {
+        fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
+        fs.writeFileSync(outputJsonPath, JSON.stringify(finalization.canonicalFindings, null, 2), 'utf8');
+        console.log(`✔ Generated Canonical Findings JSON: ${outputJsonPath}`);
+      }
+
+      if (outputSarifPath) {
+        const sarif = renderSarifFromCanonical({
+          canonicalFindings: finalization.canonicalFindings,
+          manifest: finalization.manifest,
+          coverageStatus: finalization.coverageStatus,
+          provenance: finalization.provenance,
+          repoRoot
+        });
+        fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
+        fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
+        console.log(`✔ Generated SARIF report: ${outputSarifPath}`);
+      }
+
+      if (outputMdPath) {
+        const md = renderMarkdownFromCanonical({
+          canonicalFindings: finalization.canonicalFindings,
+          manifest: finalization.manifest,
+          coverageStatus: finalization.coverageStatus,
+          provenance: finalization.provenance
+        });
+        fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
+        fs.writeFileSync(outputMdPath, md, 'utf8');
+        console.log(`✔ Generated Markdown report: ${outputMdPath}`);
+      }
+
+      if (outputCoveragePath) {
+        const coveragePayload = {
+          schemaVersion: '1',
+          coverageStatus: finalization.coverageStatus,
+          canDeclareClean: finalization.summary.canDeclareClean,
+          coverageMode: manifest?.mode || (manifest?.reviewInventory ? 'review' : 'scan'),
+          manifest: finalization.manifest,
+          provenance: finalization.provenance
+        };
+        fs.mkdirSync(path.dirname(outputCoveragePath), { recursive: true });
+        fs.writeFileSync(outputCoveragePath, JSON.stringify(coveragePayload, null, 2), 'utf8');
+        console.log(`✔ Generated Coverage JSON: ${outputCoveragePath}`);
+      }
+    } catch (err) {
+      console.error('Error in finalize-scan:', err.message);
+      process.exit(1);
     }
-
-    let votes = [];
-    if (votesPath && fs.existsSync(votesPath)) {
-      votes = JSON.parse(fs.readFileSync(votesPath, 'utf8'));
-    }
-
-    const repoRoot = process.cwd();
-    const finalization = finalizeScan({ candidates, manifest, repoRoot, votes });
-
-    if (outputSarifPath) {
-      const sarif = renderSarifFromCanonical({
-        canonicalFindings: finalization.canonicalFindings,
-        manifest: finalization.manifest,
-        coverageStatus: finalization.coverageStatus,
-        provenance: finalization.provenance,
-        repoRoot
-      });
-      fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
-      fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
-      console.log(`✔ Generated SARIF report: ${outputSarifPath}`);
-    }
-
-    if (outputMdPath) {
-      const md = renderMarkdownFromCanonical({
-        canonicalFindings: finalization.canonicalFindings,
-        manifest: finalization.manifest,
-        coverageStatus: finalization.coverageStatus,
-        provenance: finalization.provenance
-      });
-      fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
-      fs.writeFileSync(outputMdPath, md, 'utf8');
-      console.log(`✔ Generated Markdown report: ${outputMdPath}`);
-    }
-
-    if (outputJsonPath) {
-      fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
-      fs.writeFileSync(outputJsonPath, JSON.stringify(finalization.canonicalFindings, null, 2), 'utf8');
-      console.log(`✔ Generated Canonical Findings JSON: ${outputJsonPath}`);
-    }
-
-    const outputCoveragePath = getArg('--output-coverage');
-    if (outputCoveragePath) {
-      const coveragePayload = {
-        schemaVersion: '1',
-        coverageStatus: finalization.coverageStatus,
-        canDeclareClean: finalization.summary.canDeclareClean,
-        coverageMode: manifest?.mode || (manifest?.reviewInventory ? 'review' : 'scan'),
-        manifest: finalization.manifest,
-        provenance: finalization.provenance
-      };
-      fs.mkdirSync(path.dirname(outputCoveragePath), { recursive: true });
-      fs.writeFileSync(outputCoveragePath, JSON.stringify(coveragePayload, null, 2), 'utf8');
-      console.log(`✔ Generated Coverage JSON: ${outputCoveragePath}`);
-    }
-  } catch (err) {
-
-    console.error('Error in finalize-scan:', err.message);
-    process.exit(1);
   }
 }
-}
+
 
