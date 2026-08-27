@@ -1291,8 +1291,23 @@ export function runTests() {
     if (content.includes('read_file')) {
       throw new Error(`P0-04 VIOLATION: Agent ${af} uses invalid tool name 'read_file'; must be 'view_file'`);
     }
-    if (content.includes('run_command') || content.includes('write_to_file')) {
+    if (content.includes('run_command') || content.includes('write_to_file') || content.includes('replace_file_content')) {
       throw new Error(`P0-04 VIOLATION: Agent ${af} has prohibited execution/modifying tools`);
+    }
+    if (/(?:^|\n)\s*permissions\s*:/i.test(content)) {
+      throw new Error(`R1-P2-03 VIOLATION: Agent ${af} declares unofficial permissions block`);
+    }
+    const toolMatch = content.match(/tools:\s*\n((?:\s*-\s*[a-zA-Z0-9_]+\s*\n)+)/);
+    if (toolMatch) {
+      const declaredTools = toolMatch[1].split('\n')
+        .map(l => l.replace(/^\s*-\s*/, '').trim())
+        .filter(Boolean);
+      const allowedTools = new Set(['view_file', 'list_dir', 'grep_search', 'find_by_name']);
+      for (const t of declaredTools) {
+        if (!allowedTools.has(t)) {
+          throw new Error(`P0-04 VIOLATION: Agent ${af} declares non-whitelisted tool '${t}'`);
+        }
+      }
     }
   }
   if (categorizeDirectory('agents').status !== 'SCANNED') {

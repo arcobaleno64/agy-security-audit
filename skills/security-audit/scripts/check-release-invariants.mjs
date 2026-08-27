@@ -172,6 +172,21 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       if (content.includes('run_command') || content.includes('write_to_file') || content.includes('replace_file_content')) {
         errors.push(`Agent invariant violation: ${af} contains prohibited modifying/execution tools`);
       }
+      if (/(?:^|\n)\s*permissions\s*:/i.test(content)) {
+        errors.push(`Agent invariant violation: ${af} contains unofficial/deprecated 'permissions:' block; must rely on official tools and commandExecutionPolicy (R1-P2-03)`);
+      }
+      const toolMatch = content.match(/tools:\s*\n((?:\s*-\s*[a-zA-Z0-9_]+\s*\n)+)/);
+      if (toolMatch) {
+        const declaredTools = toolMatch[1].split('\n')
+          .map(l => l.replace(/^\s*-\s*/, '').trim())
+          .filter(Boolean);
+        const allowedTools = new Set(['view_file', 'list_dir', 'grep_search', 'find_by_name']);
+        for (const t of declaredTools) {
+          if (!allowedTools.has(t)) {
+            errors.push(`Agent invariant violation: ${af} declares non-whitelisted tool '${t}'`);
+          }
+        }
+      }
     }
   }
 

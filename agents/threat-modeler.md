@@ -9,9 +9,6 @@ tools:
   - list_dir
   - grep_search
   - find_by_name
-permissions:
-  read_only: true
-  terminal_sandbox: true
 ---
 
 
