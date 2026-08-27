@@ -1,0 +1,20 @@
+{
+  "name": "@arcobaleno64/agy-security-audit",
+  "version": "0.9.1",
+  "description": "Antigravity (AGY) security audit plugin benchmarked against Claude Security and NIST standards.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node skills/security-audit/scripts/render-sarif.mjs --test"
+  },
+  "keywords": [
+    "antigravity",
+    "agy",
+    "security-audit",
+    "claude-security",
+    "sarif",
+    "cvss-v4",
+    "subagents",
+    "code-review"
+  ]
+}
