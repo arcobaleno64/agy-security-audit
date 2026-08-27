@@ -42,7 +42,8 @@ import {
   loadVotes,
   extractVoteEvidence,
   validateVoteEvidence,
-  deriveAuthoritativeRigor
+  deriveAuthoritativeRigor,
+  validateCanonicalFindings
 } from './finalize-scan.mjs';
 
 
@@ -134,7 +135,8 @@ export function renderMarkdown({ findings = [], manifest = null, provenance = nu
     canonicalFindings: finalization.canonicalFindings,
     manifest: finalization.manifest,
     coverageStatus: finalization.coverageStatus,
-    provenance: finalization.provenance
+    provenance: finalization.provenance,
+    repoRoot
   });
 }
 
@@ -1219,18 +1221,21 @@ export function runTests() {
   } catch {}
   console.log('✔ 52. P0-03 Invariant: loadVotes correctly aggregates ballots from files and directories.');
 
-  // 53. P0-03 Invariant: Canonical rendering pipeline preserves canonical disposition without re-evaluation
+  // 53. P0-03 Invariant: Canonical pipeline renders canonical findings without making disposition decisions.
   const preFinalizedCanonical = [
     {
       id: 'CANON-001',
       ruleId: 'CWE-89',
-      title: 'SQL Injection in Auth',
+      title: 'Pre-finalized SQLi',
       severity: 'CRITICAL',
       cvssV4: { vector: validVector, score: 9.3, severity: 'CRITICAL' },
-      location: { uri: 'src/auth.ts', startLine: 42, endLine: 44, lineSnippet: 'SELECT' },
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 42, endLine: 44, lineSnippet: 'SELECT' },
+      consensus: { supports: 2, total: 2, unanimous: true },
+      rigor: { score: 0.85, assuranceLevel: 'HIGH_RIGOR' },
       disposition: 'REPORTABLE',
-      mappedVerdict: 'CONFIRMED',
-      confidence: 'high'
+      verdict: 'CONFIRMED',
+      confidenceScore: 0.9,
+      confidenceLevel: 'high'
     }
   ];
   const canonicalSarifOutput = renderSarifFromCanonical({
@@ -2073,7 +2078,97 @@ export function runTests() {
 
   console.log('✔ 63. R1-P1-02 Invariant: Git --base / --head subcommand option injection is strictly rejected fail-closed.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (63/63).');
+  // 64. R1-P1-03 Invariant: --canonical renderer validates canonical schema and redacts secrets
+  // Case 1: Raw secrets in canonical findings are completely redacted across title and description
+  const rawSecretAws = 'AKIAIOSFODNN7EXAMPLE';
+  const rawSecretGhp = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const rawSecretCanonical = [
+    {
+      id: 'SEC-CANON-1',
+      ruleId: 'CWE-798',
+      title: `Hardcoded Key ${rawSecretAws}`,
+      description: `Discovered GitHub token ${rawSecretGhp} in config`,
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, lineSnippet: `const k = "${rawSecretGhp}";` },
+      disposition: 'DEFERRED',
+      verdict: 'NEEDS_MANUAL_REVIEW'
+    }
+  ];
+  const renderedMd = renderMarkdownFromCanonical({ canonicalFindings: rawSecretCanonical, repoRoot: process.cwd() });
+  if (renderedMd.includes(rawSecretAws)) {
+    throw new Error('R1-P1-03 VIOLATION: Raw AWS secret leaked into rendered Markdown from canonical findings');
+  }
+  if (renderedMd.includes(rawSecretGhp)) {
+    throw new Error('R1-P1-03 VIOLATION: Raw GitHub token leaked into rendered Markdown from canonical findings');
+  }
+  if (!renderedMd.includes('REDACTED_AWS_ACCESS_KEY')) {
+    throw new Error('R1-P1-03 VIOLATION: Redacted AWS key fingerprint missing from rendered Markdown');
+  }
+  if (!renderedMd.includes('REDACTED_GITHUB_TOKEN')) {
+    throw new Error('R1-P1-03 VIOLATION: Redacted GitHub token fingerprint missing from rendered Markdown');
+  }
+
+  // Case 2: Fabricated REPORTABLE claim without consensus is downgraded to DEFERRED under Default-Deny
+  const fakeReportableCanonical = [
+    {
+      id: 'SEC-FAKE-REPORTABLE',
+      ruleId: 'CWE-89',
+      title: 'Fabricated Confirmed SQLi',
+      description: 'Pretends to be confirmed without votes',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+      disposition: 'REPORTABLE',
+      verdict: 'CONFIRMED',
+      consensus: { supports: 0, totalVotes: 0 },
+      rigor: { score: 0.1 }
+    }
+  ];
+  const validatedFindings = validateCanonicalFindings(fakeReportableCanonical, process.cwd());
+  if (validatedFindings[0].disposition !== 'DEFERRED' || validatedFindings[0].verdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error(`R1-P1-03 VIOLATION: Fabricated REPORTABLE finding was not downgraded to DEFERRED: ${JSON.stringify(validatedFindings[0])}`);
+  }
+  const renderedFakeMd = renderMarkdownFromCanonical({ canonicalFindings: fakeReportableCanonical, repoRoot: process.cwd() });
+  if (renderedFakeMd.includes('Confirmed Vulnerabilities (Reportable): 1')) {
+    throw new Error('R1-P1-03 VIOLATION: Fabricated canonical finding was rendered as Confirmed in Markdown report');
+  }
+
+  // Case 3: Traversal location in canonical finding downgraded to DEFERRED fail-closed
+  const traversalCanonical = [
+    {
+      id: 'SEC-TRAVERSAL',
+      ruleId: 'CWE-89',
+      title: 'Traversal Path SQLi',
+      location: { uri: '../../etc/passwd', startLine: 1 },
+      disposition: 'REPORTABLE',
+      verdict: 'CONFIRMED',
+      consensus: { supports: 3, totalVotes: 3 },
+      rigor: { score: 0.9 }
+    }
+  ];
+  const validatedTraversal = validateCanonicalFindings(traversalCanonical, process.cwd());
+  if (validatedTraversal[0].disposition !== 'DEFERRED') {
+    throw new Error('R1-P1-03 VIOLATION: Canonical finding with path traversal location was not downgraded to DEFERRED');
+  }
+
+  // Case 4: Split vote in canonical finding downgraded to DEFERRED fail-closed
+  const splitVoteCanonical = [
+    {
+      id: 'SEC-SPLIT',
+      ruleId: 'CWE-89',
+      title: 'Split Vote SQLi',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+      disposition: 'REPORTABLE',
+      verdict: 'CONFIRMED',
+      consensus: { supports: 2, refutes: 5, totalVotes: 7 },
+      rigor: { score: 0.9 }
+    }
+  ];
+  const validatedSplit = validateCanonicalFindings(splitVoteCanonical, process.cwd());
+  if (validatedSplit[0].disposition !== 'DEFERRED') {
+    throw new Error('R1-P1-03 VIOLATION: Canonical finding with split votes / active refutations was not downgraded to DEFERRED');
+  }
+
+  console.log('✔ 64. R1-P1-03 Invariant: Canonical renderer validates canonical schema and redacts secrets under Default-Deny.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (64/64).');
 
   } finally {
     gitFixture.cleanup();
@@ -2143,9 +2238,10 @@ if (canonicalPath || inputPath) {
     let coverageStatus = 'COMPLETE';
 
     if (canonicalPath) {
-      // Production Canonical Pipeline: renderer formats pre-finalized canonical findings
+      // Production Canonical Pipeline: renderer formats pre-finalized canonical findings with invariant validation
       const rawCanonical = fs.readFileSync(canonicalPath, 'utf8');
-      canonicalFindings = JSON.parse(rawCanonical);
+      const parsedCanonical = JSON.parse(rawCanonical);
+      canonicalFindings = validateCanonicalFindings(parsedCanonical, repoRoot);
       const covRes = reconcileCoverage(manifest, repoRoot);
       coverageStatus = covRes.status;
     } else {
@@ -2181,7 +2277,8 @@ if (canonicalPath || inputPath) {
         canonicalFindings,
         manifest,
         coverageStatus,
-        provenance
+        provenance,
+        repoRoot
       });
       fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
       fs.writeFileSync(outputMdPath, md, 'utf8');

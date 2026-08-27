@@ -22,6 +22,7 @@ export const CVSS_V4_REGEX = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\
 // Common secret patterns for deterministic redaction
 export const SECRET_PATTERNS = [
   { type: 'AWS_ACCESS_KEY', regex: /(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}/g },
+  { type: 'GITHUB_TOKEN', regex: /(?:ghp_[a-zA-Z0-9]{36,40}|github_pat_[a-zA-Z0-9_]{82}|gh[orpus]_[a-zA-Z0-9]{36,40})/g },
   { type: 'BEARER_TOKEN', regex: /bearer\s+[a-zA-Z0-9_\-\.:=_\+\/]{20,}/gi },
   { type: 'PRIVATE_KEY', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g },
   { type: 'GENERIC_SECRET_KV', regex: /(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret[_-]?key|password|passwd|pwd)\s*[:=]\s*["']?([a-zA-Z0-9_\-\.\+=/]{16,})["']?/gi },
@@ -1418,6 +1419,108 @@ export function mapSeverityToSarif(severity, cvssScore) {
 }
 
 /**
+ * Validates canonical findings under Default-Deny before rendering.
+ * Enforces schema integrity, reapplies secret redaction, and downgrades
+ * any self-asserted or unsupported REPORTABLE claims to DEFERRED.
+ */
+export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
+  if (!Array.isArray(findings)) {
+    if (findings && typeof findings === 'object' && Array.isArray(findings.canonicalFindings)) {
+      findings = findings.canonicalFindings;
+    } else {
+      return [];
+    }
+  }
+
+  const validated = [];
+
+  for (const raw of findings) {
+    if (!raw || typeof raw !== 'object') continue;
+
+    const id = String(raw.id || raw.findingId || 'SEC-UNKNOWN');
+    const ruleId = String(raw.ruleId || 'SEC-VULN');
+    const severity = String(raw.severity || 'MEDIUM').toUpperCase();
+
+    // Re-apply secret redaction and sanitization across all text fields
+    const title = redactSecrets(stripControlAndBidi(String(raw.title || 'Security Finding')));
+    const description = redactSecrets(stripControlAndBidi(String(raw.description || '')));
+    const uri = raw.location?.uri ? String(raw.location.uri) : 'unknown';
+    const startLine = Number(raw.location?.startLine || 1);
+    const endLine = Number(raw.location?.endLine || startLine);
+    let lineSnippet = raw.location?.lineSnippet ? redactSecrets(stripControlAndBidi(String(raw.location.lineSnippet))) : null;
+
+    // Suppress snippet for secrets
+    const isCredential = /(?:secret|credential|token|password|api[_-]?key|cwe-798)/i.test(`${title} ${ruleId} ${id}`);
+    if (isCredential) {
+      lineSnippet = '[Line snippet suppressed for credential finding]';
+    }
+
+    let disposition = String(raw.disposition || 'DEFERRED').toUpperCase();
+    let verdict = String(raw.verdict || 'NEEDS_MANUAL_REVIEW').toUpperCase();
+    let dispositionReason = redactSecrets(stripControlAndBidi(String(raw.dispositionReason || '')));
+
+    const consensus = (raw.consensus && typeof raw.consensus === 'object') ? raw.consensus : { supports: 0, refutes: 0, totalVotes: 0, unanimous: false };
+    const rigor = (raw.rigor && typeof raw.rigor === 'object') ? raw.rigor : { score: 0.0, assuranceLevel: 'NONE' };
+
+    // Default-Deny Invariant: REPORTABLE / CONFIRMED cannot be asserted without quorum, unanimity/supermajority, and rigor
+    if (disposition === 'REPORTABLE' || verdict === 'CONFIRMED') {
+      const totalVotes = Number(consensus.total !== undefined ? consensus.total : (consensus.totalVotes !== undefined ? consensus.totalVotes : 0));
+      const supports = Number(consensus.supports || 0);
+      const refutes = Number(consensus.refutes || 0);
+      const hasQuorum = supports >= 2 && totalVotes >= 2 && refutes === 0 && (supports === totalVotes || (supports / totalVotes >= 0.66));
+      const hasRigor = Number(rigor.score || 0) >= 0.60;
+      let fileExists = true;
+      if (repoRoot && uri !== 'unknown') {
+        const normUri = uri.replace(/\\/g, '/').replace(/^\.\//, '');
+        if (normUri.startsWith('..') || normUri.includes('/../') || path.isAbsolute(uri)) {
+          fileExists = false;
+        } else {
+          const fullTarget = path.resolve(repoRoot, normUri);
+          const relToRepo = path.relative(repoRoot, fullTarget);
+          if (relToRepo.startsWith('..') || path.isAbsolute(relToRepo) || !fs.existsSync(fullTarget)) {
+            fileExists = false;
+          }
+        }
+      }
+
+      if (!hasQuorum || !hasRigor || !fileExists) {
+        disposition = 'DEFERRED';
+        verdict = 'NEEDS_MANUAL_REVIEW';
+        dispositionReason = `Presumption of Non-Pass: Canonical finding lacked authoritative verifier quorum (${supports}/${totalVotes}, refutes=${refutes}) or rigor (${rigor.score || 0}).`;
+      }
+    }
+
+    validated.push({
+      ...raw,
+      id,
+      ruleId,
+      severity,
+      title,
+      description,
+      location: {
+        uri,
+        startLine,
+        endLine,
+        lineSnippet,
+        lineHash: raw.location?.lineHash || ''
+      },
+      confidenceScore: raw.confidenceScore !== undefined ? raw.confidenceScore : 0.5,
+      confidenceLevel: raw.confidenceLevel || 'LOW',
+      cvssV4: raw.cvssV4 || null,
+      rigor,
+      consensus,
+      disposition,
+      verdict,
+      dispositionReason,
+      fingerprint: raw.fingerprint || '',
+      tags: Array.isArray(raw.tags) ? raw.tags : []
+    });
+  }
+
+  return validated;
+}
+
+/**
  * Renders SARIF 2.1.0 document from canonical findings.
  */
 export function renderSarifFromCanonical({
@@ -1427,10 +1530,11 @@ export function renderSarifFromCanonical({
   provenance = null,
   repoRoot = process.cwd()
 }) {
+  const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
   const rulesMap = new Map();
   const results = [];
 
-  for (const f of canonicalFindings) {
+  for (const f of safeFindings) {
     const ruleId = f.ruleId || 'SEC-VULN';
     const cvssScore = f.cvssV4 ? f.cvssV4.score : null;
     const { level, securitySeverity } = mapSeverityToSarif(f.severity, cvssScore);
@@ -1522,7 +1626,8 @@ export function renderMarkdownFromCanonical({
   canonicalFindings = [],
   manifest = null,
   coverageStatus = 'COMPLETE',
-  provenance = null
+  provenance = null,
+  repoRoot = process.cwd()
 }) {
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
@@ -1579,10 +1684,12 @@ export function renderMarkdownFromCanonical({
   }
   md += '\n---\n\n';
 
+  const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
+
   // Categorize canonical findings
-  const confirmed = canonicalFindings.filter(f => f.disposition === 'REPORTABLE');
-  const manualReview = canonicalFindings.filter(f => f.disposition === 'DEFERRED');
-  const falsePositives = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED');
+  const confirmed = safeFindings.filter(f => f.disposition === 'REPORTABLE');
+  const manualReview = safeFindings.filter(f => f.disposition === 'DEFERRED');
+  const falsePositives = safeFindings.filter(f => f.disposition === 'SUPPRESSED');
 
   md += '## 2. Findings Summary\n\n';
   md += `- **Confirmed Vulnerabilities (Reportable)**: ${confirmed.length}\n`;
@@ -1630,10 +1737,16 @@ export function renderMarkdownFromCanonical({
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       md += `- **Calculated Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
       md += `- **Deferral Reason**: ${sanitizeInlineText(f.dispositionReason || 'Unproven taint flow or missing verifier consensus')}\n\n`;
+      if (f.description) {
+        md += `**Description**:\n${sanitizeBlockText(f.description)}\n\n`;
+      }
       if (Array.isArray(f.proofGaps) && f.proofGaps.length > 0) {
         md += `- **Unclosed Proof Gaps**:\n`;
         for (const g of f.proofGaps) {
-          md += `  - [${sanitizeInlineText(String(g.target || (g.stepIndex !== undefined ? 'step ' + g.stepIndex : 'evidence')))}] ${sanitizeInlineText(g.unprovenProperty || 'Unverified step')}${g.location ? ` (\`${sanitizeInlineText(g.location)}\`)` : ''}\n`;
+          const safeTarget = redactSecrets(sanitizeInlineText(String(g.target || (g.stepIndex !== undefined ? 'step ' + g.stepIndex : 'evidence'))));
+          const safeProp = redactSecrets(sanitizeInlineText(g.unprovenProperty || 'Unverified step'));
+          const safeLoc = g.location ? ` (\`${redactSecrets(sanitizeInlineText(g.location))}\`)` : '';
+          md += `  - [${safeTarget}] ${safeProp}${safeLoc}\n`;
         }
         md += '\n';
       }

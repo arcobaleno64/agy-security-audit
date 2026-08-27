@@ -112,19 +112,21 @@ When launched, the skill inspects explicit user flags or prompts for customizati
 
 
 ### Stage 4: Reporting & Artifact Generation
-1. Enforce Two-Stage Canonical Authority Pipeline:
-   - **Step 1: Deterministic Finalization with Verifier Votes**
-     Transform candidate findings into authoritative canonical findings using verifier ballots under Default-Deny:
+1. Enforce Authoritative Finalization & Reporting Pipeline:
+   - **Primary Official Pipeline: Direct Authoritative Finalization & Rendering**
+     `finalize-scan.mjs` owns final authority, applies verifier ballots under Default-Deny, redacts secrets, and directly outputs Canonical Findings, SARIF, and Markdown in one invocation:
      ```bash
      node skills/security-audit/scripts/finalize-scan.mjs \
        --candidates scratch/candidate-findings.json \
        --votes scratch/verifier-votes.json \
        --manifest scratch/directory-manifest.json \
        --repo-root . \
-       --output scratch/canonical-findings.json
+       --output-json scratch/canonical-findings.json \
+       --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
+       --output-md scratch/AGY-SECURITY-RESULTS.md
      ```
-   - **Step 2: Canonical Rendering (SARIF & Markdown)**
-     Render reports strictly from canonical findings (renderer does not derive security verdicts):
+   - **Secondary / Adapter Pipeline: Canonical Rendering**
+     If rendering existing canonical findings, `render-sarif.mjs` strictly validates canonical schema and downgrades unproven claims under Default-Deny before formatting:
      ```bash
      node skills/security-audit/scripts/render-sarif.mjs \
        --canonical scratch/canonical-findings.json \
@@ -132,7 +134,6 @@ When launched, the skill inspects explicit user flags or prompts for customizati
        --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
        --output-md scratch/AGY-SECURITY-RESULTS.md
      ```
-   *(Alternatively, `finalize-scan.mjs` can directly emit `--output-sarif` and `--output-md` alongside `--output` in a single command).*
 
 2. Save the Markdown report as a **Brain Artifact** in `<appDataDir>\brain\<conversation-id>\AGY-SECURITY-RESULTS.md` via `write_to_file`.
 3. If remediation patches were requested, review [patching-jail.md](./references/patching-jail.md) and produce dual-track outputs in `scratch/patches/` with `git apply --check` validation.

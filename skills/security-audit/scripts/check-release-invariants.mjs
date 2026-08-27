@@ -279,6 +279,20 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         if (sarif.runs[0].results.length !== 1 || sarif.runs[0].results[0].properties.disposition !== 'DEFERRED') {
           throw new Error('Canonical renderer failed to preserve canonical finding disposition');
         }
+        // R1-P1-03: Fabricated REPORTABLE claim without consensus is downgraded to DEFERRED
+        const fakeReportable = {
+          id: 'INV-7-FAKE',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
+          disposition: 'REPORTABLE',
+          verdict: 'CONFIRMED',
+          title: 'Fake Confirmed',
+          consensus: { supports: 0, totalVotes: 0 },
+          rigor: { score: 0.1 }
+        };
+        const sarifFake = renderSarifFromCanonical({ canonicalFindings: [fakeReportable] });
+        if (sarifFake.runs[0].results[0].properties.disposition !== 'DEFERRED') {
+          throw new Error('Canonical renderer accepted fabricated REPORTABLE finding without verifier consensus');
+        }
       }
     },
     {
