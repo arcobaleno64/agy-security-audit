@@ -76,11 +76,30 @@ export function runEvals(repoRoot = process.cwd()) {
         title: tp.title,
         location: { uri: tp.file, startLine: 2, endLine: 5 }
       };
-      // Verifier panel unanimous confirmation
+      // Verifier panel unanimous confirmation with verified evidence bindings (R1-P0-01)
       const ballots = [
-        { findingId: candidate.id, lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Unfiltered user input reaches sink' },
-        { findingId: candidate.id, lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No validation or barrier present' },
-        { findingId: candidate.id, lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Direct security impact confirmed' }
+        {
+          findingId: candidate.id,
+          lens: 'REACHABILITY',
+          decision: 'SUPPORTS',
+          source: `${tp.file}:2`,
+          sink: `${tp.file}:4`,
+          reason: 'Unfiltered user input reaches sink'
+        },
+        {
+          findingId: candidate.id,
+          lens: 'DEFENSES',
+          decision: 'SUPPORTS',
+          evidence: [{ path: tp.file, line: 3, role: 'control' }],
+          reason: 'No validation or barrier present'
+        },
+        {
+          findingId: candidate.id,
+          lens: 'IMPACT',
+          decision: 'SUPPORTS',
+          sink: `${tp.file}:4`,
+          reason: 'Direct security impact confirmed'
+        }
       ];
       const res = deriveFinalDisposition(candidate, ballots, { score: 0.85 }, repoRoot);
       if (res.disposition !== 'REPORTABLE' || res.mappedVerdict !== 'CONFIRMED' || !res.votesSummary?.unanimous) {

@@ -41,7 +41,8 @@ import {
   normalizeDirectoryPath,
   loadVotes,
   extractVoteEvidence,
-  validateVoteEvidence
+  validateVoteEvidence,
+  deriveAuthoritativeRigor
 } from './finalize-scan.mjs';
 
 
@@ -297,7 +298,7 @@ export function runTests() {
         severity: 'CRITICAL'
       },
       location: {
-        uri: 'src/auth.ts',
+        uri: 'skills/security-audit/scripts/safe-git.mjs',
         startLine: 42,
         endLine: 44,
         lineSnippet: 'const query = `SELECT * FROM users WHERE name = "${input}"`;'
@@ -307,11 +308,24 @@ export function runTests() {
   ];
 
   const confirmedVotes = [
-    { findingId: 'SEC-001', reviewerId: 'rev-1', decision: 'CONFIRMED' },
-    { findingId: 'SEC-001', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+    {
+      findingId: 'SEC-001',
+      reviewerId: 'rev-1',
+      decision: 'CONFIRMED',
+      evidence: [
+        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'source' },
+        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }
+      ]
+    },
+    {
+      findingId: 'SEC-001',
+      reviewerId: 'rev-2',
+      decision: 'CONFIRMED',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'control' }]
+    }
   ];
 
-  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes });
+  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes, repoRoot: process.cwd() });
   if (sarif.version !== '2.1.0') throw new Error('SARIF version must be 2.1.0');
   if (sarif.runs[0].tool.driver.rules.length !== 1) throw new Error('Rule was not registered in driver.rules');
   if (sarif.runs[0].results[0].level !== 'error') throw new Error('Critical confirmed finding must map to level error');
@@ -621,11 +635,31 @@ export function runTests() {
     dataflowVerified: true
   };
   const threeLensVotes = [
-    { findingId: 'SEC-3LENS', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Unsanitized argument flows directly to spawn' },
-    { findingId: 'SEC-3LENS', lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No escaping or allowlist barrier present' },
-    { findingId: 'SEC-3LENS', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Arbitrary host command execution' }
+    {
+      findingId: 'SEC-3LENS',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      source: 'skills/security-audit/scripts/safe-git.mjs:25',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:36',
+      reason: 'Unsanitized argument flows directly to spawn'
+    },
+    {
+      findingId: 'SEC-3LENS',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }],
+      reason: 'No escaping or allowlist barrier present'
+    },
+    {
+      findingId: 'SEC-3LENS',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:36',
+      reason: 'Arbitrary host command execution'
+    }
   ];
-  const disp3Lens = deriveFinalDisposition(candidate3Lens, threeLensVotes, { score: 0.85 });
+  const disp3Lens = deriveFinalDisposition(candidate3Lens, threeLensVotes, { score: 0.85 }, process.cwd());
+
   if (disp3Lens.disposition !== 'REPORTABLE' || !disp3Lens.votesSummary.isThreeLens) {
     throw new Error('P1 VIOLATION: Unanimous 3-Lens panel failed to achieve REPORTABLE');
   }
@@ -985,17 +1019,31 @@ export function runTests() {
   // 43. P0-01 Hardening: Real task-bound ballots required for REPORTABLE
   const realBallotCandidate = {
     id: 'C-REAL-BALLOTS',
-    location: { uri: 'src/auth.ts', startLine: 10 }
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
   };
   const realBallots = [
-    { findingId: 'C-REAL-BALLOTS', reviewerId: 'rev-1', decision: 'CONFIRMED' },
-    { findingId: 'C-REAL-BALLOTS', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+    {
+      findingId: 'C-REAL-BALLOTS',
+      reviewerId: 'rev-1',
+      decision: 'CONFIRMED',
+      evidence: [
+        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' },
+        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }
+      ]
+    },
+    {
+      findingId: 'C-REAL-BALLOTS',
+      reviewerId: 'rev-2',
+      decision: 'CONFIRMED',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    }
   ];
-  const realResult = deriveFinalDisposition(realBallotCandidate, realBallots, { score: 0.85 });
+  const realResult = deriveFinalDisposition(realBallotCandidate, realBallots, { score: 0.85 }, process.cwd());
   if (realResult.disposition !== 'REPORTABLE' || realResult.mappedVerdict !== 'CONFIRMED') {
     throw new Error(`P0-01 VIOLATION: Valid ballots with mathematical rigor failed to achieve REPORTABLE: ${JSON.stringify(realResult)}`);
   }
   console.log('✔ 43. P0-01 Invariant: Real task-bound ballots required to transition to REPORTABLE.');
+
 
   // 44. P0-01 Hardening: Unassigned ballots cannot bind via isSingleCandidate & null safety
   const unassignedBallot = [{ reviewerId: 'rev-1', decision: 'CONFIRMED' }];
@@ -1294,20 +1342,32 @@ export function runTests() {
 
   // 57.7 Valid evidence on REFUTES successfully suppresses to FALSE_POSITIVE
   const validEvVotes = [
-    { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    {
+      findingId: 'SEC-EV-TEST',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      source: 'skills/security-audit/scripts/safe-git.mjs:20',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:25'
+    },
     {
       findingId: 'SEC-EV-TEST',
       lens: 'DEFENSES',
       decision: 'REFUTES',
       evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
     },
-    { findingId: 'SEC-EV-TEST', lens: 'IMPACT', decision: 'SUPPORTS' }
+    {
+      findingId: 'SEC-EV-TEST',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:25'
+    }
   ];
   const validEvRes = deriveFinalDisposition(testCandidate, validEvVotes, { score: 0.8 }, process.cwd());
   if (validEvRes.disposition !== 'SUPPRESSED' || validEvRes.mappedVerdict !== 'FALSE_POSITIVE') {
     throw new Error('P1-02 VIOLATION: Valid evidence refutation failed to suppress to FALSE_POSITIVE');
   }
   console.log('✔ 57. P1-02 Invariant: All REFUTES decisions strictly enforce verifiable evidence binding.');
+
 
   // 58. P1-04 Invariant: Orchestration consistency & unified Fixed 3-Lens verification
   const skillFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/SKILL.md'), 'utf8');
@@ -1400,7 +1460,124 @@ export function runTests() {
   }
   console.log('✔ 59. P1-05 Invariant: Test harness and release gate pass on clean extracted zip without git init.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (59/59).');
+  // 60. R1-P0-01 Invariant: SUPPORTS requires verifiable evidence binding and cannot self-certify authority via raw rigorMetrics
+  const r1Candidate = {
+    id: 'SEC-R1-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Safe Git Helper',
+    severity: 'HIGH',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+    rigorMetrics: {
+      sinkVerified: true,
+      sourceVerified: true,
+      dataflowTotalSteps: 1,
+      dataflowVerifiedSteps: 1,
+      mitigationInspected: true
+    }
+  };
+
+  // Case 1: 3 SUPPORTS + 0 evidence -> DEFERRED
+  const votesNoEv = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [] }
+  ];
+  const resNoEv = deriveFinalDisposition(r1Candidate, votesNoEv, { score: 0.85 }, process.cwd());
+  if (resNoEv.disposition !== 'DEFERRED' || resNoEv.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error(`R1-P0-01 VIOLATION: 3 SUPPORTS with 0 evidence was not DEFERRED: ${JSON.stringify(resNoEv)}`);
+  }
+
+  // Case 2: 3 SUPPORTS + fake rigorMetrics (no source/sink evidence in votes) -> DEFERRED
+  const votesArbitraryEv = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'general' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'general' }] }
+  ];
+  const resFakeRigor = deriveFinalDisposition(r1Candidate, votesArbitraryEv, { score: 0.95 }, process.cwd());
+  if (resFakeRigor.disposition !== 'DEFERRED' || resFakeRigor.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error(`R1-P0-01 VIOLATION: Fake candidate rigorMetrics allowed REPORTABLE without validated source evidence: ${JSON.stringify(resFakeRigor)}`);
+  }
+
+  // Case 3: 3 SUPPORTS + missing source evidence -> DEFERRED
+  const votesMissingSource = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+  ];
+  const resMissingSource = deriveFinalDisposition(r1Candidate, votesMissingSource, { score: 0.85 }, process.cwd());
+  if (resMissingSource.disposition !== 'DEFERRED' || !resMissingSource.reason.includes('source/entrypoint')) {
+    throw new Error(`R1-P0-01 VIOLATION: Missing source evidence was not DEFERRED: ${JSON.stringify(resMissingSource)}`);
+  }
+
+  // Case 4: 3 SUPPORTS + missing sink/root-control evidence -> DEFERRED
+  const votesMissingSink = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+  ];
+  const resMissingSink = deriveFinalDisposition({ ...r1Candidate, location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 } }, votesMissingSink, { score: 0.85 }, process.cwd());
+  if (resMissingSink.disposition !== 'DEFERRED' || !resMissingSink.reason.includes('sink/root-control')) {
+    throw new Error(`R1-P0-01 VIOLATION: Missing sink evidence was not DEFERRED: ${JSON.stringify(resMissingSink)}`);
+  }
+
+  // Case 5: 3 SUPPORTS + nonexistent evidence file -> DEFERRED
+  const votesNonexistentFile = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'nonexistent-file.js:1', sink: 'skills/security-audit/scripts/safe-git.mjs:25' },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+  ];
+  const resNonexistent = deriveFinalDisposition(r1Candidate, votesNonexistentFile, { score: 0.85 }, process.cwd());
+  if (resNonexistent.disposition !== 'DEFERRED' || !resNonexistent.reason.includes('does not exist')) {
+    throw new Error(`R1-P0-01 VIOLATION: Nonexistent evidence file was not DEFERRED: ${JSON.stringify(resNonexistent)}`);
+  }
+
+  // Case 6: 3 SUPPORTS + line beyond EOF -> DEFERRED
+  const votesBeyondEof = [
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'skills/security-audit/scripts/safe-git.mjs:999999', sink: 'skills/security-audit/scripts/safe-git.mjs:25' },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+  ];
+  const resBeyondEof = deriveFinalDisposition(r1Candidate, votesBeyondEof, { score: 0.85 }, process.cwd());
+  if (resBeyondEof.disposition !== 'DEFERRED' || !resBeyondEof.reason.includes('exceeds file length')) {
+    throw new Error(`R1-P0-01 VIOLATION: Line beyond EOF was not DEFERRED: ${JSON.stringify(resBeyondEof)}`);
+  }
+
+  // Case 7: Valid complete evidence tuple + full 3-Lens -> eligible REPORTABLE
+  const votesValidTuple = [
+    {
+      findingId: 'SEC-R1-01',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      source: 'skills/security-audit/scripts/safe-git.mjs:10',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:25',
+      reason: 'Reachable from safe-git argument'
+    },
+    {
+      findingId: 'SEC-R1-01',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }],
+      reason: 'No argument sanitization'
+    },
+    {
+      findingId: 'SEC-R1-01',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      sink: 'skills/security-audit/scripts/safe-git.mjs:25',
+      reason: 'Arbitrary execution'
+    }
+  ];
+  const resValid = deriveFinalDisposition(r1Candidate, votesValidTuple, { score: 0.85 }, process.cwd());
+  if (resValid.disposition !== 'REPORTABLE' || resValid.mappedVerdict !== 'CONFIRMED') {
+    throw new Error(`R1-P0-01 VIOLATION: Valid evidence tuple failed to achieve REPORTABLE: ${JSON.stringify(resValid)}`);
+  }
+  if (!resValid.authoritativeRigor || resValid.authoritativeRigor.score < 0.60) {
+    throw new Error(`R1-P0-01 VIOLATION: Authoritative rigor was not derived from evidence: ${JSON.stringify(resValid)}`);
+  }
+  console.log('✔ 60. R1-P0-01 Invariant: SUPPORTS strictly mandates verifiable evidence bindings and derives authoritative rigor.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (60/60).');
+
   } finally {
     gitFixture.cleanup();
   }

@@ -626,16 +626,44 @@ export function extractVoteEvidence(vote, candidate = {}) {
     return null;
   };
 
+  const voteLens = vote.lens ? String(vote.lens).toUpperCase() : null;
+
   if (Array.isArray(vote.evidence)) {
-    for (const e of vote.evidence) {
-      const parsed = parsePathLine(e, defaultCandidatePath);
+    for (let i = 0; i < vote.evidence.length; i++) {
+      const e = vote.evidence[i];
+      let defRole = null;
+      if (voteLens === 'REACHABILITY') {
+        if (vote.evidence.length >= 2) defRole = (i === 0) ? 'source' : 'sink';
+        else defRole = 'entrypoint';
+      } else if (voteLens === 'DEFENSES') {
+        defRole = 'control';
+      } else if (voteLens === 'IMPACT') {
+        defRole = 'impact-boundary';
+      }
+      const parsed = parsePathLine(e, defaultCandidatePath, defRole);
       if (parsed) items.push(parsed);
     }
   } else if (vote.evidence) {
-    const parsed = parsePathLine(vote.evidence, defaultCandidatePath);
+    let defRole = null;
+    if (voteLens === 'REACHABILITY') defRole = 'entrypoint';
+    else if (voteLens === 'DEFENSES') defRole = 'control';
+    else if (voteLens === 'IMPACT') defRole = 'impact-boundary';
+    const parsed = parsePathLine(vote.evidence, defaultCandidatePath, defRole);
     if (parsed) items.push(parsed);
   }
 
+  if (vote.source) {
+    const parsed = parsePathLine(vote.source, defaultCandidatePath, 'source');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.entrypoint) {
+    const parsed = parsePathLine(vote.entrypoint, defaultCandidatePath, 'entrypoint');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.sink) {
+    const parsed = parsePathLine(vote.sink, defaultCandidatePath, 'sink');
+    if (parsed) items.push(parsed);
+  }
   if (vote.mitigationProofLine) {
     const parsed = parsePathLine(vote.mitigationProofLine, defaultCandidatePath, 'guard');
     if (parsed) items.push(parsed);
@@ -661,7 +689,8 @@ export function extractVoteEvidence(vote, candidate = {}) {
 }
 
 /**
- * Validates vote evidence fail-closed under Default-Deny (P1-02).
+ * Validates vote evidence fail-closed under Default-Deny (P1-02, R1-P0-01).
+ * Both SUPPORTS and REFUTES decisions mandate verified evidence binding.
  */
 export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
   if (!vote || typeof vote !== 'object') {
@@ -678,7 +707,7 @@ export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
   // 2. Extract Evidence
   const evidenceItems = extractVoteEvidence(vote, candidate);
   if (evidenceItems.length === 0) {
-    return { valid: false, reason: 'Refutation requires non-empty evidence binding' };
+    return { valid: false, reason: 'Vote requires non-empty evidence binding' };
   }
 
   // 3. Validate Each Evidence Item
@@ -723,9 +752,68 @@ export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
 }
 
 /**
+ * Derives authoritative mathematical rigor from validated evidence.
+ * Raw candidate.rigorMetrics is strictly treated as an untrusted hint and CANNOT self-certify authority (R1-P0-01).
+ */
+export function deriveAuthoritativeRigor(candidate = {}, validSupportVotes = [], repoRoot = null) {
+  const allEvidence = [];
+  for (const v of validSupportVotes) {
+    if (v && v._validatedEvidence) {
+      allEvidence.push(...v._validatedEvidence);
+    }
+  }
+
+  const hasSource = allEvidence.some(e => ['source', 'entrypoint', 'origin'].includes(e.role));
+  const candidateUri = candidate.location?.uri || candidate.location?.path;
+  const candidateLine = Number(candidate.location?.startLine);
+  const hasSink = allEvidence.some(e => ['sink', 'root-control', 'target'].includes(e.role)) ||
+    (candidateUri && allEvidence.some(e => e.path === candidateUri && e.line === candidateLine));
+  const hasControlInspection = allEvidence.some(e => ['control', 'closest-control', 'guard', 'defense', 'inspected-control', 'mitigation'].includes(e.role));
+
+  const sSource = hasSource ? 1.0 : 0.0;
+  const sSink = hasSink ? 1.0 : 0.0;
+  const sMitigation = hasControlInspection ? 1.0 : 0.0;
+
+  // Dataflow verification
+  let flowTotal = 0;
+  let flowVerified = 0;
+  if (candidate.attackPath && Array.isArray(candidate.attackPath.steps)) {
+    flowTotal = candidate.attackPath.steps.length;
+    flowVerified = (candidate.proofGaps && candidate.proofGaps.length > 0) ? 0 : flowTotal;
+  } else if (hasSource && hasSink) {
+    flowTotal = 1;
+    flowVerified = 1;
+  }
+  const flowRatio = flowTotal > 0 ? Math.min(1.0, Math.max(0.0, flowVerified / flowTotal)) : 0.0;
+  const sPoc = (candidate.attackPath?.proofOfConcept || candidate.pocSyntacticDemonstrated) ? 1.0 : 0.0;
+
+  const score = Number((0.25 * sSink + 0.25 * sSource + 0.25 * flowRatio + 0.15 * sPoc + 0.10 * sMitigation).toFixed(4));
+
+  let assuranceLevel = 'LOW_RIGOR';
+  if (score >= 0.85) {
+    assuranceLevel = 'HIGH_RIGOR';
+  } else if (score >= 0.60) {
+    assuranceLevel = 'MODERATE_RIGOR';
+  }
+
+  return {
+    score,
+    assuranceLevel,
+    metrics: {
+      sinkVerified: hasSink,
+      sourceVerified: hasSource,
+      dataflowTotalSteps: flowTotal,
+      dataflowVerifiedSteps: flowVerified,
+      mitigationInspected: hasControlInspection
+    }
+  };
+}
+
+/**
  * Derives the deterministic disposition under the Presumption of Non-Pass (Default-Deny).
  * Raw verdict from input is strictly treated as an untrusted candidate hint and NEVER has authority.
  * Every REFUTES decision strictly requires verifiable evidence binding (P1-02).
+ * Every SUPPORTS decision strictly requires verifiable evidence binding and cannot self-certify via raw rigorMetrics (R1-P0-01).
  */
 export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null) {
   // 1. Schema & Location Containment Validation
@@ -781,6 +869,11 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     let defensesRefuted = false;
     let impactRefuted = false;
     let invalidRefutation = null;
+    let invalidSupport = null;
+    const validSupportVotes = [];
+    let reachabilitySupports = null;
+    let defensesSupports = null;
+    let impactSupports = null;
     const lenses = new Set();
 
     for (const v of dedupedVotes) {
@@ -789,7 +882,22 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       const lens = v.lens ? String(v.lens).toUpperCase() : null;
 
       if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(decision)) {
-        supports++;
+        // R1-P0-01: SUPPORTS must also be evidence-bound
+        const evCheck = validateVoteEvidence(v, candidate, repoRoot);
+        if (!evCheck.valid) {
+          invalidSupport = {
+            vote: v,
+            lens: lens || 'GENERAL',
+            reason: evCheck.reason
+          };
+        } else {
+          v._validatedEvidence = evCheck.evidence;
+          supports++;
+          validSupportVotes.push(v);
+          if (lens === 'REACHABILITY') reachabilitySupports = v;
+          if (lens === 'DEFENSES') defensesSupports = v;
+          if (lens === 'IMPACT') impactSupports = v;
+        }
       } else if (['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(decision)) {
         refutes++;
         // P1-02: Every REFUTES must have verifiable evidence binding
@@ -858,13 +966,77 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         };
       }
 
+      // If any support failed evidence validation, candidate cannot be confirmed -> DEFERRED (R1-P0-01)
+      if (invalidSupport) {
+        return {
+          disposition: 'DEFERRED',
+          mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+          reason: `Unverified support: ${invalidSupport.lens} lens voted SUPPORTS without valid evidence binding (${invalidSupport.reason}); deferred under default-deny`,
+          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
       // 3-Lens requires unanimous confirmation (supports === 3)
-      if (supports === 3 && rigor.score >= 0.60) {
+      if (supports === 3) {
+        // R1-P0-01: Verify required evidence tuple:
+        // 1. REACHABILITY must prove source/entrypoint
+        const reachEv = reachabilitySupports?._validatedEvidence || [];
+        const hasSource = reachEv.some(e => ['source', 'entrypoint', 'origin'].includes(e.role));
+        if (!hasSource) {
+          return {
+            disposition: 'DEFERRED',
+            mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+            reason: 'Incomplete evidence tuple: REACHABILITY lens missing verified source/entrypoint evidence; deferred under default-deny',
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+          };
+        }
+
+        // 2. Must prove sink / root-control
+        const allEv = validSupportVotes.flatMap(v => v._validatedEvidence || []);
+        const candidatePath = candidate.location?.uri || candidate.location?.path;
+        const candidateLine = Number(candidate.location?.startLine);
+
+        if (candidatePath && repoRoot) {
+          const fullCandTarget = path.resolve(repoRoot, candidatePath);
+          if (!fs.existsSync(fullCandTarget)) {
+            return {
+              disposition: 'DEFERRED',
+              mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+              reason: `Candidate target file does not exist: '${candidatePath}'; deferred under default-deny`,
+              votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+            };
+          }
+        }
+
+        const hasSink = allEv.some(e => ['sink', 'root-control', 'target'].includes(e.role)) ||
+          (candidatePath && allEv.some(e => e.path === candidatePath && e.line === candidateLine));
+        if (!hasSink) {
+          return {
+            disposition: 'DEFERRED',
+            mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+            reason: 'Incomplete evidence tuple: missing verified sink/root-control evidence; deferred under default-deny',
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+          };
+        }
+
+        // 3. Authoritative rigor derived strictly from verified evidence (R1-P0-01)
+        const authoritativeRigor = deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
+        if (authoritativeRigor.score < 0.60) {
+          return {
+            disposition: 'DEFERRED',
+            mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+            reason: `Authoritative rigor insufficient (${authoritativeRigor.score} < 0.60); candidate claims lack validated evidence backing; deferred under default-deny`,
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) },
+            authoritativeRigor
+          };
+        }
+
         return {
           disposition: 'REPORTABLE',
           mappedVerdict: 'CONFIRMED',
-          reason: 'Confirmed by unanimous 3-Lens panel (Reachability, Defenses, Impact)',
-          votesSummary: { total, supports: 3, refutes: 0, unanimous: true, isThreeLens, lenses: Array.from(lenses) }
+          reason: 'Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence',
+          votesSummary: { total, supports: 3, refutes: 0, unanimous: true, isThreeLens, lenses: Array.from(lenses) },
+          authoritativeRigor
         };
       }
 
@@ -888,13 +1060,22 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     }
 
     // General Persona Evaluation: Decisive counterevidence refutation always suppresses
-
     if (validDecisiveMitigationVote) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
         reason: 'Affirmatively refuted by verifier with verified mitigation evidence',
         votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
+      };
+    }
+
+    // If any support failed evidence validation, candidate cannot be confirmed -> DEFERRED (R1-P0-01)
+    if (invalidSupport) {
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: `Unverified support: ${invalidSupport.lens} lens voted SUPPORTS without valid evidence binding (${invalidSupport.reason}); deferred under default-deny`,
+        votesSummary: { total, supports, refutes, unanimous: false, lenses: Array.from(lenses) }
       };
     }
 
@@ -909,13 +1090,14 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     }
 
     const supportRatio = supports / total;
+    const authoritativeRigor = deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
 
-    // Reportable requirement: 2/3 supermajority + rigor
-    if (supportRatio >= 0.66 && total >= 2 && rigor.score >= 0.60) {
+    // Reportable requirement: 2/3 supermajority + authoritative rigor >= 0.60 + source & sink verified
+    if (supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
-        reason: 'Confirmed by 2/3 verifier supermajority with verified taint evidence',
+        reason: 'Confirmed by 2/3 verifier supermajority with verified evidence',
         votesSummary: {
           total,
           supports,
@@ -923,7 +1105,8 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
           unanimous: supports === total,
           isThreeLens: false,
           lenses: Array.from(lenses)
-        }
+        },
+        authoritativeRigor
       };
     }
 
@@ -936,8 +1119,6 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
-
-
 
     // Fallback on dispute / split decision
     return {
@@ -1044,6 +1225,7 @@ export function finalizeScan({
     delete raw.consensus;
     delete raw.sourceVerified;
     delete raw.dataflowVerified;
+    delete raw.pocSyntacticDemonstrated;
     delete raw.isSingleCandidate;
     delete raw.mitigationProofLine;
     delete raw.mitigationReason;
@@ -1051,7 +1233,7 @@ export function finalizeScan({
 
     // If attackPath is supplied, validate schema and detect proof gaps
     if (raw.attackPath && typeof raw.attackPath === 'object') {
-      const apVal = validateAttackPath(raw.attackPath, repoRoot);
+      const apVal = validateAttackPath(raw.attackPath, safeRepoRoot);
       if (!apVal.valid) {
         raw.proofGaps = raw.proofGaps || [];
         raw.proofGaps.push({ target: 'attackPath', unprovenProperty: apVal.error });
@@ -1067,8 +1249,8 @@ export function finalizeScan({
 
     // Target containment check
     const rawUri = raw.location?.uri || raw.location?.path || 'unknown';
-    const pathContained = isPathContained(repoRoot, rawUri);
-    const normalizedRelativeUri = pathContained ? normalizeUri(repoRoot, rawUri) : 'invalid_path_escaped';
+    const pathContained = isPathContained(safeRepoRoot, rawUri);
+    const normalizedRelativeUri = pathContained ? normalizeUri(safeRepoRoot, rawUri) : 'invalid_path_escaped';
 
     const startLine = Number(raw.location?.startLine) >= 1 ? Number(raw.location?.startLine) : 1;
     const endLine = Number(raw.location?.endLine) >= startLine ? Number(raw.location?.endLine) : startLine;
@@ -1110,7 +1292,7 @@ export function finalizeScan({
         votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
       };
     } else {
-      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, repoRoot);
+      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot);
     }
 
 
@@ -1152,7 +1334,7 @@ export function finalizeScan({
         lineHash
       },
       cvssV4: cvss.valid ? { vector: cvss.vector, score: cvss.score, severity: cvss.severity } : null,
-      rigor,
+      rigor: dispositionResult.authoritativeRigor || rigor,
       consensus: dispositionResult.votesSummary || {
         totalVotes: 0,
         unanimous: false,

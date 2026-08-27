@@ -406,6 +406,44 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           throw new Error('getHardenedGitProvenance failed to produce safe fallback in non-git directory');
         }
       }
+    },
+    {
+      id: 'SEC-INV-15',
+      name: 'SUPPORTS without evidence cannot REPORTABLE',
+      check: () => {
+        const candidate = {
+          id: 'INV-15',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+          rigorMetrics: {
+            sinkVerified: true,
+            sourceVerified: true,
+            dataflowTotalSteps: 1,
+            dataflowVerifiedSteps: 1,
+            mitigationInspected: true
+          }
+        };
+        // 1. 3 SUPPORTS with empty evidence -> DEFERRED
+        const noEvVotes = [
+          { findingId: 'INV-15', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [] },
+          { findingId: 'INV-15', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [] },
+          { findingId: 'INV-15', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [] }
+        ];
+        const resNoEv = deriveFinalDisposition(candidate, noEvVotes, { score: 0.85 }, repoRoot);
+        if (resNoEv.disposition !== 'DEFERRED') {
+          throw new Error('3 SUPPORTS votes without evidence achieved non-DEFERRED disposition');
+        }
+
+        // 2. Fake rigorMetrics on candidate cannot grant REPORTABLE without validated evidence
+        const arbitraryEvVotes = [
+          { findingId: 'INV-15', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'general' }] },
+          { findingId: 'INV-15', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+          { findingId: 'INV-15', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'general' }] }
+        ];
+        const resFakeRigor = deriveFinalDisposition(candidate, arbitraryEvVotes, { score: 0.95 }, repoRoot);
+        if (resFakeRigor.disposition === 'REPORTABLE') {
+          throw new Error('Fake candidate rigorMetrics granted REPORTABLE without validated source evidence');
+        }
+      }
     }
   ];
 
