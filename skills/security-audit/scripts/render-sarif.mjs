@@ -1492,8 +1492,19 @@ export function runTests() {
         encoding: 'utf8',
         env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
       });
-      if (!evalsOut.includes('All 50/50 L1.5 adversarial evaluations passed cleanly!')) {
+      if (!evalsOut.includes('All 50/50 deterministic security invariant and adversarial regression tests passed cleanly!')) {
         throw new Error(`P2-02 VIOLATION: run-evals.mjs failed in clean non-git extract directory:\n${evalsOut}`);
+      }
+
+      // Execute run-semantic-eval.mjs inside cleanExtractDir (R1-P2-01)
+      const semanticScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-semantic-eval.mjs');
+      const semanticOut = execFileSync(process.execPath, [semanticScriptInClean], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!semanticOut.includes('semantic security evaluations passed')) {
+        throw new Error(`R1-P2-01 VIOLATION: run-semantic-eval.mjs failed in clean non-git extract directory:\n${semanticOut}`);
       }
 
       // Execute check-release-invariants.mjs inside the cleanExtractDir

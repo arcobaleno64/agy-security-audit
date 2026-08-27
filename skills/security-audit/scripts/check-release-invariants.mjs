@@ -38,6 +38,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/validate-attack-path.mjs',
   'skills/security-audit/scripts/validate-patch.mjs',
   'skills/security-audit/scripts/run-evals.mjs',
+  'skills/security-audit/scripts/run-semantic-eval.mjs',
   'skills/security-audit/scripts/check-release-invariants.mjs',
   'skills/security-audit/jobs/scan.md',
   'skills/security-audit/jobs/review.md',
@@ -114,7 +115,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
     errors.push(`Automated test suite failed: ${err.message}\n${err.stderr || ''}`);
   }
 
-  // 3.1 Check L1.5 Adversarial Evaluation Suite (P2-02)
+  // 3.1 Check Deterministic Security Invariant & Adversarial Regression Suite (50 Cases) (P2-02, R1-P2-01)
   const evalsScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-evals.mjs');
   try {
     const stdout = execFileSync(process.execPath, [evalsScriptPath], {
@@ -122,11 +123,26 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    if (!stdout.includes('All 50/50 L1.5 adversarial evaluations passed cleanly!')) {
-      errors.push('L1.5 Adversarial Evaluation Suite did not output clean pass signature');
+    if (!stdout.includes('All 50/50 deterministic security invariant and adversarial regression tests passed cleanly!')) {
+      errors.push('Deterministic Adversarial Regression Suite did not output clean pass signature');
     }
   } catch (err) {
-    errors.push(`L1.5 Adversarial Evaluation Suite failed: ${err.message}\n${err.stderr || ''}`);
+    errors.push(`Deterministic Adversarial Regression Suite failed: ${err.message}\n${err.stderr || ''}`);
+  }
+
+  // 3.2 Check L1.5 Semantic Security Accuracy Benchmark (R1-P2-01)
+  const semanticScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-semantic-eval.mjs');
+  try {
+    const stdout = execFileSync(process.execPath, [semanticScriptPath], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    if (!stdout.includes('semantic security evaluations passed')) {
+      errors.push('L1.5 Semantic Security Reasoning Benchmark did not output clean pass signature');
+    }
+  } catch (err) {
+    errors.push(`L1.5 Semantic Security Reasoning Benchmark failed: ${err.message}\n${err.stderr || ''}`);
   }
 
   // 4. Validate Plugin Custom Agents Capability & Tool Invariants (P0-04)

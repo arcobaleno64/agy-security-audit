@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * run-evals.mjs
- * L1.5 Adversarial Evaluation Suite for AGY Security Audit.
- * Executes 50 benchmark evaluations across 8 adversarial categories:
+ * Deterministic Security Invariant & Adversarial Regression Suite for AGY Security Audit (50 Cases).
+ * Validates deterministic policy enforcement, fail-closed boundaries, and adversarial injection rejection:
  * - True Positives (10)
  * - False Positive Mitigation Guards (10)
  * - Prompt Injection Neutralization (5)
@@ -29,7 +29,7 @@ import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './vali
 import { HARDENED_GIT_ENV, getHardenedGitProvenance } from './safe-git.mjs';
 
 export function runEvals(repoRoot = process.cwd()) {
-  console.log('Running L1.5 Adversarial Evaluation Corpus (50 test cases across 8 categories)...\n');
+  console.log('Running Deterministic Security Invariant & Adversarial Regression Suite (50 test cases across 8 categories)...\n');
   let passed = 0;
   let failed = 0;
   const errors = [];
@@ -345,7 +345,7 @@ export function runEvals(repoRoot = process.cwd()) {
   }
 
   console.log('\n================================================================');
-  console.log(`L1.5 Adversarial Evaluation Results: ${passed} passed, ${failed} failed (Total: ${passed + failed})`);
+  console.log(`Deterministic Security Invariant & Adversarial Regression Results: ${passed} passed, ${failed} failed (Total: ${passed + failed})`);
   console.log('================================================================');
 
   return {
@@ -364,8 +364,8 @@ const isDirectExecution = process.argv[1] && process.argv[1].endsWith('run-evals
 if (isDirectExecution) {
   const result = runEvals(process.cwd());
   if (result.failed > 0) {
-    console.error(`\n❌ L1.5 Adversarial Evaluations FAILED with ${result.failed} failure(s).`);
+    console.error(`\n❌ Deterministic Adversarial Regression FAILED with ${result.failed} failure(s).`);
     process.exit(1);
   }
-  console.log('\n✔ All 50/50 L1.5 adversarial evaluations passed cleanly!\n');
+  console.log('\n✔ All 50/50 deterministic security invariant and adversarial regression tests passed cleanly!\n');
 }

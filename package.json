@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node skills/security-audit/scripts/render-sarif.mjs --test",
     "test:evals": "node skills/security-audit/scripts/run-evals.mjs",
+    "test:semantic": "node skills/security-audit/scripts/run-semantic-eval.mjs",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs"
   },
 

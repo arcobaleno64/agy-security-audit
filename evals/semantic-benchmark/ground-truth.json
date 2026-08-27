@@ -1,0 +1,187 @@
+[
+  {
+    "id": "SEM-01",
+    "name": "Missing Authorization on Critical State Mutation",
+    "category": "authz-bypass",
+    "cwe": "CWE-862",
+    "file": "evals/semantic-benchmark/01-authz-bypass.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Admin settings update endpoint checks authentication token but never verifies user role or admin privilege before modifying system configuration.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-02",
+    "name": "Cross-Tenant Data Leakage via Unscoped Identifier",
+    "category": "cross-tenant-access",
+    "cwe": "CWE-639",
+    "file": "evals/semantic-benchmark/02-cross-tenant-access.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Document fetch endpoint queries document strictly by documentId without enforcing session tenantId scope, enabling cross-tenant data exfiltration.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-03",
+    "name": "Confused Deputy via Credential-Forwarding Proxy",
+    "category": "confused-deputy",
+    "cwe": "CWE-441",
+    "file": "evals/semantic-benchmark/03-confused-deputy.js",
+    "targetLine": 13,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Internal service relay forwards ambient service-mesh credentials to arbitrary caller-specified destinations, acting as a confused deputy.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-04",
+    "name": "Broken State Machine Transition in Payment Workflow",
+    "category": "state-transition",
+    "cwe": "CWE-840",
+    "file": "evals/semantic-benchmark/04-state-transition.js",
+    "targetLine": 15,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "CRITICAL",
+    "description": "Payment refund endpoint allows state transition directly from CREATED to REFUNDED without verifying prior PAID state.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-05",
+    "name": "Validated vs. Consumed Input Mismatch",
+    "category": "validated-vs-consumed",
+    "cwe": "CWE-20",
+    "file": "evals/semantic-benchmark/05-validated-vs-consumed.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Validation check inspects req.query.filePath for traversal, but file operations consume raw req.body.filePath, rendering the validation moot.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-06",
+    "name": "Partial Mitigation in Context-Dependent Sanitizer",
+    "category": "partial-mitigation",
+    "cwe": "CWE-79",
+    "file": "evals/semantic-benchmark/06-partial-mitigation.js",
+    "targetLine": 15,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "MEDIUM",
+    "description": "Sanitizer escapes HTML attributes but output is embedded directly inside an unquoted inline script block, allowing execution.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-07",
+    "name": "Insecure Default Privilege Fallback",
+    "category": "unsafe-default",
+    "cwe": "CWE-1188",
+    "file": "evals/semantic-benchmark/07-unsafe-default.js",
+    "targetLine": 11,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Security policy evaluation defaults to PERMISSIVE / ALLOW_ALL when configuration key is missing or undefined.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-08",
+    "name": "Multi-Step Taint Flow Across Asynchronous Job Boundary",
+    "category": "multistep-attack-path",
+    "cwe": "CWE-94",
+    "file": "evals/semantic-benchmark/08-multistep-attack-path.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "CRITICAL",
+    "description": "Untrusted input arrives at webhook endpoint, enqueues to message broker, is dequeued by worker, and is executed without deserialization safeguards.",
+    "evidenceRoles": [
+      "source",
+      "guard",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-01-SAFE",
+    "name": "Enforced Role Authorization Guard",
+    "category": "authz-bypass",
+    "cwe": "CWE-862",
+    "file": "evals/semantic-benchmark/safe/01-authz-bypass.js",
+    "targetLine": 11,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Endpoint enforces role === admin verification check prior to executing configuration update.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/01-authz-bypass.js",
+      "line": 11,
+      "reason": "Enforces role === admin invariant"
+    }
+  },
+  {
+    "id": "SEM-02-SAFE",
+    "name": "Tenant-Scoped Document Query Guard",
+    "category": "cross-tenant-access",
+    "cwe": "CWE-639",
+    "file": "evals/semantic-benchmark/safe/02-cross-tenant-access.js",
+    "targetLine": 10,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Document query explicitly filters by both id and currentTenantId.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/02-cross-tenant-access.js",
+      "line": 10,
+      "reason": "Enforces tenant isolation invariant"
+    }
+  },
+  {
+    "id": "SEM-05-SAFE",
+    "name": "Canonicalized Basename Guard",
+    "category": "validated-vs-consumed",
+    "cwe": "CWE-20",
+    "file": "evals/semantic-benchmark/safe/05-validated-vs-consumed.js",
+    "targetLine": 9,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Target filename is strictly stripped to basename and confirmed within DATA_DIR boundary.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/05-validated-vs-consumed.js",
+      "line": 9,
+      "reason": "Enforces directory jail and basename boundary"
+    }
+  },
+  {
+    "id": "SEM-07-SAFE",
+    "name": "Secure Default-Deny Policy Guard",
+    "category": "unsafe-default",
+    "cwe": "CWE-1188",
+    "file": "evals/semantic-benchmark/safe/07-unsafe-default.js",
+    "targetLine": 8,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Security policy evaluation defaults to DENY_ALL when unconfigured.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/07-unsafe-default.js",
+      "line": 8,
+      "reason": "Enforces fail-closed default-deny invariant"
+    }
+  }
+]
