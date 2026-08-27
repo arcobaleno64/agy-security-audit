@@ -472,7 +472,104 @@ export function normalizeUri(repoRoot, filePath) {
 }
 
 /**
+ * Parses a standard CVSS v4.0 vector string into a key-value metric map.
+ */
+export function parseCvssV4Vector(vectorStr) {
+  if (!vectorStr || typeof vectorStr !== 'string') return null;
+  const parts = vectorStr.trim().split('/');
+  if (parts[0] !== 'CVSS:4.0') return null;
+  const metrics = {};
+  for (let i = 1; i < parts.length; i++) {
+    const [k, v] = parts[i].split(':');
+    if (k && v) metrics[k] = v;
+  }
+  return metrics;
+}
+
+/**
+ * Validates consistency between CVSS v4.0 vector metrics, score, and severity.
+ * Fails closed on any contradiction or fabricated authority claim (R1-P1-04).
+ */
+export function validateCvssV4Consistency(metrics, score, severity) {
+  if (!metrics) return { valid: false, error: 'Missing metrics' };
+
+  const allImpactsNone = (
+    metrics.VC === 'N' && metrics.VI === 'N' && metrics.VA === 'N' &&
+    metrics.SC === 'N' && metrics.SI === 'N' && metrics.SA === 'N'
+  );
+
+  // 1. Zero-impact invariant: if all impacts are None, score must be 0.0 or null
+  if (allImpactsNone) {
+    if (score !== null && score !== undefined && score > 0.0) {
+      return {
+        valid: false,
+        error: `CVSS consistency violation: zero-impact vector (all N) cannot have non-zero score (${score})`
+      };
+    }
+    if (severity && severity !== 'NONE' && severity !== 'UNRATED') {
+      return {
+        valid: false,
+        error: `CVSS consistency violation: zero-impact vector cannot have severity '${severity}'`
+      };
+    }
+  }
+
+  // 2. Score vs Severity consistency check
+  if (score !== null && score !== undefined && severity && severity !== 'UNRATED') {
+    let expectedSeverity = 'NONE';
+    if (score >= 9.0) expectedSeverity = 'CRITICAL';
+    else if (score >= 7.0) expectedSeverity = 'HIGH';
+    else if (score >= 4.0) expectedSeverity = 'MEDIUM';
+    else if (score > 0.0) expectedSeverity = 'LOW';
+
+    if (severity !== expectedSeverity) {
+      return {
+        valid: false,
+        error: `CVSS consistency violation: score ${score} maps to ${expectedSeverity}, but claimed severity is '${severity}'`
+      };
+    }
+  }
+
+  // 3. Physical attack vector constraint: AV:P cannot be CRITICAL (neither score >= 9.0 nor severity 'CRITICAL')
+  if (metrics.AV === 'P' && ((score !== null && score !== undefined && score >= 9.0) || severity === 'CRITICAL')) {
+    return {
+      valid: false,
+      error: `CVSS consistency violation: Physical attack vector (AV:P) cannot be CRITICAL (score=${score}, severity=${severity})`
+    };
+  }
+
+  // 4. Zero vulnerable system impact constraint: VC:N, VI:N, VA:N cannot be CRITICAL
+  if (metrics.VC === 'N' && metrics.VI === 'N' && metrics.VA === 'N' && ((score !== null && score !== undefined && score >= 9.0) || severity === 'CRITICAL')) {
+    return {
+      valid: false,
+      error: `CVSS consistency violation: zero vulnerable-system impact (VC:N/VI:N/VA:N) cannot be CRITICAL (score=${score}, severity=${severity})`
+    };
+  }
+
+  // 4b. Vulnerable system impact without any High metric (VC/VI/VA not H) cannot be CRITICAL
+  if (metrics.VC !== 'H' && metrics.VI !== 'H' && metrics.VA !== 'H' && ((score !== null && score !== undefined && score >= 9.0) || severity === 'CRITICAL')) {
+    return {
+      valid: false,
+      error: `CVSS consistency violation: vulnerable system without High impact (VC/VI/VA not H) cannot be CRITICAL (score=${score}, severity=${severity})`
+    };
+  }
+
+  // 5. Maximal impact and exploitability cannot have score < 7.0
+  if (metrics.AV === 'N' && metrics.AC === 'L' && metrics.AT === 'N' && metrics.PR === 'N' && metrics.UI === 'N' &&
+      metrics.VC === 'H' && metrics.VI === 'H' && metrics.VA === 'H' &&
+      score !== null && score !== undefined && score < 7.0) {
+    return {
+      valid: false,
+      error: `CVSS consistency violation: maximal impact and exploitability cannot have score < 7.0 (${score})`
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Validates CVSS v4 vector fail-closed. Never substitutes a fake high-severity vector or clamped invalid scores.
+ * Enforces consistency between vector metrics and score/severity under Default-Deny (R1-P1-04).
  */
 export function validateCvssV4(cvssObj) {
   if (!cvssObj || typeof cvssObj !== 'object') {
@@ -489,6 +586,9 @@ export function validateCvssV4(cvssObj) {
       error: 'Invalid or missing CVSS v4 vector'
     };
   }
+
+  const trimmedVector = rawVector.trim();
+  const metrics = parseCvssV4Vector(trimmedVector);
 
   let validatedScore = null;
   if (cvssObj.score !== undefined && cvssObj.score !== null) {
@@ -515,11 +615,40 @@ export function validateCvssV4(cvssObj) {
     severity = cvssObj.severity.toUpperCase();
   } else if (validatedScore !== null) {
     severity = validatedScore >= 9.0 ? 'CRITICAL' : validatedScore >= 7.0 ? 'HIGH' : validatedScore >= 4.0 ? 'MEDIUM' : validatedScore > 0 ? 'LOW' : 'NONE';
+  } else {
+    // Derive qualitative severity from vector when score is null
+    const allImpactsNone = (
+      metrics.VC === 'N' && metrics.VI === 'N' && metrics.VA === 'N' &&
+      metrics.SC === 'N' && metrics.SI === 'N' && metrics.SA === 'N'
+    );
+    if (allImpactsNone) {
+      severity = 'NONE';
+    } else if (metrics.AV === 'N' && metrics.AC === 'L' && metrics.PR === 'N' && metrics.VC === 'H' && metrics.VI === 'H') {
+      severity = 'CRITICAL';
+    } else if (metrics.VC === 'H' || metrics.VI === 'H') {
+      severity = 'HIGH';
+    } else if (metrics.VC === 'L' || metrics.VI === 'L' || metrics.VA === 'L') {
+      severity = 'MEDIUM';
+    } else {
+      severity = 'LOW';
+    }
+  }
+
+  // R1-P1-04: Strict consistency check between vector, score, and severity
+  const consistencyCheck = validateCvssV4Consistency(metrics, validatedScore, severity);
+  if (!consistencyCheck.valid) {
+    return {
+      valid: false,
+      vector: null,
+      score: null,
+      severity: 'UNRATED',
+      error: consistencyCheck.error
+    };
   }
 
   return {
     valid: true,
-    vector: rawVector.trim(),
+    vector: trimmedVector,
     score: validatedScore,
     severity
   };
@@ -1318,7 +1447,11 @@ export function finalizeScan({
     // Severity determination (calibrated by impact verifier if available)
     let severity = (impactVote && impactVote.calibratedSeverity)
       ? String(impactVote.calibratedSeverity).toUpperCase()
-      : String(raw.severity || cvss.severity || 'HIGH').toUpperCase();
+      : (cvss.valid && cvss.severity && cvss.severity !== 'UNRATED')
+        ? cvss.severity
+        : (raw.cvssV4 && !cvss.valid)
+          ? 'MEDIUM' // Default-deny clamp if submitted CVSS was invalid/contradictory
+          : String(raw.severity || 'MEDIUM').toUpperCase();
     if (!['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(severity)) {
       severity = 'MEDIUM';
     }
@@ -1490,6 +1623,18 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       }
     }
 
+    let validatedCvss = null;
+    if (raw.cvssV4 && typeof raw.cvssV4 === 'object') {
+      const cvssRes = validateCvssV4(raw.cvssV4);
+      if (cvssRes && cvssRes.valid) {
+        validatedCvss = {
+          vector: cvssRes.vector,
+          score: cvssRes.score,
+          severity: cvssRes.severity
+        };
+      }
+    }
+
     validated.push({
       ...raw,
       id,
@@ -1506,7 +1651,7 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       },
       confidenceScore: raw.confidenceScore !== undefined ? raw.confidenceScore : 0.5,
       confidenceLevel: raw.confidenceLevel || 'LOW',
-      cvssV4: raw.cvssV4 || null,
+      cvssV4: validatedCvss,
       rigor,
       consensus,
       disposition,
@@ -1715,7 +1860,7 @@ export function renderMarkdownFromCanonical({
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       md += `- **Confidence**: \`${f.confidenceScore}\` (${f.confidenceLevel})\n`;
       if (f.cvssV4?.vector) {
-        md += `- **CVSS v4.0**: \`${sanitizeInlineText(f.cvssV4.vector)}\` (Score: ${f.cvssV4.score})\n`;
+        md += `- **CVSS v4.0**: \`${sanitizeInlineText(f.cvssV4.vector)}\`${f.cvssV4.score !== null ? ` (Score: ${f.cvssV4.score})` : ' (Score: Unrated / Vector-Only)'}\n`;
       }
       md += `- **Mathematical Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
       md += `- **Verifier Consensus**: ${f.consensus.supports}/${f.consensus.totalVotes} votes support (unanimous=${f.consensus.unanimous})\n`;

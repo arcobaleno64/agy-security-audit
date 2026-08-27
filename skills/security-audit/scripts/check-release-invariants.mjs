@@ -366,6 +366,16 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         if (outOfBounds.valid) {
           throw new Error('Out of bounds CVSS score (11.5) was accepted or clamped instead of fail-closed rejection');
         }
+
+        // R1-P1-04: Inconsistent CVSS score/vector rejection
+        const inconsistentZeroImpact = validateCvssV4({
+          vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N',
+          score: 10.0,
+          severity: 'CRITICAL'
+        });
+        if (inconsistentZeroImpact.valid) {
+          throw new Error('Inconsistent zero-impact CVSS vector with score 10.0 was accepted');
+        }
       }
     },
     {

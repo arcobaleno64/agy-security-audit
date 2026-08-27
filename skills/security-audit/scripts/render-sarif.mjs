@@ -2168,7 +2168,113 @@ export function runTests() {
 
   console.log('✔ 64. R1-P1-03 Invariant: Canonical renderer validates canonical schema and redacts secrets under Default-Deny.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (64/64).');
+  // 65. R1-P1-04 Invariant: CVSS v4 Vector and Score Consistency Validation
+  // 65.1 Zero-impact vector with non-zero score rejected fail-closed
+  const zeroImpactInconsistent = {
+    vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N',
+    score: 10.0,
+    severity: 'CRITICAL'
+  };
+  const zeroImpRes = validateCvssV4(zeroImpactInconsistent);
+  if (zeroImpRes.valid || !zeroImpRes.error.includes('zero-impact vector')) {
+    throw new Error('R1-P1-04 VIOLATION: Zero-impact vector with score 10 was not rejected fail-closed');
+  }
+
+  // 65.2 Physical vector with CRITICAL score rejected fail-closed
+  const physicalInconsistent = {
+    vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N',
+    score: 9.5,
+    severity: 'CRITICAL'
+  };
+  const physRes = validateCvssV4(physicalInconsistent);
+  if (physRes.valid || !physRes.error.includes('Physical attack vector (AV:P) cannot be CRITICAL')) {
+    throw new Error('R1-P1-04 VIOLATION: Physical vector with score 9.5 was not rejected fail-closed');
+  }
+
+  // 65.3 Score / severity contradiction rejected fail-closed
+  const scoreSeverityContradiction = {
+    vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N',
+    score: 2.5,
+    severity: 'CRITICAL'
+  };
+  const contraRes = validateCvssV4(scoreSeverityContradiction);
+  if (contraRes.valid || !contraRes.error.includes('maps to LOW, but claimed severity is \'CRITICAL\'')) {
+    throw new Error('R1-P1-04 VIOLATION: Score 2.5 with severity CRITICAL was not rejected fail-closed');
+  }
+
+  // 65.4 Zero-impact vector with score 0.0 or null accepted as NONE
+  const zeroImpValid = {
+    vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N'
+  };
+  const zeroImpValidRes = validateCvssV4(zeroImpValid);
+  if (!zeroImpValidRes.valid || zeroImpValidRes.severity !== 'NONE') {
+    throw new Error('R1-P1-04 VIOLATION: Zero-impact vector without score was not accepted as severity NONE');
+  }
+
+  // 65.5 Consistent valid vector and score accepted
+  const consistentValid = {
+    vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N',
+    score: 9.3,
+    severity: 'CRITICAL'
+  };
+  const validRes = validateCvssV4(consistentValid);
+  if (!validRes.valid || validRes.score !== 9.3 || validRes.severity !== 'CRITICAL') {
+    throw new Error('R1-P1-04 VIOLATION: Consistent CVSS vector and score failed validation');
+  }
+
+  // 65.6 Physical vector with score omitted but severity CRITICAL rejected fail-closed
+  const physNoScoreCrit = {
+    vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N',
+    severity: 'CRITICAL'
+  };
+  const physNoScoreRes = validateCvssV4(physNoScoreCrit);
+  if (physNoScoreRes.valid) {
+    throw new Error('R1-P1-04 VIOLATION: Physical vector with omitted score and claimed CRITICAL was accepted');
+  }
+
+  // 65.7 Zero vulnerable system impact with score omitted but severity CRITICAL rejected fail-closed
+  const zeroVulnNoScoreCrit = {
+    vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:H/SI:H/SA:H',
+    severity: 'CRITICAL'
+  };
+  const zeroVulnRes = validateCvssV4(zeroVulnNoScoreCrit);
+  if (zeroVulnRes.valid) {
+    throw new Error('R1-P1-04 VIOLATION: Zero vulnerable-system impact with claimed CRITICAL was accepted');
+  }
+
+  // 65.8 Low-only vulnerable impact (VC:L/VI:L/VA:L) with claimed CRITICAL rejected fail-closed
+  const lowOnlyCrit = {
+    vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N',
+    score: 9.2,
+    severity: 'CRITICAL'
+  };
+  const lowOnlyRes = validateCvssV4(lowOnlyCrit);
+  if (lowOnlyRes.valid) {
+    throw new Error('R1-P1-04 VIOLATION: Low-only vulnerable impact with claimed CRITICAL score was accepted');
+  }
+
+  // 65.9 validateCanonicalFindings filters out contradictory CVSS payload fail-closed
+  const canonWithBadCvss = [
+    {
+      id: 'SEC-CANON-BAD-CVSS',
+      ruleId: 'CWE-89',
+      title: 'Canonical Finding with Inconsistent CVSS',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      cvssV4: {
+        vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N',
+        score: 10.0,
+        severity: 'CRITICAL'
+      }
+    }
+  ];
+  const validatedCanonCvss = validateCanonicalFindings(canonWithBadCvss, process.cwd());
+  if (validatedCanonCvss[0].cvssV4 !== null) {
+    throw new Error('R1-P1-04 VIOLATION: Inconsistent CVSS payload was not stripped from canonical findings');
+  }
+
+  console.log('✔ 65. R1-P1-04 Invariant: CVSS v4 Vector, Score, and Severity Consistency Validation enforced fail-closed.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (65/65).');
 
   } finally {
     gitFixture.cleanup();
