@@ -37,9 +37,19 @@ Return a structured JSON vote for each candidate:
   "sink": "src/db/query.ts:88",
   "pathReachable": true,
   "preconditions": ["Authenticated tenant session required"],
-  "reason": "Clear HTTP parameter propagation through controller to SQL query"
+  "reason": "Clear HTTP parameter propagation through controller to SQL query",
+  "evidence": [
+    {
+      "path": "src/api/routes.ts",
+      "line": 42,
+      "role": "entrypoint"
+    }
+  ]
 }
 ```
 
-If the sink is unreachable (e.g. internal test helper, dead branch), vote `REFUTES` with explicit proof.
+### Strict Voting Semantics (P1-02):
+- **Vote `SUPPORTS`**: When entrypoint is reachable from untrusted source and flows continuously to sink.
+- **Vote `REFUTES`**: When candidate is genuinely unreachable (dead code, uncalled internal helper, unmounted route). You **MUST** provide concrete `evidence` with `path` and `line` locating the unreachable guard or uncalled boundary. Any `REFUTES` lacking verified evidence will be strictly deferred under Default-Deny.
+
 

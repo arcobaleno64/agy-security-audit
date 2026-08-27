@@ -36,12 +36,20 @@ Return a structured JSON vote for each candidate:
   "defensesFound": ["Zod schema validation at route entry"],
   "mitigationProofLine": "src/api/routes.ts:18",
   "mitigationReason": "Request body parsed with strict zod schema disallowing special characters",
-  "reason": "Defense invariant neutralizes attack vector"
+  "reason": "Defense invariant neutralizes attack vector",
+  "evidence": [
+    {
+      "path": "src/api/routes.ts",
+      "line": 18,
+      "role": "guard"
+    }
+  ]
 }
 ```
 
-### Strict Voting Semantics:
+### Strict Voting Semantics (P1-02):
 - **Vote `SUPPORTS`**: When defenses are **absent, flawed, or bypassable** (you SUPPORT the finding that a vulnerability exists).
-- **Vote `REFUTES`**: When an **effective sanitizer, validator, or defense barrier neutralizes the threat** (you REFUTE the finding). You MUST provide `mitigationProofLine` and `mitigationReason`.
+- **Vote `REFUTES`**: When an **effective sanitizer, validator, or defense barrier neutralizes the threat** (you REFUTE the finding). You **MUST** provide concrete `evidence` (or `mitigationProofLine`) with valid in-repo `path` and `line` locating the defense barrier. Any `REFUTES` lacking verified evidence will be strictly deferred under Default-Deny.
+
 
 

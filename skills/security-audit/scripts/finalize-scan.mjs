@@ -595,10 +595,139 @@ export function unionCandidates(runs = [], repoRoot = process.cwd()) {
 }
 
 /**
+ * Extracts candidate evidence items from a verifier vote (P1-02).
+ */
+export function extractVoteEvidence(vote, candidate = {}) {
+  const items = [];
+  const defaultCandidatePath = candidate.location?.uri || candidate.location?.path || null;
+
+  const parsePathLine = (val, defaultPath, defaultRole = null) => {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'number') {
+      return { path: defaultPath, line: val, role: defaultRole };
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      const match = trimmed.match(/^([^:]+):(\d+)$/);
+      if (match) {
+        return { path: match[1], line: parseInt(match[2], 10), role: defaultRole };
+      }
+      const lineOnly = parseInt(trimmed, 10);
+      if (!isNaN(lineOnly) && lineOnly > 0 && !trimmed.includes('/') && !trimmed.includes('\\')) {
+        return { path: defaultPath, line: lineOnly, role: defaultRole };
+      }
+      return { path: trimmed, line: null, role: defaultRole };
+    }
+    if (typeof val === 'object' && val !== null) {
+      const p = val.path || val.uri || val.file || defaultPath;
+      const l = Number(val.line || val.startLine);
+      return { path: p, line: (!isNaN(l) && l > 0) ? l : null, role: val.role || defaultRole };
+    }
+    return null;
+  };
+
+  if (Array.isArray(vote.evidence)) {
+    for (const e of vote.evidence) {
+      const parsed = parsePathLine(e, defaultCandidatePath);
+      if (parsed) items.push(parsed);
+    }
+  } else if (vote.evidence) {
+    const parsed = parsePathLine(vote.evidence, defaultCandidatePath);
+    if (parsed) items.push(parsed);
+  }
+
+  if (vote.mitigationProofLine) {
+    const parsed = parsePathLine(vote.mitigationProofLine, defaultCandidatePath, 'guard');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.unreachableProofLine) {
+    const parsed = parsePathLine(vote.unreachableProofLine, defaultCandidatePath, 'dead-path');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.containmentProofLine) {
+    const parsed = parsePathLine(vote.containmentProofLine, defaultCandidatePath, 'impact-boundary');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.proofLine) {
+    const parsed = parsePathLine(vote.proofLine, defaultCandidatePath, 'guard');
+    if (parsed) items.push(parsed);
+  }
+  if (vote.path && vote.line) {
+    const parsed = parsePathLine({ path: vote.path, line: vote.line }, defaultCandidatePath);
+    if (parsed) items.push(parsed);
+  }
+
+  return items;
+}
+
+/**
+ * Validates vote evidence fail-closed under Default-Deny (P1-02).
+ */
+export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
+  if (!vote || typeof vote !== 'object') {
+    return { valid: false, reason: 'Malformed vote object' };
+  }
+
+  // 1. FindingId Match
+  const voteFindingId = vote.findingId;
+  const candidateId = candidate.id;
+  if (!voteFindingId || (candidateId && voteFindingId !== candidateId)) {
+    return { valid: false, reason: `Vote findingId '${voteFindingId}' does not match candidate '${candidateId}'` };
+  }
+
+  // 2. Extract Evidence
+  const evidenceItems = extractVoteEvidence(vote, candidate);
+  if (evidenceItems.length === 0) {
+    return { valid: false, reason: 'Refutation requires non-empty evidence binding' };
+  }
+
+  // 3. Validate Each Evidence Item
+  for (const item of evidenceItems) {
+    if (!item.path || typeof item.path !== 'string') {
+      return { valid: false, reason: 'Evidence missing valid file path' };
+    }
+    if (!Number.isInteger(item.line) || item.line <= 0) {
+      return { valid: false, reason: `Evidence line must be a positive integer, got '${item.line}'` };
+    }
+
+    const normPath = item.path.replace(/\\/g, '/').replace(/^\.\//, '');
+
+    // Anti-traversal check
+    if (normPath.startsWith('..') || normPath.includes('/../') || path.isAbsolute(item.path)) {
+      return { valid: false, reason: `Evidence path escapes workspace: '${item.path}'` };
+    }
+
+    // Real filesystem verification if repoRoot is provided
+    if (repoRoot) {
+      const fullTarget = path.resolve(repoRoot, normPath);
+      const relToRepo = path.relative(repoRoot, fullTarget);
+      if (relToRepo.startsWith('..') || path.isAbsolute(relToRepo)) {
+        return { valid: false, reason: `Evidence path outside repository root: '${normPath}'` };
+      }
+      if (!fs.existsSync(fullTarget)) {
+        return { valid: false, reason: `Evidence file does not exist: '${normPath}'` };
+      }
+      try {
+        const fileContent = fs.readFileSync(fullTarget, 'utf8');
+        const lineCount = fileContent.split('\n').length;
+        if (item.line > lineCount) {
+          return { valid: false, reason: `Evidence line ${item.line} exceeds file length (${lineCount} lines) in '${normPath}'` };
+        }
+      } catch (e) {
+        return { valid: false, reason: `Failed to inspect evidence file '${normPath}': ${e.message}` };
+      }
+    }
+  }
+
+  return { valid: true, evidence: evidenceItems };
+}
+
+/**
  * Derives the deterministic disposition under the Presumption of Non-Pass (Default-Deny).
  * Raw verdict from input is strictly treated as an untrusted candidate hint and NEVER has authority.
+ * Every REFUTES decision strictly requires verifiable evidence binding (P1-02).
  */
-export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }) {
+export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null) {
   // 1. Schema & Location Containment Validation
   if (!candidate || typeof candidate !== 'object') {
     return { disposition: 'DEFERRED', mappedVerdict: 'NEEDS_MANUAL_REVIEW', reason: 'Malformed candidate' };
@@ -624,7 +753,6 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     };
   }
 
-
   // 2. Candidate task-binding and deduplication of votes
   const safeVotes = Array.isArray(votes) ? votes : [];
   const candidateVotes = safeVotes.filter(v => {
@@ -632,8 +760,6 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     if (v.findingId) return v.findingId === candidate.id;
     return false;
   });
-
-
 
   const dedupedVotes = [];
   const seenKeys = new Set();
@@ -650,22 +776,39 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
   if (dedupedVotes.length > 0) {
     let supports = 0;
     let refutes = 0;
-    let hasDecisiveMitigation = false;
+    let validDecisiveMitigationVote = null;
     let reachabilityRefuted = false;
+    let defensesRefuted = false;
+    let impactRefuted = false;
+    let invalidRefutation = null;
     const lenses = new Set();
 
     for (const v of dedupedVotes) {
       if (v.lens) lenses.add(String(v.lens).toUpperCase());
       const decision = String(v.decision || v.verdict || '').toUpperCase();
+      const lens = v.lens ? String(v.lens).toUpperCase() : null;
+
       if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(decision)) {
         supports++;
       } else if (['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(decision)) {
         refutes++;
-        if (v.mitigationProofLine || (v.mitigationReason && v.mitigationReason.trim().length > 0)) {
-          hasDecisiveMitigation = true;
-        }
-        if (v.lens && String(v.lens).toUpperCase() === 'REACHABILITY') {
-          reachabilityRefuted = true;
+        // P1-02: Every REFUTES must have verifiable evidence binding
+        const evCheck = validateVoteEvidence(v, candidate, repoRoot);
+        if (!evCheck.valid) {
+          invalidRefutation = {
+            vote: v,
+            lens: lens || 'GENERAL',
+            reason: evCheck.reason
+          };
+        } else {
+          validDecisiveMitigationVote = v;
+          if (lens === 'REACHABILITY') {
+            reachabilityRefuted = true;
+          } else if (lens === 'DEFENSES') {
+            defensesRefuted = true;
+          } else if (lens === 'IMPACT') {
+            impactRefuted = true;
+          }
         }
       }
     }
@@ -673,40 +816,44 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     const total = dedupedVotes.length;
     const isThreeLens = lenses.has('REACHABILITY') && lenses.has('DEFENSES') && lenses.has('IMPACT');
 
+    // If any refutation failed evidence validation, candidate cannot be suppressed OR confirmed -> DEFERRED
+    if (invalidRefutation) {
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: `Unverified refutation: ${invalidRefutation.lens} lens refuted without valid evidence binding (${invalidRefutation.reason}); deferred under default-deny`,
+        votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+      };
+    }
+
     // 3-Lens Conjunctive Evaluation
     if (isThreeLens) {
-      // If Reachability refutes -> Unreachable (FALSE_POSITIVE)
+      // If Reachability refutes with valid evidence -> Unreachable (FALSE_POSITIVE)
       if (reachabilityRefuted) {
         return {
           disposition: 'SUPPRESSED',
           mappedVerdict: 'FALSE_POSITIVE',
-          reason: 'Unreachable: refuted by 3-Lens REACHABILITY analysis',
+          reason: 'Unreachable: refuted by 3-Lens REACHABILITY analysis with verified evidence',
           votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
         };
       }
 
-      // If Defenses refutes -> Neutralized by sanitizer / validation barrier (FALSE_POSITIVE)
-      const defensesVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'DEFENSES');
-      if (defensesVote && ['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(String(defensesVote.decision || defensesVote.verdict).toUpperCase())) {
-        const hasMitigation = defensesVote.mitigationProofLine || (defensesVote.mitigationReason && defensesVote.mitigationReason.trim().length > 0);
-        if (hasMitigation) {
-          return {
-            disposition: 'SUPPRESSED',
-            mappedVerdict: 'FALSE_POSITIVE',
-            reason: 'Neutralized: affirmative defense proven by 3-Lens DEFENSES analysis',
-            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
-          };
-        }
-      }
-
-
-      // If Impact refutes -> Purely theoretical / zero demonstrable harm (FALSE_POSITIVE)
-      const impactVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
-      if (impactVote && ['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(String(impactVote.decision || impactVote.verdict).toUpperCase())) {
+      // If Defenses refutes with valid evidence -> Neutralized by sanitizer / validation barrier (FALSE_POSITIVE)
+      if (defensesRefuted) {
         return {
           disposition: 'SUPPRESSED',
           mappedVerdict: 'FALSE_POSITIVE',
-          reason: 'Zero demonstrable harm: refuted by 3-Lens IMPACT analysis',
+          reason: 'Neutralized: affirmative defense proven by 3-Lens DEFENSES analysis with verified evidence',
+          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
+      // If Impact refutes with valid evidence -> Purely theoretical / zero demonstrable harm (FALSE_POSITIVE)
+      if (impactRefuted) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Zero demonstrable harm: refuted by 3-Lens IMPACT analysis with verified evidence',
           votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
         };
       }
@@ -731,11 +878,11 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     }
 
     // General Persona Evaluation: Decisive counterevidence refutation always suppresses
-    if (hasDecisiveMitigation) {
+    if (validDecisiveMitigationVote) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
-        reason: 'Affirmatively refuted by verifier with positive mitigation evidence',
+        reason: 'Affirmatively refuted by verifier with verified mitigation evidence',
         votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
@@ -769,9 +916,8 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       };
     }
 
-
     // Refuted requirement: 3/4 supermajority + affirmative verifier mitigation proof
-    if (refutes / total >= 0.75 && hasDecisiveMitigation) {
+    if (refutes / total >= 0.75 && validDecisiveMitigationVote) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
@@ -779,6 +925,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
+
 
 
     // Fallback on dispute / split decision
@@ -952,8 +1099,9 @@ export function finalizeScan({
         votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
       };
     } else {
-      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor);
+      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, repoRoot);
     }
+
 
 
     // Confidence Clamp

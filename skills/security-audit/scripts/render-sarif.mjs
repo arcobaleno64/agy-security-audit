@@ -37,8 +37,11 @@ import {
   renderSarifFromCanonical,
   renderMarkdownFromCanonical,
   normalizeDirectoryPath,
-  loadVotes
+  loadVotes,
+  extractVoteEvidence,
+  validateVoteEvidence
 } from './finalize-scan.mjs';
+
 
 
 
@@ -582,7 +585,13 @@ export function runTests() {
     location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 30 }
   };
   const reachabilityRefuteVotes = [
-    { findingId: 'SEC-UNREACH', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Function is unreachable from any external route or entrypoint' },
+    {
+      findingId: 'SEC-UNREACH',
+      lens: 'REACHABILITY',
+      decision: 'REFUTES',
+      reason: 'Function is unreachable from any external route or entrypoint',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 30, role: 'dead-path' }]
+    },
     { findingId: 'SEC-UNREACH', lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No internal sanitizer' },
     { findingId: 'SEC-UNREACH', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read' }
   ];
@@ -602,10 +611,11 @@ export function runTests() {
   };
   const defensesRefuteVotes = [
     { findingId: 'SEC-MITIGATED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Public API endpoint reachable' },
-    { findingId: 'SEC-MITIGATED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:20', mitigationReason: 'Parameterized query barrier prevents injection' },
+    { findingId: 'SEC-MITIGATED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20', mitigationReason: 'Parameterized query barrier prevents injection' },
     { findingId: 'SEC-MITIGATED', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read impact' }
   ];
   const dispMitigated = deriveFinalDisposition(mitigatedCandidate, defensesRefuteVotes, { score: 0.85 });
+
   if (dispMitigated.disposition !== 'SUPPRESSED' || dispMitigated.mappedVerdict !== 'FALSE_POSITIVE') {
     throw new Error('P1 VIOLATION: DEFENSES mitigation was outvoted 2-to-1 in 3-Lens panel!');
   }
@@ -1117,8 +1127,94 @@ export function runTests() {
   }
   console.log('✔ 56. P1-01 Invariant: CVSS v4 strictly fails closed on invalid scores and avoids score fabrication.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (56/56).');
+  // 57. P1-02 Invariant: All REFUTES decisions require verifiable evidence binding
+  const testCandidate = {
+    id: 'SEC-EV-TEST',
+    title: 'Candidate for Evidence Binding Check',
+    ruleId: 'CWE-89',
+    severity: 'HIGH',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 }
+  };
+
+  // 57.1 REACHABILITY REFUTES without evidence -> DEFERRED
+  const noEvReachabilityVotes = [
+    { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable' },
+    { findingId: 'SEC-EV-TEST', lens: 'DEFENSES', decision: 'SUPPORTS' },
+    { findingId: 'SEC-EV-TEST', lens: 'IMPACT', decision: 'SUPPORTS' }
+  ];
+  const noEvReachRes = deriveFinalDisposition(testCandidate, noEvReachabilityVotes, { score: 0.8 }, process.cwd());
+  if (noEvReachRes.disposition !== 'DEFERRED' || noEvReachRes.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P1-02 VIOLATION: REACHABILITY REFUTES without evidence was not DEFERRED');
+  }
+
+  // 57.2 IMPACT REFUTES without evidence -> DEFERRED
+  const noEvImpactVotes = [
+    { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    { findingId: 'SEC-EV-TEST', lens: 'DEFENSES', decision: 'SUPPORTS' },
+    { findingId: 'SEC-EV-TEST', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm' }
+  ];
+  const noEvImpactRes = deriveFinalDisposition(testCandidate, noEvImpactVotes, { score: 0.8 }, process.cwd());
+  if (noEvImpactRes.disposition !== 'DEFERRED' || noEvImpactRes.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P1-02 VIOLATION: IMPACT REFUTES without evidence was not DEFERRED');
+  }
+
+  // 57.3 DEFENSES REFUTES without proof/evidence -> DEFERRED
+  const noEvDefensesVotes = [
+    { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    { findingId: 'SEC-EV-TEST', lens: 'DEFENSES', decision: 'REFUTES', reason: 'Sanitized somehow' },
+    { findingId: 'SEC-EV-TEST', lens: 'IMPACT', decision: 'SUPPORTS' }
+  ];
+  const noEvDefRes = deriveFinalDisposition(testCandidate, noEvDefensesVotes, { score: 0.8 }, process.cwd());
+  if (noEvDefRes.disposition !== 'DEFERRED' || noEvDefRes.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P1-02 VIOLATION: DEFENSES REFUTES without proof was not DEFERRED');
+  }
+
+  // 57.4 Wrong findingId evidence rejected
+  const wrongIdVote = { findingId: 'WRONG-ID', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20 }] };
+  const wrongIdRes = validateVoteEvidence(wrongIdVote, testCandidate, process.cwd());
+  if (wrongIdRes.valid) {
+    throw new Error('P1-02 VIOLATION: Wrong findingId evidence was accepted');
+  }
+
+  // 57.5 Outside-repo evidence rejected
+  const traversalVote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: '../../etc/passwd', line: 1 }] };
+  const traversalRes = validateVoteEvidence(traversalVote, testCandidate, process.cwd());
+  if (traversalRes.valid) {
+    throw new Error('P1-02 VIOLATION: Path traversal evidence was accepted');
+  }
+
+  // 57.6 Invalid line rejected (line 0, line -5, line beyond EOF)
+  const line0Vote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 0 }] };
+  const line0Res = validateVoteEvidence(line0Vote, testCandidate, process.cwd());
+  if (line0Res.valid) {
+    throw new Error('P1-02 VIOLATION: Evidence with line 0 was accepted');
+  }
+  const lineBeyondEofVote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 999999 }] };
+  const lineBeyondRes = validateVoteEvidence(lineBeyondEofVote, testCandidate, process.cwd());
+  if (lineBeyondRes.valid) {
+    throw new Error('P1-02 VIOLATION: Evidence line beyond EOF was accepted');
+  }
+
+  // 57.7 Valid evidence on REFUTES successfully suppresses to FALSE_POSITIVE
+  const validEvVotes = [
+    { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    {
+      findingId: 'SEC-EV-TEST',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+    },
+    { findingId: 'SEC-EV-TEST', lens: 'IMPACT', decision: 'SUPPORTS' }
+  ];
+  const validEvRes = deriveFinalDisposition(testCandidate, validEvVotes, { score: 0.8 }, process.cwd());
+  if (validEvRes.disposition !== 'SUPPRESSED' || validEvRes.mappedVerdict !== 'FALSE_POSITIVE') {
+    throw new Error('P1-02 VIOLATION: Valid evidence refutation failed to suppress to FALSE_POSITIVE');
+  }
+  console.log('✔ 57. P1-02 Invariant: All REFUTES decisions strictly enforce verifiable evidence binding.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (57/57).');
 }
+
 
 
 

@@ -36,9 +36,19 @@ Return a structured JSON vote for each candidate:
   "impactScope": "Confidentiality and Integrity of tenant database",
   "calibratedSeverity": "HIGH",
   "cvssV4Vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
-  "reason": "Direct SQL injection enables cross-tenant database read and write access"
+  "reason": "Direct SQL injection enables cross-tenant database read and write access",
+  "evidence": [
+    {
+      "path": "src/db/client.ts",
+      "line": 50,
+      "role": "impact-boundary"
+    }
+  ]
 }
 ```
 
-If the consequence is purely theoretical with zero demonstrable security harm (e.g. log formatting without impact), vote `REFUTES` or downgrade severity.
+### Strict Voting Semantics (P1-02):
+- **Vote `SUPPORTS`**: When demonstrable security impact violates confidentiality, integrity, availability, or privilege boundary.
+- **Vote `REFUTES`**: When consequence is purely theoretical with zero demonstrable harm, or strictly contained by an unbreachable boundary. You **MUST** provide concrete `evidence` with valid in-repo `path` and `line` proving containment or lack of harm. Any `REFUTES` lacking verified evidence will be strictly deferred under Default-Deny.
+
 
