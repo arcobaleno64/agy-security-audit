@@ -32,9 +32,14 @@ import {
   deriveFinalDisposition,
   clampConfidence,
   finalizeScan,
+  unionCandidates,
+  computeFindingFingerprint,
   renderSarifFromCanonical,
   renderMarkdownFromCanonical
 } from './finalize-scan.mjs';
+
+import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
+
 
 
 export {
@@ -582,8 +587,130 @@ export function runTests() {
   }
   console.log('✔ 28. P1 Invariant: Full 10 vulnerability families and discovery matrix generated.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (28/28).');
+  // 29. P2 (0.11.0): Section 21 Attack Path Schema Validation
+  const validAttackPath = {
+    attackPathId: 'AP-01',
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'User controllable argument' },
+    steps: [
+      { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Command string concatenation' }
+    ],
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 40, description: 'Child process invocation' },
+    preconditions: ['Local operator execution'],
+    exploitabilityPrerequisites: ['Unvalidated input parameters'],
+    unmitigatedInvariant: 'No shell escape routine applied'
+  };
+  const apResult = validateAttackPath(validAttackPath, process.cwd());
+  if (!apResult.valid) {
+    throw new Error(`P2 VIOLATION: valid attack path failed validation: ${apResult.error}`);
+  }
+  const traversalAttackPath = {
+    ...validAttackPath,
+    source: { uri: '../../../etc/passwd', line: 1 }
+  };
+  const apTraversalResult = validateAttackPath(traversalAttackPath, process.cwd());
+  if (apTraversalResult.valid) {
+    throw new Error('P2 VIOLATION: Attack path with directory traversal was accepted!');
+  }
+  console.log('✔ 29. P2 Invariant: Section 21 attack path schema validated fail-closed against traversal.');
+
+  // 30. P2 (0.11.0): Proof-Gap Detection
+  const gappyPath = {
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10 },
+    steps: [
+      { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 20, description: 'assumed data propagation' }
+    ],
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 30, description: 'sink' }
+  };
+  const gaps = detectProofGaps(gappyPath);
+  if (!gaps.hasGaps || gaps.proofGaps.length < 2) {
+    throw new Error('P2 VIOLATION: detectProofGaps failed to flag unproven steps or missing invariants');
+  }
+  console.log('✔ 30. P2 Invariant: Proof-gap detector flags unproven hops and missing mitigation proofs.');
+
+  // 31. P2 (0.11.0): Multi-Run Candidate Union & Fingerprint Deduplication
+  const run1 = [
+    { ruleId: 'CWE-89', location: { uri: 'src/api.ts', startLine: 15 }, title: 'SQLi Candidate' },
+    { ruleId: 'CWE-79', location: { uri: 'src/view.ts', startLine: 30 }, title: 'XSS Candidate' }
+  ];
+  const run2 = [
+    { ruleId: 'CWE-89', location: { uri: 'src/api.ts', startLine: 15 }, title: 'SQLi Candidate Run 2' },
+    { ruleId: 'CWE-78', location: { uri: 'src/exec.ts', startLine: 45 }, title: 'Command Injection' }
+  ];
+  const unioned = unionCandidates([run1, run2]);
+  if (unioned.length !== 3) {
+    throw new Error(`P2 VIOLATION: unionCandidates length expected 3, got ${unioned.length}`);
+  }
+  const sqli = unioned.find(c => c.ruleId === 'CWE-89');
+  if (!sqli || sqli.recurrenceCount !== 2 || sqli.runsObserved.length !== 2) {
+    throw new Error('P2 VIOLATION: Multi-run candidate union failed recurrence tracking');
+  }
+  console.log('✔ 31. P2 Invariant: Multi-run candidate union deduplicates candidates and tracks recurrence.');
+
+  // 32. P2 (0.11.0): Unclosed Proof Gap Forces DEFERRED Under Default-Deny
+  const candidateWithProofGaps = {
+    id: 'SEC-GAP-01',
+    ruleId: 'CWE-89',
+    title: 'Candidate with Gap',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+    proofGaps: [{ stepIndex: 1, unprovenProperty: 'Control flow branch cannot be proven reachable' }]
+  };
+  const threeLensVotesWithGaps = [
+    { findingId: 'SEC-GAP-01', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    { findingId: 'SEC-GAP-01', lens: 'DEFENSES', decision: 'SUPPORTS' },
+    { findingId: 'SEC-GAP-01', lens: 'IMPACT', decision: 'SUPPORTS' }
+  ];
+  const dispGaps = deriveFinalDisposition(candidateWithProofGaps, threeLensVotesWithGaps, { score: 1.0 });
+  if (dispGaps.disposition !== 'DEFERRED' || dispGaps.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P2 VIOLATION: Candidate with unclosed proof gaps was not forced to DEFERRED!');
+  }
+  console.log('✔ 32. P2 Invariant: Unclosed proof gaps strictly force DEFERRED disposition.');
+
+  // 33. P2 (0.11.0): Fingerprint Delimiter Collision Resistance
+  const fpA = computeFindingFingerprint('semgrep:rules', 'xss/api.ts', 10);
+  const fpB = computeFindingFingerprint('semgrep', 'rules:xss/api.ts', 10);
+  if (fpA === fpB) {
+    throw new Error('P2 VIOLATION: computeFindingFingerprint collided on colon delimiter!');
+  }
+  console.log('✔ 33. P2 Invariant: Length-prefixed fingerprint generation is collision-resistant.');
+
+  // 34. P2 (0.11.0): Automatic Proof-Gap Integration in finalizeScan
+  const candidateWithUnprovenPath = {
+    id: 'SEC-AUTO-GAP',
+    ruleId: 'CWE-89',
+    title: 'SQLi Candidate with Unverified Hop',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 15 },
+    attackPath: {
+      source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Incoming query parameter' },
+      steps: [
+        { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 12, description: 'assumed unvalidated string concatenation' }
+      ],
+      sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, description: 'Executed SQL query' },
+      unmitigatedInvariant: 'No parameterized query'
+    }
+  };
+  const threeVotes = [
+    { findingId: 'SEC-AUTO-GAP', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    { findingId: 'SEC-AUTO-GAP', lens: 'DEFENSES', decision: 'SUPPORTS' },
+    { findingId: 'SEC-AUTO-GAP', lens: 'IMPACT', decision: 'SUPPORTS' }
+  ];
+  const finalizationWithGap = finalizeScan({
+    candidates: [candidateWithUnprovenPath],
+    votes: threeVotes,
+    repoRoot: process.cwd()
+  });
+  const canonicalFindingWithGap = finalizationWithGap.canonicalFindings[0];
+  if (canonicalFindingWithGap.disposition !== 'DEFERRED' || canonicalFindingWithGap.verdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P2 VIOLATION: Attack path with unproven hop leaked into CONFIRMED in finalizeScan!');
+  }
+  if (!Array.isArray(canonicalFindingWithGap.proofGaps) || canonicalFindingWithGap.proofGaps.length === 0) {
+    throw new Error('P2 VIOLATION: proofGaps were not retained on canonical finding!');
+  }
+  console.log('✔ 34. P2 Invariant: finalizeScan automatically detects proof gaps and enforces DEFERRED under Default-Deny.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (34/34).');
 }
+
+
 
 
 

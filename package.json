@@ -1,6 +1,7 @@
 {
   "name": "@arcobaleno64/agy-security-audit",
-  "version": "0.10.0",
+  "version": "0.11.0",
+
 
   "description": "Antigravity (AGY) security audit plugin benchmarked against Claude Security and NIST standards.",
   "type": "module",

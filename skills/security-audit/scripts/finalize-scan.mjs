@@ -11,6 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getHardenedGitProvenance, runSafeGit } from './safe-git.mjs';
+import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
+
 
 export const CVSS_V4_REGEX = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]/;
 
@@ -280,6 +282,75 @@ export function validateCvssV4(cvssObj) {
 }
 
 /**
+ * Unifies multi-run discovery candidate sets using deterministic fingerprints.
+ */
+export function unionCandidates(runs = [], repoRoot = process.cwd()) {
+  if (!Array.isArray(runs) || runs.length === 0) return [];
+  const fingerprintMap = new Map();
+  const totalRuns = runs.length;
+
+  for (let runIdx = 0; runIdx < totalRuns; runIdx++) {
+    const runCandidates = runs[runIdx] || [];
+    const seenInRun = new Set();
+
+    for (const c of runCandidates) {
+      if (!c || typeof c !== 'object') continue;
+      const ruleId = c.ruleId || 'SEC-VULN';
+      const loc = c.location || {};
+      const rawUri = loc.uri || loc.path || 'unknown';
+      const normUri = normalizeUri(repoRoot, rawUri);
+      const startLine = Number(loc.startLine) || 1;
+      const fp = computeFindingFingerprint(ruleId, normUri, startLine);
+
+      if (!fingerprintMap.has(fp)) {
+        fingerprintMap.set(fp, {
+          ...c,
+          id: c.id || `SEC-${fp.substring(0, 8)}`,
+          location: {
+            ...loc,
+            uri: normUri,
+            startLine
+          },
+          fingerprint: fp,
+          recurrenceCount: 1,
+          runsObserved: [runIdx + 1],
+          proofGaps: Array.isArray(c.proofGaps) ? [...c.proofGaps] : []
+        });
+        seenInRun.add(fp);
+      } else {
+        const existing = fingerprintMap.get(fp);
+        // Only increment recurrence if not duplicate within this single run
+        if (!seenInRun.has(fp)) {
+          existing.recurrenceCount += 1;
+          existing.runsObserved.push(runIdx + 1);
+          seenInRun.add(fp);
+        }
+
+        // Structurally deduplicate proof gaps across runs
+        if (Array.isArray(c.proofGaps)) {
+          existing.proofGaps = existing.proofGaps || [];
+          const existingKeys = new Set(existing.proofGaps.map(g => `${g.stepIndex ?? g.target}:${g.unprovenProperty}:${g.location || ''}`));
+          for (const g of c.proofGaps) {
+            const key = `${g.stepIndex ?? g.target}:${g.unprovenProperty}:${g.location || ''}`;
+            if (!existingKeys.has(key)) {
+              existingKeys.add(key);
+              existing.proofGaps.push(g);
+            }
+          }
+        }
+
+        // Merge extra attack path dataflow steps if newly discovered in this run
+        if (c.attackPath && Array.isArray(c.attackPath.steps) && (!existing.attackPath || !existing.attackPath.steps || c.attackPath.steps.length > existing.attackPath.steps.length)) {
+          existing.attackPath = c.attackPath;
+        }
+      }
+    }
+  }
+
+  return Array.from(fingerprintMap.values());
+}
+
+/**
  * Derives the deterministic disposition under the Presumption of Non-Pass (Default-Deny).
  * Raw verdict from input is strictly treated as an untrusted candidate hint and NEVER has authority.
  */
@@ -297,6 +368,19 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     return { disposition: 'DEFERRED', mappedVerdict: 'NEEDS_MANUAL_REVIEW', reason: 'Missing concrete location' };
   }
 
+  // 1.5 Proof-Gap Check (Default-Deny)
+  const rawGaps = candidate.proofGaps?.proofGaps || candidate.proofGaps;
+  if (Array.isArray(rawGaps) && rawGaps.length > 0) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: `Unclosed proof gap: ${rawGaps.length} step(s) unverified under default-deny`,
+      votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false },
+      proofGaps: rawGaps
+    };
+  }
+
+
   // 2. Candidate task-binding and deduplication of votes
   const candidateVotes = votes.filter(v => {
     if (!v) return false;
@@ -304,6 +388,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     // Unassigned ballots only bind if candidate explicitly matches or in single-candidate context
     return Boolean(candidate.isSingleCandidate || !candidate.id);
   });
+
 
   const dedupedVotes = [];
   const seenKeys = new Set();
@@ -358,13 +443,17 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       // If Defenses refutes -> Neutralized by sanitizer / validation barrier (FALSE_POSITIVE)
       const defensesVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'DEFENSES');
       if (defensesVote && ['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(String(defensesVote.decision || defensesVote.verdict).toUpperCase())) {
-        return {
-          disposition: 'SUPPRESSED',
-          mappedVerdict: 'FALSE_POSITIVE',
-          reason: 'Neutralized: affirmative defense proven by 3-Lens DEFENSES analysis',
-          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
-        };
+        const hasMitigation = defensesVote.mitigationProofLine || (defensesVote.mitigationReason && defensesVote.mitigationReason.trim().length > 0);
+        if (hasMitigation) {
+          return {
+            disposition: 'SUPPRESSED',
+            mappedVerdict: 'FALSE_POSITIVE',
+            reason: 'Neutralized: affirmative defense proven by 3-Lens DEFENSES analysis',
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+          };
+        }
       }
+
 
       // If Impact refutes -> Purely theoretical / zero demonstrable harm (FALSE_POSITIVE)
       const impactVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
@@ -536,9 +625,13 @@ export function computeLineHash(content) {
  * Computes stable finding fingerprint.
  */
 export function computeFindingFingerprint(ruleId, uri, startLine) {
-  const payload = `${ruleId || 'SEC'}:${uri || 'unknown'}:${startLine || 1}`;
-  return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 16);
+  const r = String(ruleId || 'SEC');
+  const u = String(uri || 'unknown');
+  const l = String(startLine || 1);
+  const payload = `${r.length}:${r}:${u.length}:${u}:${l}`;
+  return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 32);
 }
+
 
 /**
  * Central deterministic finalizer: transforms candidates into canonical findings.
@@ -562,7 +655,24 @@ export function finalizeScan({
   for (let i = 0; i < candidates.length; i++) {
     const raw = candidates[i];
     const candidateId = raw.id || `SEC-${String(i + 1).padStart(3, '0')}`;
+    raw.id = candidateId;
     const ruleId = raw.ruleId || 'SEC-VULN';
+
+    // If attackPath is supplied, validate schema and detect proof gaps
+    if (raw.attackPath && typeof raw.attackPath === 'object') {
+      const apVal = validateAttackPath(raw.attackPath, repoRoot);
+      if (!apVal.valid) {
+        raw.proofGaps = raw.proofGaps || [];
+        raw.proofGaps.push({ target: 'attackPath', unprovenProperty: apVal.error });
+      } else {
+        const gapCheck = detectProofGaps(raw.attackPath);
+        if (gapCheck.hasGaps) {
+          raw.proofGaps = raw.proofGaps || [];
+          raw.proofGaps.push(...gapCheck.proofGaps);
+        }
+      }
+    }
+
 
     // Target containment check
     const rawUri = raw.location?.uri || raw.location?.path || 'unknown';
@@ -655,9 +765,12 @@ export function finalizeScan({
         minorityEscalated: false
       },
       fingerprint: stableFingerprint,
-      tags: raw.tags || []
+      tags: raw.tags || [],
+      proofGaps: Array.isArray(raw.proofGaps) ? raw.proofGaps : (dispositionResult.proofGaps || []),
+      attackPath: raw.attackPath || null
     });
   }
+
 
   // 3. Summary Statistics
   const confirmedCount = canonicalFindings.filter(f => f.disposition === 'REPORTABLE').length;
@@ -928,12 +1041,20 @@ export function renderMarkdownFromCanonical({
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       md += `- **Calculated Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
       md += `- **Deferral Reason**: ${sanitizeInlineText(f.dispositionReason || 'Unproven taint flow or missing verifier consensus')}\n\n`;
+      if (Array.isArray(f.proofGaps) && f.proofGaps.length > 0) {
+        md += `- **Unclosed Proof Gaps**:\n`;
+        for (const g of f.proofGaps) {
+          md += `  - [${sanitizeInlineText(String(g.target || (g.stepIndex !== undefined ? 'step ' + g.stepIndex : 'evidence')))}] ${sanitizeInlineText(g.unprovenProperty || 'Unverified step')}${g.location ? ` (\`${sanitizeInlineText(g.location)}\`)` : ''}\n`;
+        }
+        md += '\n';
+      }
       if (f.location.lineSnippet) {
         md += `**Code Reference**:\n\`\`\`\n${f.location.lineSnippet}\n\`\`\`\n\n`;
       }
       md += '> [!IMPORTANT]\n> Under default-deny, this candidate is retained and marked unverified until manual inspection or panel quorum.\n\n';
     }
   }
+
 
 
   // Section 5: Affirmatively Refuted
