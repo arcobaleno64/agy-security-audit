@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runSafeGit, getHardenedGitProvenance } from './safe-git.mjs';
-import { isPathContained } from './finalize-scan.mjs';
+import { isPathContained, validateVoteEvidence } from './finalize-scan.mjs';
 
 // CVE-2021-42574: Invisible Bidirectional control characters
 const BIDI_REGEX = /[\u202A-\u202E\u2066-\u2069]/;
@@ -189,13 +189,19 @@ export function detectStalePatch(repoRoot = process.cwd(), targetFiles = [], bas
 }
 
 /**
- * Validates candidate remediation against the full 3-Lens panel under Default-Deny (P1-03).
+ * Validates candidate remediation against the full 3-Lens panel under Default-Deny (P1-03, R1-P0-02).
  * Requires all 3 lenses (DEFENSES, REACHABILITY, IMPACT).
  * Missing votes fail verification fail-closed (silence is not approval).
+ * All 3 REFUTES votes must provide verifiable evidence binding inside the patched tree.
  */
-export function verifyRemediation(finding, verifierVotes = []) {
+export function verifyRemediation(finding, verifierVotes = [], repoRoot = null, options = {}) {
   if (!finding || typeof finding !== 'object') {
     return { verified: false, reason: 'Invalid finding object' };
+  }
+
+  // Under Default-Deny, verification strictly requires concrete repository root
+  if (!repoRoot || typeof repoRoot !== 'string' || repoRoot.trim().length === 0) {
+    return { verified: false, reason: 'Verification requires concrete repository root under default-deny' };
   }
 
   const findingId = finding.id || finding.findingId;
@@ -224,68 +230,110 @@ export function verifyRemediation(finding, verifierVotes = []) {
     };
   }
 
-  // 2. DEFENSES Lens Verification
-  const defDecision = String(defensesVote.decision || defensesVote.verdict || '').toUpperCase();
-  const isDefRefutes = ['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(defDecision);
+  // 2. Active Exploit Dissent Check: any lens voting SUPPORTS/CONFIRMED immediately rejects
+  for (const v of [defensesVote, reachabilityVote, impactVote]) {
+    const dec = String(v.decision || v.verdict || '').toUpperCase();
+    if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(dec)) {
+      return {
+        verified: false,
+        reason: `${String(v.lens).toUpperCase()} lens confirms active exploit/impact despite patch`
+      };
+    }
+    if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(dec)) {
+      return {
+        verified: false,
+        reason: `${String(v.lens).toUpperCase()} lens decision '${dec}' does not refute vulnerability under default-deny`
+      };
+    }
+  }
 
-  const proofLine = defensesVote.mitigationProofLine
-    ? String(defensesVote.mitigationProofLine).trim()
-    : (Array.isArray(defensesVote.evidence) && defensesVote.evidence[0]
-        ? (typeof defensesVote.evidence[0] === 'object' ? `${defensesVote.evidence[0].path}:${defensesVote.evidence[0].line}` : String(defensesVote.evidence[0]))
-        : null);
-  const proofReason = defensesVote.mitigationReason
-    ? String(defensesVote.mitigationReason).trim()
-    : (defensesVote.reason ? String(defensesVote.reason).trim() : null);
+  // 3. Evidence Validation for all 3 REFUTES ballots (R1-P0-02)
+  for (const v of [defensesVote, reachabilityVote, impactVote]) {
+    const evCheck = validateVoteEvidence(v, finding, repoRoot);
+    if (!evCheck.valid) {
+      return {
+        verified: false,
+        reason: `Unverified refutation: ${String(v.lens).toUpperCase()} lens refuted remediation without valid evidence binding (${evCheck.reason}); deferred under default-deny`
+      };
+    }
+    v._validatedEvidence = evCheck.evidence;
+  }
 
-  const hasDefProof = Boolean(
-    proofLine &&
-    proofLine.length > 0 &&
-    proofReason &&
-    proofReason.length > 0
-  );
-
-  if (!isDefRefutes || !hasDefProof) {
+  // 4. Scratch Tree Isolation Guard (R1-P0-02)
+  if (options.scratchTree && path.resolve(repoRoot) !== path.resolve(options.scratchTree)) {
     return {
       verified: false,
-      reason: 'DEFENSES lens must vote REFUTES with affirmative mitigation proof (mitigationProofLine and mitigationReason)'
+      reason: 'Verification must be executed against isolated scratch tree, not unpatched repository root'
+    };
+  }
+  if (options.originalTree) {
+    const origAbs = path.resolve(options.originalTree);
+    const repoAbs = path.resolve(repoRoot);
+    if (origAbs === repoAbs) {
+      return {
+        verified: false,
+        reason: 'Verification rejected: repository root points to original unpatched tree instead of isolated scratch tree'
+      };
+    }
+  }
+
+  // 5. Target Correlation Guard (R1-P0-02)
+  const targetUri = finding.location?.uri || finding.location?.path;
+  const defEv = defensesVote._validatedEvidence || [];
+  const reachEv = reachabilityVote._validatedEvidence || [];
+  const impactEv = impactVote._validatedEvidence || [];
+
+  if (targetUri) {
+    const normTarget = targetUri.replace(/\\/g, '/').replace(/^\.\//, '');
+    const allEv = [defEv, reachEv, impactEv].flat();
+    const touchesTarget = allEv.some(e => e.path.replace(/\\/g, '/').replace(/^\.\//, '') === normTarget);
+    if (!touchesTarget) {
+      return {
+        verified: false,
+        reason: `Evidence does not correlate with vulnerability target file: '${targetUri}'`
+      };
+    }
+  }
+
+  // 6. Specific Lens Proof Assertions:
+  // DEFENSES: must prove mitigation/guard
+  const hasDefProof = defEv.some(e => ['guard', 'control', 'defense', 'mitigation'].includes(e.role)) ||
+    Boolean(defensesVote.mitigationProofLine);
+  const defReason = defensesVote.mitigationReason || defensesVote.reason;
+  if (!hasDefProof || !defReason) {
+    return {
+      verified: false,
+      reason: 'DEFENSES lens must provide verified mitigation proof (mitigationProofLine / guard role and reason)'
     };
   }
 
-  // 3. REACHABILITY Lens Verification
-  const reachDecision = String(reachabilityVote.decision || reachabilityVote.verdict || '').toUpperCase();
-  if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(reachDecision)) {
+  // REACHABILITY: must prove route/flow blocked with role and rationale
+  const reachReason = reachabilityVote.reason || reachabilityVote.justification || reachabilityVote.mitigationReason;
+  const hasReachProof = reachEv.some(e => ['dead-path', 'blocked', 'unreachable', 'guard', 'control', 'entrypoint'].includes(e.role)) ||
+    Boolean(reachabilityVote.unreachableProofLine);
+  if (!hasReachProof || !reachReason) {
     return {
       verified: false,
-      reason: 'REACHABILITY lens confirms that attack path remains active despite patch'
-    };
-  }
-  if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(reachDecision)) {
-    return {
-      verified: false,
-      reason: `REACHABILITY lens decision '${reachDecision}' does not refute reachability under default-deny`
+      reason: 'REACHABILITY lens must provide verified evidence and rationale that attack path is blocked'
     };
   }
 
-  // 4. IMPACT Lens Verification
-  const impactDecision = String(impactVote.decision || impactVote.verdict || '').toUpperCase();
-  if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(impactDecision)) {
+  // IMPACT: must prove consequence neutralized with role and rationale
+  const impactReason = impactVote.reason || impactVote.justification || impactVote.mitigationReason;
+  const hasImpactProof = impactEv.some(e => ['impact-boundary', 'containment', 'neutralized', 'guard', 'control', 'defense'].includes(e.role)) ||
+    Boolean(impactVote.containmentProofLine);
+  if (!hasImpactProof || !impactReason) {
     return {
       verified: false,
-      reason: 'IMPACT lens confirms that security consequence remains obtainable despite patch'
-    };
-  }
-  if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(impactDecision)) {
-    return {
-      verified: false,
-      reason: `IMPACT lens decision '${impactDecision}' does not refute security impact under default-deny`
+      reason: 'IMPACT lens must provide verified evidence and rationale that security consequence is neutralized'
     };
   }
 
   return {
     verified: true,
-    reason: 'Full 3-Lens panel (DEFENSES, REACHABILITY, IMPACT) unanimously verifies remediation under default-deny',
-    mitigationProofLine: proofLine,
-    mitigationReason: proofReason
+    reason: 'Full 3-Lens panel (DEFENSES, REACHABILITY, IMPACT) unanimously verifies remediation with validated evidence bindings',
+    mitigationProofLine: defensesVote.mitigationProofLine || `${defEv[0]?.path}:${defEv[0]?.line}`,
+    mitigationReason: defReason
   };
 }
 

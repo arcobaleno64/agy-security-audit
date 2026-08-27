@@ -699,7 +699,7 @@ export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
 
   // 1. FindingId Match
   const voteFindingId = vote.findingId;
-  const candidateId = candidate.id;
+  const candidateId = candidate.id || candidate.findingId;
   if (!voteFindingId || (candidateId && voteFindingId !== candidateId)) {
     return { valid: false, reason: `Vote findingId '${voteFindingId}' does not match candidate '${candidateId}'` };
   }

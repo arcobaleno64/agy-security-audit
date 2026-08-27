@@ -302,23 +302,34 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       id: 'SEC-INV-09',
       name: 'verify-fix requires all 3 lenses',
       check: () => {
-        const finding = { id: 'INV-9', ruleId: 'CWE-89' };
+        const finding = { id: 'INV-9', ruleId: 'CWE-89', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 } };
         // 1 DEFENSES vote only -> REJECTED
         const oneVote = [
-          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:1' }
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' }
         ];
-        const res1 = verifyRemediation(finding, oneVote);
+        const res1 = verifyRemediation(finding, oneVote, process.cwd());
         if (res1.verified) {
           throw new Error('Remediation verified with only 1 lens instead of all 3 required lenses');
         }
         // 2 votes only (DEFENSES + REACHABILITY) -> REJECTED
         const twoVotes = [
-          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:1' },
-          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES' }
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' },
+          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'blocked', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] }
         ];
-        const res2 = verifyRemediation(finding, twoVotes);
+        const res2 = verifyRemediation(finding, twoVotes, process.cwd());
         if (res2.verified) {
           throw new Error('Remediation verified with only 2 lenses instead of all 3 required lenses');
+        }
+
+        // 3 votes with fake evidence -> REJECTED (R1-P0-02)
+        const fakeThreeVotes = [
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'totally/fake.js:999999', mitigationReason: 'trust me' },
+          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'totally/fake.js', line: 10, role: 'dead-path' }] },
+          { findingId: 'INV-9', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'totally/fake.js', line: 10, role: 'impact-boundary' }] }
+        ];
+        const res3 = verifyRemediation(finding, fakeThreeVotes, process.cwd());
+        if (res3.verified) {
+          throw new Error('Remediation verified with fake evidence paths instead of verified patched tree');
         }
       }
     },

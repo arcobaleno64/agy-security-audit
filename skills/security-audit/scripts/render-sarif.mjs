@@ -875,44 +875,67 @@ export function runTests() {
   console.log('✔ 36. P2 Invariant: Stale baseline check safely inspects target file divergence.');
 
   // 37. P1-03: Remediation Verification strictly requires complete 3-Lens panel under Default-Deny
-  const findingToVerify = { id: 'SEC-REMED', ruleId: 'CWE-89' };
+  const findingToVerify = {
+    id: 'SEC-REMED',
+    ruleId: 'CWE-89',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 }
+  };
 
   // 37.1 1 DEFENSES only -> REJECTED
   const defensesOnlyVotes = [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' }
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' }
   ];
-  const defOnlyResult = verifyRemediation(findingToVerify, defensesOnlyVotes);
+  const defOnlyResult = verifyRemediation(findingToVerify, defensesOnlyVotes, process.cwd());
   if (defOnlyResult.verified) {
     throw new Error('P1-03 VIOLATION: Single DEFENSES vote alone certified remediation without REACHABILITY and IMPACT!');
   }
 
   // 37.2 DEFENSES + REACHABILITY only -> REJECTED
   const defAndReachVotes = [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
-    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked' }
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'dead-path' }] }
   ];
-  const defAndReachResult = verifyRemediation(findingToVerify, defAndReachVotes);
+  const defAndReachResult = verifyRemediation(findingToVerify, defAndReachVotes, process.cwd());
   if (defAndReachResult.verified) {
     throw new Error('P1-03 VIOLATION: Missing IMPACT vote certified remediation!');
   }
 
   // 37.3 All 3 valid -> VERIFIED
   const allThreeVotes = [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
-    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked' },
-    { findingId: 'SEC-REMED', lens: 'IMPACT', decision: 'REFUTES', reason: 'Impact neutralized' }
+    {
+      findingId: 'SEC-REMED',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25',
+      mitigationReason: 'Parameterized query barrier added',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'guard' }]
+    },
+    {
+      findingId: 'SEC-REMED',
+      lens: 'REACHABILITY',
+      decision: 'REFUTES',
+      reason: 'Exploit path blocked',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'dead-path' }]
+    },
+    {
+      findingId: 'SEC-REMED',
+      lens: 'IMPACT',
+      decision: 'REFUTES',
+      reason: 'Impact neutralized',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'impact-boundary' }]
+    }
   ];
-  const remediationResult = verifyRemediation(findingToVerify, allThreeVotes);
+  const remediationResult = verifyRemediation(findingToVerify, allThreeVotes, process.cwd());
   if (!remediationResult.verified) {
     throw new Error(`P1-03 VIOLATION: Complete 3-lens panel failed to certify remediation: ${remediationResult.reason}`);
   }
 
   // 37.4 Active exploit dissent (e.g. REACHABILITY SUPPORTS) -> REJECTED
   const unverifiedResult = verifyRemediation(findingToVerify, [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
     { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Bypass found' },
     { findingId: 'SEC-REMED', lens: 'IMPACT', decision: 'REFUTES', reason: 'Impact neutralized' }
-  ]);
+  ], process.cwd());
   if (unverifiedResult.verified) {
     throw new Error('P1-03 VIOLATION: Unverified remediation was incorrectly certified!');
   }
@@ -950,31 +973,57 @@ export function runTests() {
 
 
   // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Active Exploit Dissent
-  const candidateA = { id: 'SEC-100' };
-  const candidateB = { id: 'SEC-200' };
+  const candidateA = { id: 'SEC-100', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
+  const candidateB = { id: 'SEC-200', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
   const votesForA = [
-    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' },
-    { findingId: 'SEC-100', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable' },
-    { findingId: 'SEC-100', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm' }
+    {
+      findingId: 'SEC-100',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20',
+      mitigationReason: 'Sanitizer installed',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+    },
+    {
+      findingId: 'SEC-100',
+      lens: 'REACHABILITY',
+      decision: 'REFUTES',
+      reason: 'Unreachable',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'dead-path' }]
+    },
+    {
+      findingId: 'SEC-100',
+      lens: 'IMPACT',
+      decision: 'REFUTES',
+      reason: 'Zero harm',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'impact-boundary' }]
+    }
   ];
   // Ballots for A must verify candidate A
-  const candidateAVerified = verifyRemediation(candidateA, votesForA);
+  const candidateAVerified = verifyRemediation(candidateA, votesForA, process.cwd());
   if (!candidateAVerified.verified) {
     throw new Error('P1-03 VIOLATION: Valid 3-lens ballots for Candidate A failed verification!');
   }
   // Ballots for A must not verify candidate B
-  const crossBindingCheck = verifyRemediation(candidateB, votesForA);
+  const crossBindingCheck = verifyRemediation(candidateB, votesForA, process.cwd());
   if (crossBindingCheck.verified) {
     throw new Error('P2 VIOLATION: Ballots for Finding A verified Finding B!');
   }
 
   // Reachability + Impact dissent blocks certification
   const dissentedVotes = [
-    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' },
+    {
+      findingId: 'SEC-100',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20',
+      mitigationReason: 'Sanitizer installed',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+    },
     { findingId: 'SEC-100', lens: 'REACHABILITY', decision: 'SUPPORTS', justification: 'Bypass found' },
     { findingId: 'SEC-100', lens: 'IMPACT', decision: 'SUPPORTS', justification: 'Critical data loss' }
   ];
-  const dissentCheck = verifyRemediation(candidateA, dissentedVotes);
+  const dissentCheck = verifyRemediation(candidateA, dissentedVotes, process.cwd());
   if (dissentCheck.verified) {
     throw new Error('P2 VIOLATION: Patch was certified despite REACHABILITY and IMPACT active exploit dissent!');
   }
@@ -1576,7 +1625,203 @@ export function runTests() {
   }
   console.log('✔ 60. R1-P0-01 Invariant: SUPPORTS strictly mandates verifiable evidence bindings and derives authoritative rigor.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (60/60).');
+  // 61. R1-P0-02 Invariant: verifyRemediation strictly mandates valid evidence bindings across all 3 lenses
+  const remCandidate = {
+    id: 'SEC-REMED-R1',
+    ruleId: 'CWE-89',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+  };
+
+  // Case 0: repoRoot null / omitted -> NOT VERIFIED
+  const resNoRepoRoot = verifyRemediation(remCandidate, [
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+  ], null);
+  if (resNoRepoRoot.verified || !resNoRepoRoot.reason.includes('concrete repository root')) {
+    throw new Error(`R1-P0-02 VIOLATION: Null repoRoot was not rejected fail-closed: ${JSON.stringify(resNoRepoRoot)}`);
+  }
+
+  // Case 1: 3 REFUTES + fake paths -> NOT VERIFIED
+  const votesFakePaths = [
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'fake/path.js:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'fake/path.js', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'fake/path.js', line: 10, role: 'impact-boundary' }] }
+  ];
+  const resFakePaths = verifyRemediation(remCandidate, votesFakePaths, process.cwd());
+  if (resFakePaths.verified || !resFakePaths.reason.includes('does not exist')) {
+    throw new Error(`R1-P0-02 VIOLATION: Fake paths in remediation verification was not rejected: ${JSON.stringify(resFakePaths)}`);
+  }
+
+  // Case 2: REACHABILITY REFUTES without evidence -> NOT VERIFIED
+  const votesNoReachEv = [
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable' },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+  ];
+  const resNoReachEv = verifyRemediation(remCandidate, votesNoReachEv, process.cwd());
+  if (resNoReachEv.verified || !resNoReachEv.reason.includes('REACHABILITY')) {
+    throw new Error(`R1-P0-02 VIOLATION: REACHABILITY without evidence was not rejected: ${JSON.stringify(resNoReachEv)}`);
+  }
+
+  // Case 3: IMPACT REFUTES without evidence -> NOT VERIFIED
+  const votesNoImpactEv = [
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm' }
+  ];
+  const resNoImpactEv = verifyRemediation(remCandidate, votesNoImpactEv, process.cwd());
+  if (resNoImpactEv.verified || !resNoImpactEv.reason.includes('IMPACT')) {
+    throw new Error(`R1-P0-02 VIOLATION: IMPACT without evidence was not rejected: ${JSON.stringify(resNoImpactEv)}`);
+  }
+
+  // Case 4: DEFENSES proof path nonexistent -> NOT VERIFIED
+  const votesNoDefProof = [
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'nonexistent/defenses.js:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+  ];
+  const resNoDefProof = verifyRemediation(remCandidate, votesNoDefProof, process.cwd());
+  if (resNoDefProof.verified || !resNoDefProof.reason.includes('DEFENSES')) {
+    throw new Error(`R1-P0-02 VIOLATION: Nonexistent DEFENSES proof path was not rejected: ${JSON.stringify(resNoDefProof)}`);
+  }
+
+  // Case 5: Evidence points to original tree instead of patched scratch tree -> NOT VERIFIED
+  const scratchPatchedTree = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-patch-scratch-'));
+  try {
+    fs.mkdirSync(path.join(scratchPatchedTree, 'skills/security-audit/scripts'), { recursive: true });
+    fs.writeFileSync(path.join(scratchPatchedTree, 'skills/security-audit/scripts/safe-git.mjs'), 'const patched = true;\n// line 2\n');
+
+    // Passing original working tree as repoRoot when scratchTree is required -> REJECTED
+    const resOrigTree = verifyRemediation(remCandidate, [
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'DEFENSES',
+        decision: 'REFUTES',
+        mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10',
+        mitigationReason: 'Sanitization barrier installed in patch',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+      },
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'REACHABILITY',
+        decision: 'REFUTES',
+        reason: 'Path blocked in scratch tree',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
+      },
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'IMPACT',
+        decision: 'REFUTES',
+        reason: 'Zero consequence in scratch tree',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
+      }
+    ], process.cwd(), {
+      scratchTree: scratchPatchedTree,
+      originalTree: process.cwd()
+    });
+    if (resOrigTree.verified || !resOrigTree.reason.includes('isolated scratch tree')) {
+      throw new Error(`R1-P0-02 VIOLATION: Verification against original tree instead of scratch tree was not rejected: ${JSON.stringify(resOrigTree)}`);
+    }
+
+    // Valid verification in scratch tree -> VERIFIED
+    const scratchVotes = [
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'DEFENSES',
+        decision: 'REFUTES',
+        mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:1',
+        mitigationReason: 'Sanitization barrier installed in patch',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }]
+      },
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'REACHABILITY',
+        decision: 'REFUTES',
+        reason: 'Path blocked in scratch tree',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'dead-path' }]
+      },
+      {
+        findingId: 'SEC-REMED-R1',
+        lens: 'IMPACT',
+        decision: 'REFUTES',
+        reason: 'Zero consequence in scratch tree',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'impact-boundary' }]
+      }
+    ];
+    const resScratchValid = verifyRemediation(remCandidate, scratchVotes, scratchPatchedTree, {
+      scratchTree: scratchPatchedTree,
+      originalTree: process.cwd()
+    });
+    if (!resScratchValid.verified) {
+      throw new Error(`R1-P0-02 VIOLATION: Valid scratch tree remediation was rejected: ${JSON.stringify(resScratchValid)}`);
+    }
+  } finally {
+    fs.rmSync(scratchPatchedTree, { recursive: true, force: true });
+  }
+
+  // Case 5b: Uncorrelated file evidence (e.g. package.json instead of safe-git.mjs) -> NOT VERIFIED
+  const votesUncorrelated = [
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      mitigationProofLine: 'package.json:1',
+      mitigationReason: 'Unrelated file',
+      evidence: [{ path: 'package.json', line: 1, role: 'guard' }]
+    },
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'REACHABILITY',
+      decision: 'REFUTES',
+      reason: 'Unreachable',
+      evidence: [{ path: 'package.json', line: 1, role: 'dead-path' }]
+    },
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'IMPACT',
+      decision: 'REFUTES',
+      reason: 'Zero harm',
+      evidence: [{ path: 'package.json', line: 1, role: 'impact-boundary' }]
+    }
+  ];
+  const resUncorrelated = verifyRemediation(remCandidate, votesUncorrelated, process.cwd());
+  if (resUncorrelated.verified || !resUncorrelated.reason.includes('does not correlate')) {
+    throw new Error(`R1-P0-02 VIOLATION: Uncorrelated file evidence was not rejected: ${JSON.stringify(resUncorrelated)}`);
+  }
+
+  // Case 6: All 3 valid patched-tree evidence -> eligible VERIFIED
+  const votesValidThree = [
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10',
+      mitigationReason: 'Sanitization barrier installed',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+    },
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'REACHABILITY',
+      decision: 'REFUTES',
+      reason: 'Path blocked',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
+    },
+    {
+      findingId: 'SEC-REMED-R1',
+      lens: 'IMPACT',
+      decision: 'REFUTES',
+      reason: 'Zero impact',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
+    }
+  ];
+  const resValidThree = verifyRemediation(remCandidate, votesValidThree, process.cwd());
+  if (!resValidThree.verified) {
+    throw new Error(`R1-P0-02 VIOLATION: Valid 3-lens remediation was rejected: ${JSON.stringify(resValidThree)}`);
+  }
+  console.log('✔ 61. R1-P0-02 Invariant: verifyRemediation strictly mandates valid evidence bindings across all 3 lenses.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (61/61).');
 
   } finally {
     gitFixture.cleanup();
