@@ -1,0 +1,19 @@
+{
+  "mode": "review",
+  "base": "HEAD~1",
+  "head": "HEAD",
+  "reviewInventory": {
+    "changedFiles": [
+      {
+        "path": "file1.txt",
+        "status": "MODIFIED"
+      }
+    ],
+    "deletedFiles": [
+      {
+        "path": "non-existent-fake-deleted.js",
+        "status": "DELETED"
+      }
+    ]
+  }
+}

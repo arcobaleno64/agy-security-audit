@@ -29,9 +29,12 @@ export function runSafeGit(repoRoot, args) {
 
   const safeArgs = [
     '-c', 'core.fsmonitor=false',
+    '-c', `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`,
+    '-c', 'diff.external=',
     '-C', repoRoot,
     ...args
   ];
+
 
   const result = spawnSync('git', safeArgs, {
     cwd: repoRoot,

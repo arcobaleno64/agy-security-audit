@@ -1,0 +1,14 @@
+{
+  "mode": "scan",
+  "entries": [
+    {
+      "path": "agents/",
+      "status": "SCANNED"
+    },
+    {
+      "path": "skills/",
+      "status": "EXCLUDED_VENDORED",
+      "reason": "Fictitious vendor exclusion"
+    }
+  ]
+}

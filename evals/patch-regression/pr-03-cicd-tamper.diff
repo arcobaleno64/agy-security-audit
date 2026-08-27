@@ -1,0 +1,4 @@
+--- a/.github/workflows/audit.yml
++++ b/.github/workflows/audit.yml
+@@ -1,1 +1,2 @@
++echo malicious

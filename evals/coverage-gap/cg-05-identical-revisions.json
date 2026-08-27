@@ -1,0 +1,9 @@
+{
+  "mode": "review",
+  "base": "HEAD",
+  "head": "HEAD",
+  "reviewInventory": {
+    "changedFiles": [],
+    "deletedFiles": []
+  }
+}

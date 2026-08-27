@@ -1346,7 +1346,7 @@ export function runTests() {
     const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
     try {
       // Copy project files (excluding .git) to simulate freshly extracted zip archive
-      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills'];
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills', 'evals'];
       for (const item of copyItems) {
         const srcPath = path.resolve(process.cwd(), item);
         if (fs.existsSync(srcPath)) {
@@ -1370,6 +1370,17 @@ export function runTests() {
         throw new Error(`P1-05 VIOLATION: render-sarif.mjs --test failed in clean non-git extract directory:\n${testOut}`);
       }
 
+      // Execute run-evals.mjs inside the cleanExtractDir
+      const evalsScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-evals.mjs');
+      const evalsOut = execFileSync(process.execPath, [evalsScriptInClean], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!evalsOut.includes('All 50/50 L1.5 adversarial evaluations passed cleanly!')) {
+        throw new Error(`P2-02 VIOLATION: run-evals.mjs failed in clean non-git extract directory:\n${evalsOut}`);
+      }
+
       // Execute check-release-invariants.mjs inside the cleanExtractDir
       const releaseScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'check-release-invariants.mjs');
       const releaseOut = execFileSync(process.execPath, [releaseScriptInClean], {
@@ -1380,6 +1391,7 @@ export function runTests() {
       if (!releaseOut.includes('Release Invariants Gate PASSED')) {
         throw new Error(`P1-05 VIOLATION: check-release-invariants.mjs failed in clean non-git extract directory:\n${releaseOut}`);
       }
+
     } finally {
       try {
         fs.rmSync(cleanExtractDir, { recursive: true, force: true });

@@ -1,0 +1,9 @@
+{
+  "mode": "scan",
+  "entries": [
+    {
+      "path": "agents/",
+      "status": "SCANNED"
+    }
+  ]
+}

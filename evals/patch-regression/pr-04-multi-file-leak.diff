@@ -1,0 +1,8 @@
+--- a/fileA.js
++++ b/fileA.js
+@@ -1,1 +1,2 @@
++mod
+--- a/fileB.js
++++ b/fileB.js
+@@ -1,1 +1,2 @@
++mod

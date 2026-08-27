@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "node skills/security-audit/scripts/render-sarif.mjs --test",
+    "test:evals": "node skills/security-audit/scripts/run-evals.mjs",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs"
   },
 

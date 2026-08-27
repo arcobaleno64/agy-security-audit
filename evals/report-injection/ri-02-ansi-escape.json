@@ -1,0 +1,4 @@
+{
+  "title": "\u001b[31;1mCRITICAL RED ALERT\u001b[0m",
+  "description": "Testing ANSI escape neutralization \u001b[2J."
+}
