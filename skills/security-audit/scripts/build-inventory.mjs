@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { runSafeGit, getHardenedGitProvenance } from './safe-git.mjs';
+import { runSafeGit, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 
 /**
  * Categorizes a directory path based on standard conventions.
@@ -162,16 +162,29 @@ export function extractChangedFiles(repoRoot, options = {}) {
     throw new Error('GIT_ACCOUNTING_ERROR: Cannot perform review mode in non-git workspace or uninitialized repository.');
   }
 
+  // R1-P1-02: Resolve base and head to authoritative SHA40 to eliminate option injection
+  let baseSha = null;
+  let headSha = null;
+
+  if (base !== null && base !== undefined) {
+    baseSha = resolveGitCommitRef(repoRoot, base);
+  }
+  if (head !== null && head !== undefined) {
+    headSha = resolveGitCommitRef(repoRoot, head);
+  }
+
   const changedFiles = [];
   const deletedFiles = [];
 
   const diffArgs = ['diff', '--name-status', '--no-ext-diff', '--no-textconv'];
-  if (base && head) {
-    diffArgs.push(`${base}...${head}`);
-  } else if (base) {
-    diffArgs.push(base);
+  if (baseSha && headSha) {
+    diffArgs.push(`${baseSha}...${headSha}`);
+  } else if (baseSha) {
+    diffArgs.push(baseSha);
+  } else if (headSha) {
+    diffArgs.push(`${provenance.revisionId}...${headSha}`);
   } else {
-    diffArgs.push('HEAD');
+    diffArgs.push(provenance.revisionId);
   }
 
   const diffRes = runSafeGit(repoRoot, diffArgs);
@@ -199,13 +212,13 @@ export function extractChangedFiles(repoRoot, options = {}) {
         deletedFiles.push({
           path: file1,
           status: 'RENAMED_FROM',
-          baselineRevision: base || provenance.revisionId
+          baselineRevision: baseSha || provenance.revisionId
         });
       } else if (statusCode.startsWith('D')) {
         deletedFiles.push({
           path: file1,
           status: 'DELETED',
-          baselineRevision: base || provenance.revisionId
+          baselineRevision: baseSha || provenance.revisionId
         });
       } else {
         changedFiles.push({

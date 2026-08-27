@@ -97,13 +97,63 @@ export function getHardenedGitProvenance(repoRoot) {
   }
 }
 
+const GIT_SHA_REGEX = /^[0-9a-f]{40,64}$/i;
+const SAFE_REF_REGEX = /^[a-zA-Z0-9_][a-zA-Z0-9_.~^/@-]*$/;
+
+/**
+ * Resolves a Git reference (branch, tag, revision, SHA) safely to an authoritative 40/64-character SHA.
+ * Rejects any reference starting with '-' (option injection) or containing illegal characters.
+ */
+export function resolveGitCommitRef(repoRoot, ref) {
+  if (!ref || typeof ref !== 'string') {
+    throw new Error('GIT_REF_ERROR: Reference must be a non-empty string');
+  }
+
+  const trimmed = ref.trim();
+  if (trimmed.length === 0) {
+    throw new Error('GIT_REF_ERROR: Reference cannot be empty');
+  }
+
+  // 1. Refuse any token starting with '-' or containing '--' (Option Injection defense)
+  if (trimmed.startsWith('-') || trimmed.includes(' --') || trimmed.includes('--')) {
+    throw new Error(`GIT_REF_ERROR: Refusal to parse ref starting with '-' or containing '--': '${trimmed}'`);
+  }
+
+  // 2. Conservative ref syntax validation
+  if (!SAFE_REF_REGEX.test(trimmed)) {
+    throw new Error(`GIT_REF_ERROR: Reference contains invalid characters: '${trimmed}'`);
+  }
+
+  // 3. Resolve commit SHA via git rev-parse --verify --quiet <ref>^{commit}
+  const res = runSafeGit(repoRoot, ['rev-parse', '--verify', '--quiet', `${trimmed}^{commit}`]);
+  if (res.status !== 0 || !res.stdout || res.stdout.trim().length === 0) {
+    throw new Error(`GIT_REF_ERROR: Cannot resolve reference to a valid commit: '${trimmed}'`);
+  }
+
+  const resolvedSha = res.stdout.trim();
+  if (!GIT_SHA_REGEX.test(resolvedSha)) {
+    throw new Error(`GIT_REF_ERROR: Resolved commit reference is not a valid hash: '${resolvedSha}'`);
+  }
+
+  return resolvedSha;
+}
+
 /**
  * Safely reads a file content from a specific git revision (e.g. baseline for deleted files).
  */
 export function readGitFileAtRevision(repoRoot, revision, filePath) {
-  if (!repoRoot || !revision || !filePath) return null;
+  if (!repoRoot || !revision || !filePath || typeof revision !== 'string' || typeof filePath !== 'string') return null;
+  if (filePath.trim().length === 0) return null;
+
+  let resolvedSha;
+  try {
+    resolvedSha = resolveGitCommitRef(repoRoot, revision);
+  } catch {
+    return null;
+  }
+
   const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const refSpec = `${revision}:${normalizedPath}`;
+  const refSpec = `${resolvedSha}:${normalizedPath}`;
   const res = runSafeGit(repoRoot, ['show', refSpec]);
   if (res.status === 0 && res.stdout !== null) {
     return res.stdout;

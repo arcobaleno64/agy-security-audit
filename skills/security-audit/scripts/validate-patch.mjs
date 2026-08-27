@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runSafeGit, getHardenedGitProvenance } from './safe-git.mjs';
+import { runSafeGit, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { isPathContained, validateVoteEvidence } from './finalize-scan.mjs';
 
 // CVE-2021-42574: Invisible Bidirectional control characters
@@ -152,19 +152,22 @@ export function detectStalePatch(repoRoot = process.cwd(), targetFiles = [], bas
     return { stale: false, modifiedFiles: [] };
   }
 
-  // Option injection defense: reject revisions starting with '-' or illegal characters
-  if (typeof baseRevision !== 'string' || baseRevision.startsWith('-') || !REVISION_REGEX.test(baseRevision)) {
+  // Option injection defense: resolve revision safely to commit hash
+  let resolvedBase;
+  try {
+    resolvedBase = resolveGitCommitRef(repoRoot, baseRevision);
+  } catch (err) {
     return {
       stale: true,
       modifiedFiles: [],
-      error: `Invalid or unsafe baseRevision parameter: ${baseRevision}`
+      error: `Invalid or unsafe baseRevision parameter: ${baseRevision} (${err.message})`
     };
   }
 
   const modifiedFiles = [];
 
   for (const file of targetFiles) {
-    const diffRes = runSafeGit(repoRoot, ['diff', '--name-only', '--no-ext-diff', '--no-textconv', baseRevision, '--', file]);
+    const diffRes = runSafeGit(repoRoot, ['diff', '--name-only', '--no-ext-diff', '--no-textconv', resolvedBase, '--', file]);
     // Fail-Closed: if git fails, treat as diverged / stale
     if (diffRes.status !== 0) {
       return {

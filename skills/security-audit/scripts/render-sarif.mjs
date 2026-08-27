@@ -11,7 +11,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { getHardenedGitProvenance, readGitFileAtRevision } from './safe-git.mjs';
+import { getHardenedGitProvenance, readGitFileAtRevision, resolveGitCommitRef } from './safe-git.mjs';
 import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory } from './build-inventory.mjs';
 import { buildThreatModel, generateDiscoveryMatrix } from './build-threat-model.mjs';
 
@@ -1974,7 +1974,106 @@ export function runTests() {
   }
   console.log('✔ 62. R1-P1-01 Invariant: Attack Path Schema physically verifies file existence, regular file, line bounds, and symlink containment.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (62/62).');
+  // 63. R1-P1-02 Invariant: Git --base / --head subcommand option injection is strictly rejected
+  const injectedOutput = path.join(os.tmpdir(), 'agy_git_option_injection.out');
+  if (fs.existsSync(injectedOutput)) {
+    fs.unlinkSync(injectedOutput);
+  }
+
+  // 63.1 --output option injection rejected in base
+  let optInjectionCaught = false;
+  try {
+    extractChangedFiles(gitFixture.repoPath, { base: `--output=${injectedOutput}`, head: 'HEAD' });
+  } catch (e) {
+    if (e.message.includes('Refusal to parse ref starting with \'-\'') || e.message.includes('GIT_REF_ERROR')) {
+      optInjectionCaught = true;
+    }
+  }
+  if (!optInjectionCaught) {
+    throw new Error('R1-P1-02 VIOLATION: --output option injection in base was not rejected fail-closed');
+  }
+
+  // 63.1b --output option injection rejected in head
+  let headOptInjectionCaught = false;
+  try {
+    extractChangedFiles(gitFixture.repoPath, { base: 'HEAD', head: `--output=${injectedOutput}` });
+  } catch (e) {
+    if (e.message.includes('Refusal to parse ref starting with \'-\'') || e.message.includes('GIT_REF_ERROR')) {
+      headOptInjectionCaught = true;
+    }
+  }
+  if (!headOptInjectionCaught) {
+    throw new Error('R1-P1-02 VIOLATION: --output option injection in head was not rejected fail-closed');
+  }
+
+  if (fs.existsSync(injectedOutput)) {
+    fs.unlinkSync(injectedOutput);
+    throw new Error('R1-P1-02 CRITICAL VIOLATION: Git option injection successfully wrote to filesystem outside repo!');
+  }
+
+  // 63.2 --no-index and single-dash flags rejected
+  for (const badToken of ['--no-index', '-o', '-d', '-f']) {
+    try {
+      resolveGitCommitRef(gitFixture.repoPath, badToken);
+      throw new Error(`R1-P1-02 VIOLATION: ${badToken} was accepted`);
+    } catch (e) {
+      if (!e.message.includes('Refusal to parse ref starting with \'-\'')) throw e;
+    }
+  }
+
+  // 63.3 --ext-diff option injection rejected
+  try {
+    resolveGitCommitRef(gitFixture.repoPath, '--ext-diff');
+    throw new Error('R1-P1-02 VIOLATION: --ext-diff was accepted');
+  } catch (e) {
+    if (!e.message.includes('Refusal to parse ref starting with \'-\'')) throw e;
+  }
+
+  // 63.4 Invalid ref rejected
+  try {
+    resolveGitCommitRef(gitFixture.repoPath, 'completely-invalid-nonexistent-ref');
+    throw new Error('R1-P1-02 VIOLATION: Nonexistent ref was accepted');
+  } catch (e) {
+    if (!e.message.includes('Cannot resolve reference to a valid commit')) throw e;
+  }
+
+  // 63.5 Valid branch / revision (HEAD) -> resolved SHA -> accepted
+  const headResolvedSha = resolveGitCommitRef(gitFixture.repoPath, 'HEAD');
+  if (!/^[0-9a-f]{40,64}$/i.test(headResolvedSha)) {
+    throw new Error(`R1-P1-02 VIOLATION: Valid HEAD did not resolve to SHA hash: ${headResolvedSha}`);
+  }
+
+  // 63.6 Valid SHA -> accepted
+  const shaResolved = resolveGitCommitRef(gitFixture.repoPath, headResolvedSha);
+  if (shaResolved !== headResolvedSha) {
+    throw new Error(`R1-P1-02 VIOLATION: Valid SHA resolution mismatch: ${shaResolved} vs ${headResolvedSha}`);
+  }
+
+  // 63.7 extractChangedFiles runs cleanly with resolved SHA and valid revisions
+  const safeDiffResult = extractChangedFiles(gitFixture.repoPath, { base: 'HEAD~1', head: 'HEAD' });
+  if (!safeDiffResult || typeof safeDiffResult.totalAccounted !== 'number') {
+    throw new Error('R1-P1-02 VIOLATION: extractChangedFiles failed with valid resolved revisions');
+  }
+
+  // 63.8 readGitFileAtRevision safely rejects option injection and non-string filePath
+  const readOptInj = readGitFileAtRevision(gitFixture.repoPath, '--output=/tmp/leak', 'test.txt');
+  if (readOptInj !== null) {
+    throw new Error('R1-P1-02 VIOLATION: readGitFileAtRevision did not return null on option injection');
+  }
+  const readNonString = readGitFileAtRevision(gitFixture.repoPath, 'HEAD', 12345);
+  if (readNonString !== null) {
+    throw new Error('R1-P1-02 VIOLATION: readGitFileAtRevision did not return null on non-string filePath');
+  }
+
+  // 63.9 detectStalePatch rejects option injection
+  const staleInj = detectStalePatch(gitFixture.repoPath, ['test.txt'], '--output=/tmp/leak');
+  if (!staleInj.stale || !staleInj.error.includes('Invalid or unsafe baseRevision')) {
+    throw new Error('R1-P1-02 VIOLATION: detectStalePatch did not reject option injection fail-closed');
+  }
+
+  console.log('✔ 63. R1-P1-02 Invariant: Git --base / --head subcommand option injection is strictly rejected fail-closed.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (63/63).');
 
   } finally {
     gitFixture.cleanup();

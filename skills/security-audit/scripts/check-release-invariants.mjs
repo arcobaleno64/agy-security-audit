@@ -21,7 +21,7 @@ import {
   renderSarifFromCanonical
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
-import { HARDENED_GIT_ENV, getHardenedGitProvenance } from './safe-git.mjs';
+import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -381,6 +381,15 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         }
         if (HARDENED_GIT_ENV.GIT_PAGER !== 'cat' || HARDENED_GIT_ENV.PAGER !== 'cat') {
           throw new Error('HARDENED_GIT_ENV does not neutralize GIT_PAGER/PAGER hooks');
+        }
+        // R1-P1-02: Subcommand option injection defense
+        try {
+          resolveGitCommitRef(process.cwd(), '--output=/tmp/injected');
+          throw new Error('resolveGitCommitRef failed to reject --output option injection');
+        } catch (e) {
+          if (!e.message.includes('Refusal to parse ref starting with \'-\'')) {
+            throw e;
+          }
         }
       }
     },
