@@ -1,8 +1,11 @@
 ---
 name: threat-modeler
 description: Discovers repository components, actors, entrypoints, and trust boundaries.
+mainAgent: false
+subagent: true
+commandExecutionPolicy: off
 tools:
-  - read_file
+  - view_file
   - list_dir
   - grep_search
   - find_by_name
@@ -10,6 +13,7 @@ permissions:
   read_only: true
   terminal_sandbox: true
 ---
+
 
 # Role: Security Architecture & Threat Modeler
 

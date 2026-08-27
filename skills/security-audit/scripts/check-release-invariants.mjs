@@ -36,11 +36,11 @@ const REQUIRED_FILES = [
   'skills/security-audit/references/swarm-consensus.md',
   'skills/security-audit/references/threat-modeling.md',
   'skills/security-audit/references/verifier-protocol.md',
-  'skills/security-audit/agents/threat-modeler.md',
-  'skills/security-audit/agents/discovery-agent.md',
-  'skills/security-audit/agents/verifier-reachability.md',
-  'skills/security-audit/agents/verifier-defenses.md',
-  'skills/security-audit/agents/verifier-impact.md'
+  'agents/threat-modeler.md',
+  'agents/discovery-agent.md',
+  'agents/verifier-reachability.md',
+  'agents/verifier-defenses.md',
+  'agents/verifier-impact.md'
 ];
 
 /**
@@ -64,7 +64,6 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       if (!isSelf && /\bplaceholder\b/i.test(content)) {
         errors.push(`File contains unresolved placeholder: ${relPath}`);
       }
-
     }
   }
 
@@ -86,7 +85,6 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
     }
   }
 
-
   // 3. Check automated test suite
   const testScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/render-sarif.mjs');
   try {
@@ -101,6 +99,37 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   } catch (err) {
     errors.push(`Automated test suite failed: ${err.message}\n${err.stderr || ''}`);
   }
+
+  // 4. Validate Plugin Custom Agents Capability & Tool Invariants (P0-04)
+  const agentFiles = [
+    'agents/threat-modeler.md',
+    'agents/discovery-agent.md',
+    'agents/verifier-reachability.md',
+    'agents/verifier-defenses.md',
+    'agents/verifier-impact.md'
+  ];
+  for (const af of agentFiles) {
+    const p = path.resolve(repoRoot, af);
+    if (fs.existsSync(p)) {
+      const content = fs.readFileSync(p, 'utf8');
+      if (!content.includes('mainAgent: false')) {
+        errors.push(`Agent invariant violation: ${af} must declare mainAgent: false`);
+      }
+      if (!content.includes('subagent: true')) {
+        errors.push(`Agent invariant violation: ${af} must declare subagent: true`);
+      }
+      if (!content.includes('commandExecutionPolicy: off')) {
+        errors.push(`Agent invariant violation: ${af} must declare commandExecutionPolicy: off`);
+      }
+      if (content.includes('read_file')) {
+        errors.push(`Agent invariant violation: ${af} contains deprecated/invalid tool name 'read_file'; must use 'view_file'`);
+      }
+      if (content.includes('run_command') || content.includes('write_to_file') || content.includes('replace_file_content')) {
+        errors.push(`Agent invariant violation: ${af} contains prohibited modifying/execution tools`);
+      }
+    }
+  }
+
 
   return {
     passed: errors.length === 0,

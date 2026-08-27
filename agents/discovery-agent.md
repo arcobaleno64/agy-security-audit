@@ -1,8 +1,11 @@
 ---
 name: discovery-agent
 description: Systematically explores component x family intersections to identify candidate vulnerabilities.
+mainAgent: false
+subagent: true
+commandExecutionPolicy: off
 tools:
-  - read_file
+  - view_file
   - list_dir
   - grep_search
   - find_by_name
@@ -10,6 +13,7 @@ permissions:
   read_only: true
   terminal_sandbox: true
 ---
+
 
 # Role: Component × Family Discovery Agent
 

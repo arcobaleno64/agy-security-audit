@@ -1052,8 +1052,38 @@ export function runTests() {
   }
   console.log('✔ 54. P0-03 Invariant: Production rendering without votes strictly enforces DEFERRED disposition.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (54/54).');
+  // 55. P0-04 Invariant: Custom agents located at plugin root with hardened capability declarations
+  const expectedAgents = [
+    'agents/threat-modeler.md',
+    'agents/discovery-agent.md',
+    'agents/verifier-reachability.md',
+    'agents/verifier-defenses.md',
+    'agents/verifier-impact.md'
+  ];
+  for (const af of expectedAgents) {
+    const fullP = path.resolve(process.cwd(), af);
+    if (!fs.existsSync(fullP)) {
+      throw new Error(`P0-04 VIOLATION: Expected agent missing from plugin root: ${af}`);
+    }
+    const content = fs.readFileSync(fullP, 'utf8');
+    if (!content.includes('mainAgent: false') || !content.includes('subagent: true') || !content.includes('commandExecutionPolicy: off')) {
+      throw new Error(`P0-04 VIOLATION: Agent ${af} missing mandatory capability constraints`);
+    }
+    if (content.includes('read_file')) {
+      throw new Error(`P0-04 VIOLATION: Agent ${af} uses invalid tool name 'read_file'; must be 'view_file'`);
+    }
+    if (content.includes('run_command') || content.includes('write_to_file')) {
+      throw new Error(`P0-04 VIOLATION: Agent ${af} has prohibited execution/modifying tools`);
+    }
+  }
+  if (categorizeDirectory('agents').status !== 'SCANNED') {
+    throw new Error('P0-04 VIOLATION: agents/ directory must be categorized as SCANNED');
+  }
+  console.log('✔ 55. P0-04 Invariant: Custom agents located at plugin root with verified least-privilege capabilities.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (55/55).');
 }
+
 
 
 

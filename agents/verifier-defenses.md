@@ -1,8 +1,11 @@
 ---
 name: verifier-defenses
 description: Evaluates whether existing sanitizers, validation schemas, or security barriers neutralize the candidate.
+mainAgent: false
+subagent: true
+commandExecutionPolicy: off
 tools:
-  - read_file
+  - view_file
   - list_dir
   - grep_search
   - find_by_name
@@ -10,6 +13,7 @@ permissions:
   read_only: true
   terminal_sandbox: true
 ---
+
 
 # Role: Verifier Panelist — DEFENSES Lens
 

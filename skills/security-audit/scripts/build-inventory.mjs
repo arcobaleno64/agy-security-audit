@@ -42,9 +42,13 @@ export function categorizeDirectory(dirName) {
   if (trimmed === 'bin') {
     return { status: 'SCANNED', reason: 'CLI entrypoint source scripts' };
   }
+  if (trimmed === 'agents') {
+    return { status: 'SCANNED', reason: 'Plugin custom subagents and security personas' };
+  }
 
   return { status: 'SCANNED', reason: 'Core application source code' };
 }
+
 
 /**
  * Counts total files inside a directory recursively up to maxDepth with cycle detection.
