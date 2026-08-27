@@ -39,6 +39,8 @@ import {
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
+import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
+
 
 
 
@@ -707,8 +709,108 @@ export function runTests() {
   }
   console.log('✔ 34. P2 Invariant: finalizeScan automatically detects proof gaps and enforces DEFERRED under Default-Deny.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (34/34).');
+  // 35. P2 (0.12.0): Unified Diff Patch Syntax & Traversal Defense
+  const validPatch = `--- a/skills/security-audit/scripts/safe-git.mjs
++++ b/skills/security-audit/scripts/safe-git.mjs
+@@ -10,2 +10,3 @@
+ const hardened = true;
++const verified = true;
+`;
+  const patchVal = validatePatchSyntax(validPatch, process.cwd());
+  if (!patchVal.valid || patchVal.targetFiles.length !== 1) {
+    throw new Error(`P2 VIOLATION: valid patch failed validation: ${patchVal.error}`);
+  }
+  const traversalPatch = `--- a/../../../../etc/passwd
++++ b/../../../../etc/passwd
+@@ -1,1 +1,2 @@
++malicious line
+`;
+  const traversalVal = validatePatchSyntax(traversalPatch, process.cwd());
+  if (traversalVal.valid) {
+    throw new Error('P2 VIOLATION: Patch containing directory traversal was accepted!');
+  }
+  console.log('✔ 35. P2 Invariant: Patch syntax validated fail-closed against directory traversal.');
+
+  // 36. P2 (0.12.0): Stale Baseline Detection
+  const staleCheck = detectStalePatch(process.cwd(), ['skills/security-audit/scripts/safe-git.mjs'], 'HEAD');
+  if (staleCheck.stale !== false) {
+    throw new Error('P2 VIOLATION: Clean baseline falsely marked as stale');
+  }
+  console.log('✔ 36. P2 Invariant: Stale baseline check safely inspects target file divergence.');
+
+  // 37. P2 (0.12.0): Remediation Verification via DEFENSES Lens
+  const findingToVerify = { id: 'SEC-REMED', ruleId: 'CWE-89' };
+  const verifiedVotes = [
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' }
+  ];
+  const remediationResult = verifyRemediation(findingToVerify, verifiedVotes);
+  if (!remediationResult.verified) {
+    throw new Error('P2 VIOLATION: verifyRemediation failed to certify verified defense invariant');
+  }
+  const unverifiedResult = verifyRemediation(findingToVerify, [{ findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'SUPPORTS' }]);
+  if (unverifiedResult.verified) {
+    throw new Error('P2 VIOLATION: Unverified remediation was incorrectly certified!');
+  }
+  console.log('✔ 37. P2 Invariant: Remediation verification requires affirmative DEFENSES proof.');
+
+  // 38. P2 (0.12.0): Patch Jail Security Rules (Bidi, CI/CD, Multi-file)
+  const bidiPatch = `--- a/skills/security-audit/scripts/safe-git.mjs
++++ b/skills/security-audit/scripts/safe-git.mjs
+@@ -10,1 +10,1 @@
+-const access = false;
++const access = true; \u202E /* hidden override */
+`;
+  const bidiVal = validatePatchSyntax(bidiPatch, process.cwd());
+  if (bidiVal.valid) {
+    throw new Error('P2 VIOLATION: Patch with Unicode Bidi character was accepted!');
+  }
+
+  const cicdPatch = `--- a/.github/workflows/audit.yml
++++ b/.github/workflows/audit.yml
+@@ -1,1 +1,2 @@
++tampered
+`;
+  const cicdVal = validatePatchSyntax(cicdPatch, process.cwd());
+  if (cicdVal.valid) {
+    throw new Error('P2 VIOLATION: Patch tampering with CI/CD was accepted!');
+  }
+  console.log('✔ 38. P2 Invariant: Patch Jail strictly rejects Unicode Bidi and CI/CD modifications.');
+
+  // 39. P2 (0.12.0): Option Injection Defense in detectStalePatch
+  const optionInjectionCheck = detectStalePatch(process.cwd(), ['skills/security-audit/scripts/safe-git.mjs'], '--output=/tmp/evil');
+  if (!optionInjectionCheck.stale || !optionInjectionCheck.error) {
+    throw new Error('P2 VIOLATION: Unsafe baseRevision option injection was not rejected fail-closed!');
+  }
+  console.log('✔ 39. P2 Invariant: detectStalePatch rejects CLI option injection fail-closed.');
+
+  // 40. P2 (0.12.0): 3-Lens Finding ID Binding and Active Exploit Dissent
+  const candidateA = { id: 'SEC-100' };
+  const candidateB = { id: 'SEC-200' };
+  const votesForA = [
+    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' }
+  ];
+  // Ballots for A must not verify candidate B
+  const crossBindingCheck = verifyRemediation(candidateB, votesForA);
+  if (crossBindingCheck.verified) {
+    throw new Error('P2 VIOLATION: Ballots for Finding A verified Finding B!');
+  }
+
+  // Reachability + Impact dissent blocks certification
+  const dissentedVotes = [
+    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' },
+    { findingId: 'SEC-100', lens: 'REACHABILITY', decision: 'SUPPORTS', justification: 'Bypass found' },
+    { findingId: 'SEC-100', lens: 'IMPACT', decision: 'SUPPORTS', justification: 'Critical data loss' }
+  ];
+  const dissentCheck = verifyRemediation(candidateA, dissentedVotes);
+  if (dissentCheck.verified) {
+    throw new Error('P2 VIOLATION: Patch was certified despite REACHABILITY and IMPACT active exploit dissent!');
+  }
+  console.log('✔ 40. P2 Invariant: Fix verification enforces finding identity and 3-lens consensus.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (40/40).');
 }
+
+
 
 
 
