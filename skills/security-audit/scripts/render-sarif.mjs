@@ -9,6 +9,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { getHardenedGitProvenance, readGitFileAtRevision } from './safe-git.mjs';
 import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory } from './build-inventory.mjs';
 import { buildThreatModel, generateDiscoveryMatrix } from './build-threat-model.mjs';
@@ -136,13 +138,69 @@ export function renderMarkdown({ findings = [], manifest = null, provenance = nu
 }
 
 
+/**
+ * Creates an isolated, temporary Git repository fixture for testing Git accounting,
+ * pre-image extraction, and review diffs without relying on host/unpacked working tree state.
+ */
+function createTestGitFixture() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-fixture-'));
+  try {
+    execFileSync('git', ['init'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'AuditFixture'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'fixture@audit.local'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: tmpDir, stdio: 'ignore' });
+
+    // Setup baseline commit (HEAD~1)
+    const file1 = path.join(tmpDir, 'file1.txt');
+    const fileToDelete = path.join(tmpDir, 'deleted.txt');
+    const pkgJson = path.join(tmpDir, 'package.json');
+    const scriptDir = path.join(tmpDir, 'skills', 'security-audit', 'scripts');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    fs.writeFileSync(path.join(scriptDir, 'safe-git.mjs'), '// Mock safe git script for fixture\n');
+    fs.writeFileSync(file1, 'Initial content line 1\nline 2\n');
+    fs.writeFileSync(fileToDelete, 'This file will be deleted\n');
+    fs.writeFileSync(pkgJson, JSON.stringify({ name: '@arcobaleno64/agy-security-audit', version: '1.0.0' }, null, 2));
+
+    execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'Initial baseline commit'], { cwd: tmpDir, stdio: 'ignore' });
+
+    // Setup second commit (HEAD) with modified, deleted, and added files
+    fs.writeFileSync(file1, 'Modified content line 1\nline 2\nadded line 3\n');
+    fs.unlinkSync(fileToDelete);
+    const addedFile = path.join(tmpDir, 'added.txt');
+    fs.writeFileSync(addedFile, 'Brand new file\n');
+
+    execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'Second commit with diffs'], { cwd: tmpDir, stdio: 'ignore' });
+
+    return {
+      repoPath: tmpDir,
+      cleanup: () => {
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors on Windows
+        }
+      }
+    };
+  } catch (err) {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+    throw new Error(`Failed to create test git fixture: ${err.message}`);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Self-Contained Automated Test Suite (--test)
 // -----------------------------------------------------------------------------
 export function runTests() {
   console.log('Running test suite for render-sarif.mjs and finalize-scan.mjs (P0 Hardening)...');
 
-  // 1. Rigor calculation test
+  const gitFixture = createTestGitFixture();
+  try {
+    // 1. Rigor calculation test
+
   const fullMetrics = {
     sinkVerified: true,
     sourceVerified: true,
@@ -479,9 +537,9 @@ export function runTests() {
   console.log('✔ 18. P1 Invariant: Ground-truth directory manifest derived deterministically from filesystem.');
 
   // 19. P1 (0.10.0): Review Mode Changed Files Accounting
-  const changedInfo = extractChangedFiles(process.cwd());
-  if (typeof changedInfo.totalAccounted !== 'number') {
-    throw new Error('P1 VIOLATION: extractChangedFiles did not return numeric totalAccounted');
+  const changedInfo = extractChangedFiles(gitFixture.repoPath, { base: 'HEAD~1', head: 'HEAD' });
+  if (typeof changedInfo.totalAccounted !== 'number' || changedInfo.totalAccounted === 0) {
+    throw new Error('P1 VIOLATION: extractChangedFiles did not return numeric totalAccounted > 0');
   }
   console.log('✔ 19. P1 Invariant: Review mode extracts and accounts for 100% changed/deleted files.');
 
@@ -497,7 +555,7 @@ export function runTests() {
   console.log('✔ 20. P1 Invariant: Scan and Review manifests conform to canonical schema.');
 
   // 21. P1 (0.10.0): Review Mode Coverage Reconciliation & Markdown Generation
-  const realDiffForTest21 = extractChangedFiles(process.cwd(), { base: 'HEAD~1', head: 'HEAD' });
+  const realDiffForTest21 = extractChangedFiles(gitFixture.repoPath, { base: 'HEAD~1', head: 'HEAD' });
   const reviewInventoryManifest = {
     mode: 'review',
     base: 'HEAD~1',
@@ -510,7 +568,7 @@ export function runTests() {
   const reviewFinalization = finalizeScan({
     candidates: [],
     manifest: reviewInventoryManifest,
-    repoRoot: process.cwd()
+    repoRoot: gitFixture.repoPath
   });
   if (reviewFinalization.coverageStatus !== 'COMPLETE') {
     throw new Error('P1 VIOLATION: Valid review manifest was not marked COMPLETE coverage');
@@ -539,11 +597,12 @@ export function runTests() {
   console.log('✔ 22. P1 Invariant: Critical entrypoints (.github, packages, bin) properly classified as SCANNED.');
 
   // 23. P1 (0.10.0): Git Baseline Pre-Image Reader
-  const headPkg = readGitFileAtRevision(process.cwd(), 'HEAD', 'package.json');
+  const headPkg = readGitFileAtRevision(gitFixture.repoPath, 'HEAD', 'package.json');
   if (!headPkg || !headPkg.includes('@arcobaleno64/agy-security-audit')) {
-    throw new Error('P1 VIOLATION: readGitFileAtRevision failed to read committed pre-image from git');
+    throw new Error('P1 VIOLATION: readGitFileAtRevision failed to read committed pre-image from git fixture');
   }
   console.log('✔ 23. P1 Invariant: Git baseline pre-image reader safely retrieves historical revisions.');
+
 
   // 24. P1 (0.10.0): Deterministic Threat Model Schema Compliance
   const tm = buildThreatModel(process.cwd());
@@ -775,7 +834,7 @@ export function runTests() {
   console.log('✔ 35. P2 Invariant: Patch syntax validated fail-closed against directory traversal.');
 
   // 36. P2 (0.12.0): Stale Baseline Detection
-  const staleCheck = detectStalePatch(process.cwd(), ['skills/security-audit/scripts/safe-git.mjs'], 'HEAD');
+  const staleCheck = detectStalePatch(gitFixture.repoPath, ['skills/security-audit/scripts/safe-git.mjs'], 'HEAD');
   if (staleCheck.stale !== false) {
     throw new Error('P2 VIOLATION: Clean baseline falsely marked as stale');
   }
@@ -849,11 +908,12 @@ export function runTests() {
   console.log('✔ 38. P2 Invariant: Patch Jail strictly rejects Unicode Bidi and CI/CD modifications.');
 
   // 39. P2 (0.12.0): Option Injection Defense in detectStalePatch
-  const optionInjectionCheck = detectStalePatch(process.cwd(), ['skills/security-audit/scripts/safe-git.mjs'], '--output=/tmp/evil');
+  const optionInjectionCheck = detectStalePatch(gitFixture.repoPath, ['skills/security-audit/scripts/safe-git.mjs'], '--output=/tmp/evil');
   if (!optionInjectionCheck.stale || !optionInjectionCheck.error) {
     throw new Error('P2 VIOLATION: Unsafe baseRevision option injection was not rejected fail-closed!');
   }
   console.log('✔ 39. P2 Invariant: detectStalePatch rejects CLI option injection fail-closed.');
+
 
   // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Active Exploit Dissent
   const candidateA = { id: 'SEC-100' };
@@ -973,7 +1033,7 @@ export function runTests() {
   console.log('✔ 46. P0-02 Invariant: Fake complete manifest is rejected as PARTIAL under filesystem reconciliation.');
 
   // 47. P0-02 Invariant: Review mode missing changed file results in PARTIAL (Test C)
-  const realDiffFor47 = extractChangedFiles(process.cwd(), { base: 'HEAD~1', head: 'HEAD' });
+  const realDiffFor47 = extractChangedFiles(gitFixture.repoPath, { base: 'HEAD~1', head: 'HEAD' });
   const partialChangedList = realDiffFor47.changedFiles.slice(1);
   const partialReviewManifest = {
     mode: 'review',
@@ -984,7 +1044,7 @@ export function runTests() {
       deletedFiles: realDiffFor47.deletedFiles
     }
   };
-  const partialReviewRes = reconcileCoverage(partialReviewManifest, process.cwd());
+  const partialReviewRes = reconcileCoverage(partialReviewManifest, gitFixture.repoPath);
   if (partialReviewRes.status === 'COMPLETE' || partialReviewRes.missingChanged.length === 0) {
     throw new Error(`P0-02 VIOLATION: Review manifest missing changed files was accepted as COMPLETE: ${JSON.stringify(partialReviewRes)}`);
   }
@@ -1000,7 +1060,7 @@ export function runTests() {
       deletedFiles: [{ path: 'unaccounted-fake-deleted.js', status: 'DELETED' }]
     }
   };
-  const fakeDeletedRes = reconcileCoverage(fakeDeletedManifest, process.cwd());
+  const fakeDeletedRes = reconcileCoverage(fakeDeletedManifest, gitFixture.repoPath);
   if (fakeDeletedRes.status === 'COMPLETE' || fakeDeletedRes.unexpectedDeleted.length === 0) {
     throw new Error(`P0-02 VIOLATION: Review manifest with fictitious deleted file was accepted as COMPLETE: ${JSON.stringify(fakeDeletedRes)}`);
   }
@@ -1039,11 +1099,12 @@ export function runTests() {
     head: 'HEAD',
     reviewInventory: { changedFiles: [], deletedFiles: [] }
   };
-  const identicalRevRes = finalizeScan({ candidates: [], manifest: identicalRevManifest, repoRoot: process.cwd() });
+  const identicalRevRes = finalizeScan({ candidates: [], manifest: identicalRevManifest, repoRoot: gitFixture.repoPath });
   if (identicalRevRes.coverageStatus === 'COMPLETE' || identicalRevRes.canDeclareClean) {
     throw new Error(`P0-02 VIOLATION: Identical review revisions (HEAD...HEAD) accepted as COMPLETE: ${JSON.stringify(identicalRevRes)}`);
   }
   console.log('✔ 51. P0-02 Invariant: Identical base/head revision manipulation rejected as PARTIAL.');
+
 
   // 52. P0-03 Invariant: loadVotes loads votes from single JSON file and nested ballot directories
   const tmpVotesDir = path.join(process.cwd(), 'scratch', 'test-votes-dir');
@@ -1280,8 +1341,59 @@ export function runTests() {
   }
   console.log('✔ 58. P1-04 Invariant: SKILL.md, verifier-protocol, and swarm-consensus completely aligned to Fixed 3-Lens architecture.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (58/58).');
+  // 59. P1-05 Invariant: Test harness operates independently of host git environment via isolated git fixtures
+  if (!process.env.IS_ZIP_CLEAN_SUBTEST) {
+    const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
+    try {
+      // Copy project files (excluding .git) to simulate freshly extracted zip archive
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills'];
+      for (const item of copyItems) {
+        const srcPath = path.resolve(process.cwd(), item);
+        if (fs.existsSync(srcPath)) {
+          const destPath = path.join(cleanExtractDir, item);
+          fs.cpSync(srcPath, destPath, { recursive: true });
+        }
+      }
+      // Ensure NO .git exists in cleanExtractDir
+      if (fs.existsSync(path.join(cleanExtractDir, '.git'))) {
+        throw new Error('Test setup error: .git was copied to cleanExtractDir');
+      }
+
+      // Execute render-sarif.mjs --test inside the cleanExtractDir
+      const testScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'render-sarif.mjs');
+      const testOut = execFileSync(process.execPath, [testScriptInClean, '--test'], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!testOut.includes('All render-sarif.mjs automated verification tests passed successfully')) {
+        throw new Error(`P1-05 VIOLATION: render-sarif.mjs --test failed in clean non-git extract directory:\n${testOut}`);
+      }
+
+      // Execute check-release-invariants.mjs inside the cleanExtractDir
+      const releaseScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'check-release-invariants.mjs');
+      const releaseOut = execFileSync(process.execPath, [releaseScriptInClean], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!releaseOut.includes('Release Invariants Gate PASSED')) {
+        throw new Error(`P1-05 VIOLATION: check-release-invariants.mjs failed in clean non-git extract directory:\n${releaseOut}`);
+      }
+    } finally {
+      try {
+        fs.rmSync(cleanExtractDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+  console.log('✔ 59. P1-05 Invariant: Test harness and release gate pass on clean extracted zip without git init.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (59/59).');
+  } finally {
+    gitFixture.cleanup();
+  }
 }
+
 
 
 
