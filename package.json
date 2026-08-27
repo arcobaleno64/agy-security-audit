@@ -1,15 +1,14 @@
 {
   "name": "@arcobaleno64/agy-security-audit",
-  "version": "0.12.0",
-
-
-
+  "version": "1.0.0",
   "description": "Antigravity (AGY) security audit plugin benchmarked against Claude Security and NIST standards.",
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "node skills/security-audit/scripts/render-sarif.mjs --test"
+    "test": "node skills/security-audit/scripts/render-sarif.mjs --test",
+    "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs"
   },
+
   "keywords": [
     "antigravity",
     "agy",

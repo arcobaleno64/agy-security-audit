@@ -15,6 +15,7 @@ const BIDI_REGEX = /[\u202A-\u202E\u2066-\u2069]/;
 
 // Forbidden manifest and CI/CD paths (Patch Jail Rule 3)
 const FORBIDDEN_PATHS = [
+  '.git/',
   '.github/',
   '.gitlab-ci.yml',
   '.circleci/',
@@ -26,6 +27,10 @@ const FORBIDDEN_PATHS = [
   'go.sum',
   'Cargo.toml',
   'Cargo.lock',
+  'requirements.txt',
+  'pyproject.toml',
+  'Dockerfile',
+  'docker-compose',
   '.gitignore'
 ];
 
@@ -56,8 +61,12 @@ function normalizeDiffHeaderPath(rawLine, prefix) {
     line = line.substring(2);
   }
 
+  // Normalize path separators and remove leading ./ or /
+  line = line.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+
   return line.trim();
 }
+
 
 /**
  * Validates unified diff syntax and enforces Patch Jail rules.
@@ -116,13 +125,15 @@ export function validatePatchSyntax(patchContent, repoRoot = process.cwd(), opti
 
   // Patch Jail Rule 3: No CI/CD or manifest tampering
   for (const f of fileList) {
-    const lower = f.toLowerCase();
+    const cleanPath = f.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '').toLowerCase();
     for (const forbidden of FORBIDDEN_PATHS) {
-      if (lower === forbidden.toLowerCase() || lower.startsWith(forbidden.toLowerCase())) {
+      const forbLower = forbidden.toLowerCase();
+      if (cleanPath === forbLower || cleanPath.startsWith(forbLower) || cleanPath.endsWith(forbLower) || cleanPath.includes('/' + forbLower)) {
         return { valid: false, targetFiles: fileList, error: `Patch rejected: Modifying CI/CD or package manifest is strictly forbidden: ${f}` };
       }
     }
   }
+
 
   return {
     valid: true,
@@ -153,7 +164,7 @@ export function detectStalePatch(repoRoot = process.cwd(), targetFiles = [], bas
   const modifiedFiles = [];
 
   for (const file of targetFiles) {
-    const diffRes = runSafeGit(repoRoot, ['diff', '--name-only', baseRevision, '--', file]);
+    const diffRes = runSafeGit(repoRoot, ['diff', '--name-only', '--no-ext-diff', '--no-textconv', baseRevision, '--', file]);
     // Fail-Closed: if git fails, treat as diverged / stale
     if (diffRes.status !== 0) {
       return {
@@ -218,12 +229,13 @@ export function verifyRemediation(finding, verifierVotes = []) {
   const reachabilityDissent = relevantVotes.some(v => v.lens && String(v.lens).toUpperCase() === 'REACHABILITY' && ['CONFIRMED', 'SUPPORTS'].includes(String(v.decision || v.verdict).toUpperCase()));
   const impactDissent = relevantVotes.some(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT' && ['CONFIRMED', 'SUPPORTS'].includes(String(v.decision || v.verdict).toUpperCase()));
 
-  if (reachabilityDissent && impactDissent) {
+  if (reachabilityDissent || impactDissent) {
     return {
       verified: false,
-      reason: 'REACHABILITY and IMPACT lenses confirm that attack path remains active despite patch'
+      reason: 'REACHABILITY or IMPACT lens confirms that attack path remains active despite patch'
     };
   }
+
 
   return {
     verified: true,

@@ -908,8 +908,9 @@ export function renderSarifFromCanonical({
     tool: {
       driver: {
         name: 'AGY Security Audit',
-        version: '0.9.1',
+        version: '1.0.0',
         informationUri: 'https://antigravity.google/docs/security',
+
         rules: Array.from(rulesMap.values())
       }
     },

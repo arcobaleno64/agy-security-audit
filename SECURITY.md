@@ -16,7 +16,8 @@ The `security-audit` plugin operates under two explicit trust models:
 
 ---
 
-## 2. Hardening & Guardrails (0.9.1 / P0)
+## 2. Hardening & Guardrails (v1.0.0 / Production)
+
 
 ### 2.1 Presumption of Non-Pass (Default-Deny)
 - Under Default-Deny, all candidate findings, coverage records, and patches begin in an unverified state.
