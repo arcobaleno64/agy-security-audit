@@ -298,12 +298,18 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
   }
 
   // 2. Candidate task-binding and deduplication of votes
-  const candidateVotes = votes.filter(v => v && (v.findingId === candidate.id || !v.findingId));
+  const candidateVotes = votes.filter(v => {
+    if (!v) return false;
+    if (v.findingId) return v.findingId === candidate.id;
+    // Unassigned ballots only bind if candidate explicitly matches or in single-candidate context
+    return Boolean(candidate.isSingleCandidate || !candidate.id);
+  });
+
   const dedupedVotes = [];
   const seenKeys = new Set();
 
   for (const v of candidateVotes) {
-    const key = v.reviewerId || v.persona || (v.lens ? `lens:${v.lens}` : null) || JSON.stringify(v);
+    const key = v.reviewerId || v.persona || (v.lens ? `lens:${String(v.lens).toUpperCase()}` : null) || JSON.stringify(v);
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
       dedupedVotes.push(v);
@@ -315,8 +321,11 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     let supports = 0;
     let refutes = 0;
     let hasDecisiveMitigation = false;
+    let reachabilityRefuted = false;
+    const lenses = new Set();
 
     for (const v of dedupedVotes) {
+      if (v.lens) lenses.add(String(v.lens).toUpperCase());
       const decision = String(v.decision || v.verdict || '').toUpperCase();
       if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(decision)) {
         supports++;
@@ -325,18 +334,75 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         if (v.mitigationProofLine || (v.mitigationReason && v.mitigationReason.trim().length > 0)) {
           hasDecisiveMitigation = true;
         }
+        if (v.lens && String(v.lens).toUpperCase() === 'REACHABILITY') {
+          reachabilityRefuted = true;
+        }
       }
     }
 
     const total = dedupedVotes.length;
+    const isThreeLens = lenses.has('REACHABILITY') && lenses.has('DEFENSES') && lenses.has('IMPACT');
 
-    // Decisive counterevidence refutation
-    if (hasDecisiveMitigation && refutes > supports) {
+    // 3-Lens Conjunctive Evaluation
+    if (isThreeLens) {
+      // If Reachability refutes -> Unreachable (FALSE_POSITIVE)
+      if (reachabilityRefuted) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Unreachable: refuted by 3-Lens REACHABILITY analysis',
+          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
+      // If Defenses refutes -> Neutralized by sanitizer / validation barrier (FALSE_POSITIVE)
+      const defensesVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'DEFENSES');
+      if (defensesVote && ['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(String(defensesVote.decision || defensesVote.verdict).toUpperCase())) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Neutralized: affirmative defense proven by 3-Lens DEFENSES analysis',
+          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
+      // If Impact refutes -> Purely theoretical / zero demonstrable harm (FALSE_POSITIVE)
+      const impactVote = dedupedVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
+      if (impactVote && ['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(String(impactVote.decision || impactVote.verdict).toUpperCase())) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Zero demonstrable harm: refuted by 3-Lens IMPACT analysis',
+          votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
+      // 3-Lens requires unanimous confirmation (supports === 3)
+      if (supports === 3 && (rigor.score >= 0.60 || candidate.dataflowVerified || candidate.sourceVerified || candidate.rigorMetrics?.sourceVerified)) {
+        return {
+          disposition: 'REPORTABLE',
+          mappedVerdict: 'CONFIRMED',
+          reason: 'Confirmed by unanimous 3-Lens panel (Reachability, Defenses, Impact)',
+          votesSummary: { total, supports: 3, refutes: 0, unanimous: true, isThreeLens, lenses: Array.from(lenses) }
+        };
+      }
+
+      // Any split or incomplete support in 3-Lens defaults to DEFERRED
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: '3-Lens panel non-unanimous; candidate unproven under default-deny',
+        votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+      };
+    }
+
+    // General Persona Evaluation: Decisive counterevidence refutation always suppresses
+    if (hasDecisiveMitigation) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
         reason: 'Affirmatively refuted by verifier with positive mitigation evidence',
-        votesSummary: { total, supports, refutes, unanimous: refutes === total }
+        votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
 
@@ -346,7 +412,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         disposition: 'DEFERRED',
         mappedVerdict: 'NEEDS_MANUAL_REVIEW',
         reason: 'Quorum not met: requires at least 2 independent verifier votes',
-        votesSummary: { total, supports, refutes, unanimous: false }
+        votesSummary: { total, supports, refutes, unanimous: false, lenses: Array.from(lenses) }
       };
     }
 
@@ -358,17 +424,24 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
         reason: 'Confirmed by 2/3 verifier supermajority with verified taint evidence',
-        votesSummary: { total, supports, refutes, unanimous: supports === total }
+        votesSummary: {
+          total,
+          supports,
+          refutes,
+          unanimous: supports === total,
+          isThreeLens: false,
+          lenses: Array.from(lenses)
+        }
       };
     }
 
     // Refuted requirement: 3/4 supermajority + affirmative mitigation
-    if (refutes / total >= 0.75 && (candidate.mitigationProofLine || candidate.mitigationReason)) {
+    if (refutes / total >= 0.75 && (candidate.mitigationProofLine || candidate.mitigationReason || hasDecisiveMitigation)) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
         reason: 'Refuted by 3/4 verifier supermajority with affirmative mitigation',
-        votesSummary: { total, supports, refutes, unanimous: refutes === total }
+        votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
 
@@ -377,16 +450,16 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       disposition: 'DEFERRED',
       mappedVerdict: 'NEEDS_MANUAL_REVIEW',
       reason: 'Panel split or unproven evidence under default-deny',
-      votesSummary: { total, supports, refutes, unanimous: false }
+      votesSummary: { total, supports, refutes, unanimous: false, lenses: Array.from(lenses) }
     };
   }
 
-  // 4. If no votes array, check candidate.consensus if supplied
+  // 4. If no votes array, check candidate.consensus if accompanied by verifiable mathematical rigor
   if (candidate.consensus && typeof candidate.consensus === 'object') {
     const total = Number(candidate.consensus.totalVotes) || 0;
     const unanimous = Boolean(candidate.consensus.unanimous);
 
-    // CRITICAL: 0 votes CANNOT be confirmed! Missing consensus cannot default to unanimous!
+    // CRITICAL: 0 votes CANNOT be confirmed!
     if (total === 0) {
       return {
         disposition: 'DEFERRED',
@@ -400,27 +473,30 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
-        reason: 'Consensus validated with quorum',
+        reason: 'Consensus validated with verified quorum',
         votesSummary: { total, supports: total, refutes: 0, unanimous: true }
       };
     }
 
+
     return {
       disposition: 'DEFERRED',
       mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-      reason: 'Consensus lacks quorum or unanimity',
+      reason: 'Consensus lacks quorum, unanimity, or mathematical rigor',
       votesSummary: { total, supports: 0, refutes: 0, unanimous }
     };
   }
 
-  // 5. Default-Deny: 0 votes and no consensus -> DEFERRED
+  // 5. Default-Deny: 0 votes -> DEFERRED (Cannot self-certify)
   return {
     disposition: 'DEFERRED',
     mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-    reason: 'No verifier panel or consensus record; presumed unverified',
+    reason: 'No verifier panel or consensus record; presumed unverified under default-deny',
     votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
   };
+
 }
+
 
 /**
  * Clamps confidence objectively based on derived disposition and panel agreement.
@@ -499,8 +575,13 @@ export function finalizeScan({
     // Mathematical Rigor
     const rigor = calculateRigor(raw.rigorMetrics);
 
-    // CVSS v4 Validation
-    const cvss = validateCvssV4(raw.cvssV4);
+    // Check for IMPACT lens calibration
+    const candidateVotes = votes.filter(v => v && (v.findingId === raw.id || v.findingId === candidateId));
+    const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
+
+    // CVSS v4 Validation (calibrated by impact verifier if present)
+    const cvss = validateCvssV4((impactVote && impactVote.cvssV4Vector) ? { vector: impactVote.cvssV4Vector } : raw.cvssV4);
+
 
     // Check if this is a credential/secret finding
     const isCredentialFinding = /secret|credential|cwe-798|token|password|api[_-]?key/i.test(ruleId) ||
@@ -537,11 +618,14 @@ export function finalizeScan({
       raw.confidence
     );
 
-    // Severity determination
-    let severity = String(raw.severity || cvss.severity || 'HIGH').toUpperCase();
+    // Severity determination (calibrated by impact verifier if available)
+    let severity = (impactVote && impactVote.calibratedSeverity)
+      ? String(impactVote.calibratedSeverity).toUpperCase()
+      : String(raw.severity || cvss.severity || 'HIGH').toUpperCase();
     if (!['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(severity)) {
       severity = 'MEDIUM';
     }
+
 
     const stableFingerprint = computeFindingFingerprint(ruleId, normalizedRelativeUri, startLine);
 
@@ -844,9 +928,13 @@ export function renderMarkdownFromCanonical({
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       md += `- **Calculated Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
       md += `- **Deferral Reason**: ${sanitizeInlineText(f.dispositionReason || 'Unproven taint flow or missing verifier consensus')}\n\n`;
+      if (f.location.lineSnippet) {
+        md += `**Code Reference**:\n\`\`\`\n${f.location.lineSnippet}\n\`\`\`\n\n`;
+      }
       md += '> [!IMPORTANT]\n> Under default-deny, this candidate is retained and marked unverified until manual inspection or panel quorum.\n\n';
     }
   }
+
 
   // Section 5: Affirmatively Refuted
   md += '## 5. Affirmatively Refuted Items (Suppressed)\n\n';

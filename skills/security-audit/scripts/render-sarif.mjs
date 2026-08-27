@@ -11,6 +11,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getHardenedGitProvenance, readGitFileAtRevision } from './safe-git.mjs';
 import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory } from './build-inventory.mjs';
+import { buildThreatModel, generateDiscoveryMatrix } from './build-threat-model.mjs';
+
 import {
   CVSS_V4_REGEX,
   normalizeUri,
@@ -500,8 +502,90 @@ export function runTests() {
   }
   console.log('✔ 23. P1 Invariant: Git baseline pre-image reader safely retrieves historical revisions.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (23/23).');
+  // 24. P1 (0.10.0): Deterministic Threat Model Schema Compliance
+  const tm = buildThreatModel(process.cwd());
+  if (tm.schemaVersion !== '1' || !Array.isArray(tm.components) || tm.components.length === 0 || !Array.isArray(tm.inScopeFamilies)) {
+    throw new Error('P1 VIOLATION: buildThreatModel failed Section 17/30 schema validation');
+  }
+  console.log('✔ 24. P1 Invariant: Threat Model generated deterministically adhering to bounded schema.');
+
+  // 25. P1 (0.10.0): Fixed 3-Lens Verifier Panel Unanimous Consensus
+  const candidate3Lens = {
+    id: 'SEC-3LENS',
+    title: 'Command Injection in Worker',
+    ruleId: 'CWE-078',
+    severity: 'HIGH',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+    dataflowVerified: true
+  };
+  const threeLensVotes = [
+    { findingId: 'SEC-3LENS', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Unsanitized argument flows directly to spawn' },
+    { findingId: 'SEC-3LENS', lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No escaping or allowlist barrier present' },
+    { findingId: 'SEC-3LENS', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Arbitrary host command execution' }
+  ];
+  const disp3Lens = deriveFinalDisposition(candidate3Lens, threeLensVotes, { score: 0.85 });
+  if (disp3Lens.disposition !== 'REPORTABLE' || !disp3Lens.votesSummary.isThreeLens) {
+    throw new Error('P1 VIOLATION: Unanimous 3-Lens panel failed to achieve REPORTABLE');
+  }
+  const conf3Lens = clampConfidence(disp3Lens.disposition, disp3Lens.votesSummary, 0.90);
+  if (conf3Lens.level !== 'high' || conf3Lens.score < 0.85) {
+    throw new Error('P1 VIOLATION: Unanimous 3-Lens panel did not achieve high confidence');
+  }
+  console.log('✔ 25. P1 Invariant: Unanimous 3-Lens Verifier Panel reaches High Confidence.');
+
+  // 26. P1 (0.10.0): Fixed 3-Lens Panel Reachability Refutation
+  const unreachableCandidate = {
+    id: 'SEC-UNREACH',
+    title: 'Theoretical Query Injection in Dead Code',
+    ruleId: 'CWE-089',
+    severity: 'HIGH',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 30 }
+  };
+  const reachabilityRefuteVotes = [
+    { findingId: 'SEC-UNREACH', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Function is unreachable from any external route or entrypoint' },
+    { findingId: 'SEC-UNREACH', lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No internal sanitizer' },
+    { findingId: 'SEC-UNREACH', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read' }
+  ];
+  const dispUnreach = deriveFinalDisposition(unreachableCandidate, reachabilityRefuteVotes, { score: 0.70 });
+  if (dispUnreach.disposition !== 'SUPPRESSED' || dispUnreach.mappedVerdict !== 'FALSE_POSITIVE') {
+    throw new Error('P1 VIOLATION: Unreachable candidate was not suppressed by REACHABILITY lens');
+  }
+  console.log('✔ 26. P1 Invariant: Reachability lens refutation decisively suppresses candidate under Default-Deny.');
+
+  // 27. P1 (0.10.0): 3-Lens Conjunction Invariant (Defenses Cannot Be Outvoted 2-to-1)
+  const mitigatedCandidate = {
+    id: 'SEC-MITIGATED',
+    title: 'SQL Injection in User Search',
+    ruleId: 'CWE-089',
+    severity: 'HIGH',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 35 }
+  };
+  const defensesRefuteVotes = [
+    { findingId: 'SEC-MITIGATED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Public API endpoint reachable' },
+    { findingId: 'SEC-MITIGATED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:20', mitigationReason: 'Parameterized query barrier prevents injection' },
+    { findingId: 'SEC-MITIGATED', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read impact' }
+  ];
+  const dispMitigated = deriveFinalDisposition(mitigatedCandidate, defensesRefuteVotes, { score: 0.85 });
+  if (dispMitigated.disposition !== 'SUPPRESSED' || dispMitigated.mappedVerdict !== 'FALSE_POSITIVE') {
+    throw new Error('P1 VIOLATION: DEFENSES mitigation was outvoted 2-to-1 in 3-Lens panel!');
+  }
+  console.log('✔ 27. P1 Invariant: 3-Lens conjunction prevents defenses from being outvoted 2-to-1.');
+
+  // 28. P1 (0.10.0): 10 Standard Vulnerability Families & Discovery Matrix
+  const tmFull = buildThreatModel(process.cwd());
+  if (tmFull.inScopeFamilies.length !== 10 || !tmFull.inScopeFamilies.includes('native-memory-safety')) {
+    throw new Error('P1 VIOLATION: inScopeFamilies does not include all 10 standard vulnerability families');
+  }
+  const matrix = generateDiscoveryMatrix(tmFull.components, tmFull.inScopeFamilies);
+  if (!Array.isArray(matrix) || matrix.length < 10) {
+    throw new Error('P1 VIOLATION: generateDiscoveryMatrix failed to yield full component x family pairings');
+  }
+  console.log('✔ 28. P1 Invariant: Full 10 vulnerability families and discovery matrix generated.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (28/28).');
 }
+
+
 
 
 
