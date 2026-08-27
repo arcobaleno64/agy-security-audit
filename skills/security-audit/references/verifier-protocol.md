@@ -89,17 +89,22 @@ When reading or inspecting files, code must always be encapsulated inside distin
 </untrusted_code_data>
 ```
 
-### Task-Correlation Nonce Token
-When subagents return structured ballots, they seal the ballot using a task-correlation token to ensure anti-confusion and strict finding identity binding:
+### Task-Correlation Nonce Token & Coordinator Verification
+When subagents return structured verdicts to the Coordinator, they enclose the assigned task-correlation token to ensure anti-confusion and strict finding identity binding:
 
 ```xml
 <audit_verdict nonce="X-NONCE-88f2a1b9">
   <finding_id>SEC-001</finding_id>
-  <verdict>CONFIRMED</verdict>
-  <confidence>0.90</confidence>
+  <lens>REACHABILITY</lens>
+  <decision>SUPPORTS</decision>
+  <evidence>
+    <path>src/controllers/auth.ts</path>
+    <line>42</line>
+    <role>entrypoint</role>
+  </evidence>
 </audit_verdict>
 ```
-Any ballot with mismatched finding identity or unproven claims is strictly rejected fail-closed under Default-Deny.
+The Coordinator strictly verifies `expected_nonce === returned_nonce` and `finding_id`. Any ballot with a missing or mismatched nonce is rejected fail-closed under Default-Deny.
 
 
 ---

@@ -43,7 +43,8 @@ import {
   extractVoteEvidence,
   validateVoteEvidence,
   deriveAuthoritativeRigor,
-  validateCanonicalFindings
+  validateCanonicalFindings,
+  validateBallot
 } from './finalize-scan.mjs';
 
 
@@ -2274,7 +2275,126 @@ export function runTests() {
 
   console.log('✔ 65. R1-P1-04 Invariant: CVSS v4 Vector, Score, and Severity Consistency Validation enforced fail-closed.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (65/65).');
+  // 66. R1-P1-05 Invariant: Verifier Ballot Task-Correlation Nonce Enforcement
+  // 66.1 validateBallot rejects missing nonce when expectedNonce is required
+  const ballotMissingNonce = {
+    findingId: 'SEC-NONCE-1',
+    lens: 'REACHABILITY',
+    decision: 'SUPPORTS',
+    evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
+  };
+  const resNoNonce = validateBallot(ballotMissingNonce, { id: 'SEC-NONCE-1', nonce: 'X-NONCE-CORRECT' });
+  if (resNoNonce.valid || !resNoNonce.reason.includes('Missing required task-correlation nonce')) {
+    throw new Error('R1-P1-05 VIOLATION: validateBallot accepted ballot missing required nonce');
+  }
+
+  // 66.2 validateBallot rejects mismatched nonce
+  const ballotWrongNonce = {
+    ...ballotMissingNonce,
+    nonce: 'X-NONCE-SPOOFED'
+  };
+  const resWrongNonce = validateBallot(ballotWrongNonce, { id: 'SEC-NONCE-1', nonce: 'X-NONCE-CORRECT' });
+  if (resWrongNonce.valid || !resWrongNonce.reason.includes('Task-correlation nonce mismatch')) {
+    throw new Error('R1-P1-05 VIOLATION: validateBallot accepted ballot with mismatched nonce');
+  }
+
+  // 66.3 validateBallot accepts matching nonce
+  const ballotValidNonce = {
+    ...ballotMissingNonce,
+    nonce: 'X-NONCE-CORRECT'
+  };
+  const resValidNonce = validateBallot(ballotValidNonce, { id: 'SEC-NONCE-1', nonce: 'X-NONCE-CORRECT' });
+  if (!resValidNonce.valid) {
+    throw new Error(`R1-P1-05 VIOLATION: validateBallot rejected valid ballot: ${resValidNonce.reason}`);
+  }
+
+  // 66.4 deriveFinalDisposition ignores ballots with mismatched nonces, falling back to DEFERRED
+  const candidateWithNonce = {
+    id: 'SEC-NONCE-1',
+    ruleId: 'CWE-89',
+    title: 'Nonce Protected Finding',
+    nonce: 'X-NONCE-CORRECT',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+  };
+  const spoofedVotes = [
+    {
+      findingId: 'SEC-NONCE-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      nonce: 'X-NONCE-ATTACKER',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
+    },
+    {
+      findingId: 'SEC-NONCE-1',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      nonce: 'X-NONCE-ATTACKER',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+    },
+    {
+      findingId: 'SEC-NONCE-1',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      nonce: 'X-NONCE-ATTACKER',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'sink' }]
+    }
+  ];
+  const dispNonce = deriveFinalDisposition(candidateWithNonce, spoofedVotes, { score: 1.0 }, process.cwd());
+  if (dispNonce.disposition !== 'DEFERRED') {
+    throw new Error('R1-P1-05 VIOLATION: deriveFinalDisposition honored spoofed ballots with wrong nonce');
+  }
+
+  // 66.5 loadVotes filters out mismatched nonces when options.expectedNonces provided
+  const tempNonceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nonce-test-'));
+  try {
+    fs.writeFileSync(path.join(tempNonceDir, 'v1.json'), JSON.stringify([ballotWrongNonce, ballotValidNonce]));
+    const filteredVotes = loadVotes(tempNonceDir, { expectedNonces: { 'SEC-NONCE-1': 'X-NONCE-CORRECT' } });
+    if (filteredVotes.length !== 1 || filteredVotes[0].nonce !== 'X-NONCE-CORRECT') {
+      throw new Error('R1-P1-05 VIOLATION: loadVotes did not filter out mismatched nonce ballots');
+    }
+  } finally {
+    fs.rmSync(tempNonceDir, { recursive: true, force: true });
+  }
+
+  // 66.6 finalizeScan rejects spoofed impactVote with mismatched nonce
+  const nonceCandidate = {
+    id: 'SEC-NONCE-IMP',
+    ruleId: 'CWE-89',
+    title: 'Nonce Integrity Candidate',
+    severity: 'MEDIUM',
+    nonce: 'X-NONCE-VALID-IMP',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+  };
+  const spoofedImpactVote = {
+    findingId: 'SEC-NONCE-IMP',
+    lens: 'IMPACT',
+    decision: 'SUPPORTS',
+    nonce: 'X-NONCE-SPOOFED',
+    calibratedSeverity: 'CRITICAL',
+    cvssV4Vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N',
+    evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'sink' }]
+  };
+  const finalScanRes = finalizeScan({ candidates: [nonceCandidate], votes: [spoofedImpactVote], repoRoot: process.cwd() });
+  if (finalScanRes.canonicalFindings[0].severity === 'CRITICAL' || finalScanRes.canonicalFindings[0].cvssV4 !== null) {
+    throw new Error('R1-P1-05 VIOLATION: finalizeScan allowed spoofed impactVote with wrong nonce to override severity or CVSS');
+  }
+
+  // 66.7 loadVotes with options.expectedNonces rejects unmapped findings fail-closed
+  const tempNonceDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nonce-test2-'));
+  try {
+    const unmappedBallot = { findingId: 'SEC-UNMAPPED', lens: 'IMPACT', decision: 'SUPPORTS', nonce: 'X-ANY' };
+    fs.writeFileSync(path.join(tempNonceDir2, 'v2.json'), JSON.stringify([unmappedBallot]));
+    const filteredVotes2 = loadVotes(tempNonceDir2, { expectedNonces: { 'SEC-NONCE-1': 'X-NONCE-CORRECT' } });
+    if (filteredVotes2.length !== 0) {
+      throw new Error('R1-P1-05 VIOLATION: loadVotes allowed unmapped finding ballot to pass open');
+    }
+  } finally {
+    fs.rmSync(tempNonceDir2, { recursive: true, force: true });
+  }
+
+  console.log('✔ 66. R1-P1-05 Invariant: Verifier ballot task-correlation nonce enforced fail-closed.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (66/66).');
 
   } finally {
     gitFixture.cleanup();

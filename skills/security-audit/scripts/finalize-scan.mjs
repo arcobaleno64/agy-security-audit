@@ -940,6 +940,45 @@ export function deriveAuthoritativeRigor(candidate = {}, validSupportVotes = [],
 }
 
 /**
+ * Validates a verifier ballot against candidate identity and task correlation nonce (R1-P1-05).
+ */
+export function validateBallot(vote, candidate = null, options = {}) {
+  if (!vote || typeof vote !== 'object') {
+    return { valid: false, reason: 'Ballot must be a non-null object' };
+  }
+  if (!vote.findingId || typeof vote.findingId !== 'string') {
+    return { valid: false, reason: 'Ballot missing valid findingId string' };
+  }
+  if (candidate && candidate.id && vote.findingId !== candidate.id) {
+    return { valid: false, reason: `Finding ID mismatch: ballot for '${vote.findingId}' passed to candidate '${candidate.id}'` };
+  }
+
+  // Task-correlation nonce enforcement
+  const expectedNonce = options.expectedNonce || candidate?.nonce;
+  if (expectedNonce) {
+    if (!vote.nonce) {
+      return { valid: false, reason: `Missing required task-correlation nonce (expected '${expectedNonce}')` };
+    }
+    if (vote.nonce !== expectedNonce) {
+      return { valid: false, reason: `Task-correlation nonce mismatch: expected '${expectedNonce}', got '${vote.nonce}'` };
+    }
+  }
+
+  const validLenses = ['REACHABILITY', 'DEFENSES', 'IMPACT'];
+  if (vote.lens && !validLenses.includes(String(vote.lens).toUpperCase())) {
+    return { valid: false, reason: `Invalid lens '${vote.lens}'. Must be one of: ${validLenses.join(', ')}` };
+  }
+
+  const validDecisions = ['CONFIRMED', 'SUPPORTS', 'REPORTABLE', 'FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED', 'DEFERRED', 'NEEDS_MANUAL_REVIEW'];
+  const decision = String(vote.decision || vote.verdict || '').toUpperCase();
+  if (!validDecisions.includes(decision)) {
+    return { valid: false, reason: `Invalid ballot decision '${vote.decision}'` };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Derives the deterministic disposition under the Presumption of Non-Pass (Default-Deny).
  * Raw verdict from input is strictly treated as an untrusted candidate hint and NEVER has authority.
  * Every REFUTES decision strictly requires verifiable evidence binding (P1-02).
@@ -975,8 +1014,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
   const safeVotes = Array.isArray(votes) ? votes : [];
   const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
-    if (v.findingId) return v.findingId === candidate.id;
-    return false;
+    return validateBallot(v, candidate).valid;
   });
 
   const dedupedVotes = [];
@@ -1398,8 +1436,11 @@ export function finalizeScan({
     // Mathematical Rigor
     const rigor = calculateRigor(raw.rigorMetrics);
 
-    // Check for IMPACT lens calibration
-    const candidateVotes = safeVotes.filter(v => v && (v.findingId === raw.id || v.findingId === candidateId));
+    // Check for IMPACT lens calibration (strictly validating candidate identity, lens, and nonce)
+    const candidateVotes = safeVotes.filter(v => {
+      if (!v || (v.findingId !== raw.id && v.findingId !== candidateId)) return false;
+      return validateBallot(v, raw).valid;
+    });
     const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
 
     // CVSS v4 Validation (calibrated by impact verifier if present)
@@ -1924,13 +1965,14 @@ export function renderMarkdownFromCanonical({
 // -----------------------------------------------------------------------------
 /**
  * Loads and aggregates verifier votes from a file or directory (supports nested subdirectories).
+ * Supports optional nonce filtering via options.expectedNonces (R1-P1-05).
  */
-export function loadVotes(votesPath) {
+export function loadVotes(votesPath, options = {}) {
   if (!votesPath || !fs.existsSync(votesPath)) return [];
   try {
+    let rawVotes = [];
     const stat = fs.statSync(votesPath);
     if (stat.isDirectory()) {
-      const votes = [];
       const files = fs.readdirSync(votesPath, { recursive: true });
       for (const file of files) {
         const filePath = typeof file === 'string' ? file : file.name;
@@ -1938,18 +1980,30 @@ export function loadVotes(votesPath) {
           try {
             const content = JSON.parse(fs.readFileSync(path.join(votesPath, filePath), 'utf8'));
             if (Array.isArray(content)) {
-              votes.push(...content);
+              rawVotes.push(...content);
             } else if (content && typeof content === 'object') {
-              votes.push(content);
+              rawVotes.push(content);
             }
           } catch {}
         }
       }
-      return votes;
     } else {
       const content = JSON.parse(fs.readFileSync(votesPath, 'utf8'));
-      return Array.isArray(content) ? content : [content];
+      rawVotes = Array.isArray(content) ? content : [content];
     }
+
+    if (options && options.expectedNonces) {
+      const nonceMap = options.expectedNonces instanceof Map
+        ? options.expectedNonces
+        : new Map(Object.entries(options.expectedNonces));
+      return rawVotes.filter(v => {
+        if (!v || !v.findingId) return false;
+        const expected = nonceMap.get(v.findingId);
+        return expected !== undefined && v.nonce === expected;
+      });
+    }
+
+    return rawVotes;
   } catch {
     return [];
   }

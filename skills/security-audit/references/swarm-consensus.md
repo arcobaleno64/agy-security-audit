@@ -25,7 +25,7 @@ To enable scalable codebase exploration without causing local OS thread exhausti
                     ▼
 [Fixed 3-Lens Panel: REACHABILITY, DEFENSES, IMPACT]
                     │
-                    ▼
+                    ▼ (Coordinator validates identity, lens, and nonce, then persists)
 [Private Ballot Store: scratch/votes/{finding_id}/ballot_{uuid}.json]
 ```
 
@@ -41,10 +41,11 @@ To enable scalable codebase exploration without causing local OS thread exhausti
 To eliminate Cascading Hallucinations and Conformity Bias, verifiers must never see each other's reasoning or scores.
 
 ### Private Ballot Channels
-1. The coordinator dispatches independent verification tasks via `invoke_subagent`.
-2. Each verifier writes its completed vote to a dedicated, unguessable file path:
+1. The coordinator dispatches independent verification tasks via `invoke_subagent` with a generated task-correlation nonce (`X-NONCE-{token}`).
+2. Verifier subagents operate strictly in least-privilege read-only mode (`commandExecutionPolicy: off`, no filesystem write tools) and return structured verdicts enclosing the nonce directly to the coordinator.
+3. The coordinator enforces `expected_nonce === returned_nonce`, finding identity, and evidence format, then persists verified ballots to:
    `scratch/votes/{finding_id}/ballot_{uuid}.json`
-3. Verifiers are given read access **only** to the source code and candidate coordinate, strictly prohibited from inspecting `scratch/votes/` or other verifiers' ballots.
+4. Verifiers are strictly isolated: they cannot view other verifiers' ballots or communication channels.
 
 ---
 

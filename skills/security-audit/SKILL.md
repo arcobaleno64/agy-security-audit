@@ -104,7 +104,7 @@ When launched, the skill inspects explicit user flags or prompts for customizati
    - **REACHABILITY Lens** (`agents/verifier-reachability.md`): Confirms entrypoint controllability and unbroken data/control flow to sink.
    - **DEFENSES Lens** (`agents/verifier-defenses.md`): Audits existing sanitizers, validation barriers, and defense invariants.
    - **IMPACT Lens** (`agents/verifier-impact.md`): Calibrates authentic blast radius, privilege boundaries, and CVSS v4 vector.
-3. Enforce **Double-Blind Private Ballots**: Each verifier writes its ballot to `scratch/votes/{finding_id}/ballot_{uuid}.json` (using task-correlation nonces to prevent cross-finding ballot confusion).
+3. Enforce **Double-Blind Structured Ballot Return**: Verifier subagents operate strictly in least-privilege read-only mode (`commandExecutionPolicy: off`, no filesystem write tools) and return private structured verdicts (`<audit_verdict nonce="...">`) directly to the Coordinator. The Coordinator validates finding identity, lens, and task-correlation nonces, and writes validated ballots to `scratch/votes/{finding_id}/ballot_{uuid}.json`.
 4. Apply **3-Lens Conjunctive Verification Rules (Default-Deny)**:
    - `CONFIRMED`: Unanimous 3-Lens support (`supports === 3`) + non-empty verified taint path.
    - `FALSE_POSITIVE`: Decisive refutation by any lens backed by verified in-repo evidence (REACHABILITY proves unreachable, DEFENSES proves affirmative mitigation barrier, or IMPACT proves zero demonstrable harm).
@@ -118,7 +118,7 @@ When launched, the skill inspects explicit user flags or prompts for customizati
      ```bash
      node skills/security-audit/scripts/finalize-scan.mjs \
        --candidates scratch/candidate-findings.json \
-       --votes scratch/verifier-votes.json \
+       --votes scratch/votes \
        --manifest scratch/directory-manifest.json \
        --repo-root . \
        --output-json scratch/canonical-findings.json \
