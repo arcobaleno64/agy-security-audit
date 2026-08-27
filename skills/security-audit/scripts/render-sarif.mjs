@@ -226,20 +226,22 @@ export function runTests() {
         endLine: 44,
         lineSnippet: 'const query = `SELECT * FROM users WHERE name = "${input}"`;'
       },
-      rigorMetrics: fullMetrics,
-      consensus: {
-        totalVotes: 3,
-        unanimous: true
-      }
+      rigorMetrics: fullMetrics
     }
   ];
 
-  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest });
+  const confirmedVotes = [
+    { findingId: 'SEC-001', reviewerId: 'rev-1', decision: 'CONFIRMED' },
+    { findingId: 'SEC-001', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+  ];
+
+  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes });
   if (sarif.version !== '2.1.0') throw new Error('SARIF version must be 2.1.0');
   if (sarif.runs[0].tool.driver.rules.length !== 1) throw new Error('Rule was not registered in driver.rules');
   if (sarif.runs[0].results[0].level !== 'error') throw new Error('Critical confirmed finding must map to level error');
   if (sarif.runs[0].results[0].properties.disposition !== 'REPORTABLE') throw new Error('Finding should be REPORTABLE');
   console.log('✔ 6. SARIF 2.1.0 schema compliance and level mapping tests passed.');
+
 
   // 7. P0 Invariant: Anti-Self-Assertion (0 votes cannot be CONFIRMED)
   const zeroVotesFinding = [
@@ -346,15 +348,17 @@ export function runTests() {
         uri: 'config/keys.ts',
         startLine: 5,
         lineSnippet: 'export const apiKey = "AIzaSyD-Secret123456789";'
-      },
-      consensus: { totalVotes: 3, unanimous: true },
-      sourceVerified: true
+      }
     }
   ];
-  const credSarif = renderSarif({ findings: credentialFinding, manifest: validManifest });
+  const credVotes = [
+    { findingId: 'SEC-004', reviewerId: 'rev-1', decision: 'CONFIRMED' },
+    { findingId: 'SEC-004', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+  ];
+  const credSarif = renderSarif({ findings: credentialFinding, manifest: validManifest, votes: credVotes });
   const credSnippet = credSarif.runs[0].results[0].properties?.location?.lineSnippet ||
     credSarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri;
-  const credMd = renderMarkdown({ findings: credentialFinding, manifest: validManifest });
+  const credMd = renderMarkdown({ findings: credentialFinding, manifest: validManifest, votes: credVotes });
   if (credMd.includes('AIzaSyD-Secret123456789')) {
     throw new Error('P0 VIOLATION: Credential finding leaked raw secret in report!');
   }
@@ -370,12 +374,14 @@ export function runTests() {
       ruleId: 'CWE-79',
       title: 'XSS <script>alert(1)</script> \x1B[31mRedText\x1B[0m \u202Ereversed',
       description: 'Breakout ```\n# Injected Heading\n| Pipe | Table | Injection |',
-      location: { uri: 'src/main.ts', startLine: 1 },
-      consensus: { totalVotes: 3, unanimous: true },
-      sourceVerified: true
+      location: { uri: 'src/main.ts', startLine: 1 }
     }
   ];
-  const injectedMd = renderMarkdown({ findings: injectedFinding, manifest: validManifest });
+  const injectedVotes = [
+    { findingId: 'SEC-005', reviewerId: 'rev-1', decision: 'CONFIRMED' },
+    { findingId: 'SEC-005', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+  ];
+  const injectedMd = renderMarkdown({ findings: injectedFinding, manifest: validManifest, votes: injectedVotes });
   if (injectedMd.includes('<script>') || injectedMd.includes('\x1B[31m') || injectedMd.includes('\u202E')) {
     throw new Error('P0 VIOLATION: Control characters or scripts leaked into markdown!');
   }
@@ -391,22 +397,28 @@ export function runTests() {
       ruleId: 'CWE-22',
       title: 'Path Traversal finding',
       location: { uri: '../../etc/shadow', startLine: 1 },
-      consensus: { totalVotes: 3, unanimous: true },
-      sourceVerified: true
+      consensus: { totalVotes: 3, unanimous: true }
     }
   ];
-  const traversalSarif = renderSarif({ findings: traversalFinding, manifest: validManifest, repoRoot: process.cwd() });
-  const traversalResult = traversalSarif.runs[0].results[0];
-  if (traversalResult.properties.disposition === 'REPORTABLE') {
-    throw new Error('P0 VIOLATION: Path traversal finding escaped repoRoot and was accepted as REPORTABLE!');
+  const traversalSarif = renderSarif({ findings: traversalFinding, manifest: validManifest });
+  if (!traversalSarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri.includes('invalid_path_escaped')) {
+    throw new Error('P0 VIOLATION: Path traversal finding was not neutralized to safe containment sentinel!');
   }
+
   console.log('✔ 15. P0 Invariant: Target path traversal outside repo root is rejected.');
 
-  // 16. P0 Invariant: Default-Deny Clean Claim Fail-Closed
-  const emptyFindingsNoManifest = [];
-  const partialMd = renderMarkdown({ findings: emptyFindingsNoManifest, manifest: null });
-  if (partialMd.includes('No confirmed vulnerabilities found matching default-deny verification criteria in fully reconciled coverage')) {
-    throw new Error('P0 VIOLATION: Stated repository was clean when coverage was UNCHECKABLE!');
+  // 16. P0 Invariant: Incomplete Coverage cannot declare repository clean
+  const partialManifest = {
+    schemaVersion: '1',
+    entries: [
+      { path: './', status: 'SCANNED' },
+      { path: 'src/secret-component', status: 'UNCHECKABLE' }
+    ]
+  };
+  const partialSarif = renderSarif({ findings: [], manifest: partialManifest });
+  const partialMd = renderMarkdown({ findings: [], manifest: partialManifest });
+  if (partialSarif.runs[0].properties.coverageStatus === 'COMPLETE') {
+    throw new Error('P0 VIOLATION: Incomplete coverage marked as COMPLETE in SARIF!');
   }
   if (!partialMd.includes('cannot be certified clean under default-deny')) {
     throw new Error('P0 VIOLATION: Missing explicit unverified coverage disclaimer under default-deny');
@@ -417,8 +429,10 @@ export function runTests() {
   const finalization = finalizeScan({
     candidates: confirmedFindings,
     manifest: validManifest,
-    repoRoot: process.cwd()
+    repoRoot: process.cwd(),
+    votes: confirmedVotes
   });
+
   const canonicalSarif = renderSarifFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
     manifest: finalization.manifest,
@@ -807,8 +821,74 @@ export function runTests() {
   }
   console.log('✔ 40. P2 Invariant: Fix verification enforces finding identity and 3-lens consensus.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (40/40).');
+  // 41. P0-01 Hardening: Fake consensus without ballots is strictly DEFERRED (Default-Deny)
+  const fakeConsensusCandidate = {
+    id: 'C-FAKE-CONSENSUS',
+    location: { uri: 'src/auth.ts', startLine: 10 },
+    sourceVerified: true,
+    consensus: {
+      totalVotes: 3,
+      unanimous: true
+    }
+  };
+  const fakeConsensusResult = deriveFinalDisposition(fakeConsensusCandidate, [], { score: 0.85 });
+  if (fakeConsensusResult.disposition !== 'DEFERRED' || fakeConsensusResult.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error(`P0-01 VIOLATION: Candidate self-asserted consensus was accepted without ballots: ${JSON.stringify(fakeConsensusResult)}`);
+  }
+  // End-to-end pipeline test: verify finalizeScan strips raw.consensus
+  const fakePipelineRes = finalizeScan({ candidates: [fakeConsensusCandidate], manifest: validManifest });
+  const totalRecorded = Number(fakePipelineRes.canonicalFindings[0].consensus.total ?? fakePipelineRes.canonicalFindings[0].consensus.totalVotes ?? 0);
+  if (fakePipelineRes.canonicalFindings[0].disposition !== 'DEFERRED' || totalRecorded !== 0) {
+    throw new Error(`P0-01 VIOLATION: finalizeScan leaked self-asserted consensus: ${JSON.stringify(fakePipelineRes.canonicalFindings[0].consensus)}`);
+  }
+
+  console.log('✔ 41. P0-01 Invariant: Fake consensus without independent ballots is strictly DEFERRED.');
+
+  // 42. P0-01 Hardening: Fake raw evidence flags with maximum rigor without ballots is strictly DEFERRED
+  const fakeRawFlagsCandidate = {
+    id: 'C-FAKE-FLAGS',
+    location: { uri: 'src/auth.ts', startLine: 10 },
+    sourceVerified: true,
+    dataflowVerified: true
+  };
+  const fakeFlagsResult = deriveFinalDisposition(fakeRawFlagsCandidate, [], { score: 1.0 });
+  if (fakeFlagsResult.disposition !== 'DEFERRED' || fakeFlagsResult.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error(`P0-01 VIOLATION: Candidate raw flags were accepted without ballots even at score 1.0: ${JSON.stringify(fakeFlagsResult)}`);
+  }
+  console.log('✔ 42. P0-01 Invariant: Candidate raw flags without independent ballots is strictly DEFERRED.');
+
+  // 43. P0-01 Hardening: Real task-bound ballots required for REPORTABLE
+  const realBallotCandidate = {
+    id: 'C-REAL-BALLOTS',
+    location: { uri: 'src/auth.ts', startLine: 10 }
+  };
+  const realBallots = [
+    { findingId: 'C-REAL-BALLOTS', reviewerId: 'rev-1', decision: 'CONFIRMED' },
+    { findingId: 'C-REAL-BALLOTS', reviewerId: 'rev-2', decision: 'CONFIRMED' }
+  ];
+  const realResult = deriveFinalDisposition(realBallotCandidate, realBallots, { score: 0.85 });
+  if (realResult.disposition !== 'REPORTABLE' || realResult.mappedVerdict !== 'CONFIRMED') {
+    throw new Error(`P0-01 VIOLATION: Valid ballots with mathematical rigor failed to achieve REPORTABLE: ${JSON.stringify(realResult)}`);
+  }
+  console.log('✔ 43. P0-01 Invariant: Real task-bound ballots required to transition to REPORTABLE.');
+
+  // 44. P0-01 Hardening: Unassigned ballots cannot bind via isSingleCandidate & null safety
+  const unassignedBallot = [{ reviewerId: 'rev-1', decision: 'CONFIRMED' }];
+  const multiCandidateA = { id: 'C-A', location: { uri: 'src/auth.ts', startLine: 10 }, isSingleCandidate: true };
+  const nullVotesRes = deriveFinalDisposition(multiCandidateA, null);
+  if (nullVotesRes.disposition !== 'DEFERRED') {
+    throw new Error('P0-01 VIOLATION: Null votes did not default-deny to DEFERRED');
+  }
+  const unassignedRes = deriveFinalDisposition(multiCandidateA, unassignedBallot);
+  if (unassignedRes.disposition !== 'DEFERRED') {
+    throw new Error('P0-01 VIOLATION: Unassigned ballot bound to candidate via isSingleCandidate property');
+  }
+  console.log('✔ 44. P0-01 Invariant: Strict task-binding prevents unassigned ballot leakage.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (44/44).');
+
 }
+
 
 
 

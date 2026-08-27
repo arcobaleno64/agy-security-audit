@@ -382,12 +382,13 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
 
 
   // 2. Candidate task-binding and deduplication of votes
-  const candidateVotes = votes.filter(v => {
+  const safeVotes = Array.isArray(votes) ? votes : [];
+  const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
     if (v.findingId) return v.findingId === candidate.id;
-    // Unassigned ballots only bind if candidate explicitly matches or in single-candidate context
-    return Boolean(candidate.isSingleCandidate || !candidate.id);
+    return false;
   });
+
 
 
   const dedupedVotes = [];
@@ -467,7 +468,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       }
 
       // 3-Lens requires unanimous confirmation (supports === 3)
-      if (supports === 3 && (rigor.score >= 0.60 || candidate.dataflowVerified || candidate.sourceVerified || candidate.rigorMetrics?.sourceVerified)) {
+      if (supports === 3 && rigor.score >= 0.60) {
         return {
           disposition: 'REPORTABLE',
           mappedVerdict: 'CONFIRMED',
@@ -507,8 +508,8 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
 
     const supportRatio = supports / total;
 
-    // Reportable requirement: 2/3 supermajority + rigor or verified flow
-    if (supportRatio >= 0.66 && (rigor.score >= 0.60 || candidate.dataflowVerified || candidate.sourceVerified || candidate.rigorMetrics?.sourceVerified)) {
+    // Reportable requirement: 2/3 supermajority + rigor
+    if (supportRatio >= 0.66 && total >= 2 && rigor.score >= 0.60) {
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
@@ -524,8 +525,9 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       };
     }
 
-    // Refuted requirement: 3/4 supermajority + affirmative mitigation
-    if (refutes / total >= 0.75 && (candidate.mitigationProofLine || candidate.mitigationReason || hasDecisiveMitigation)) {
+
+    // Refuted requirement: 3/4 supermajority + affirmative verifier mitigation proof
+    if (refutes / total >= 0.75 && hasDecisiveMitigation) {
       return {
         disposition: 'SUPPRESSED',
         mappedVerdict: 'FALSE_POSITIVE',
@@ -533,6 +535,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         votesSummary: { total, supports, refutes, unanimous: refutes === total, lenses: Array.from(lenses) }
       };
     }
+
 
     // Fallback on dispute / split decision
     return {
@@ -543,48 +546,15 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     };
   }
 
-  // 4. If no votes array, check candidate.consensus if accompanied by verifiable mathematical rigor
-  if (candidate.consensus && typeof candidate.consensus === 'object') {
-    const total = Number(candidate.consensus.totalVotes) || 0;
-    const unanimous = Boolean(candidate.consensus.unanimous);
-
-    // CRITICAL: 0 votes CANNOT be confirmed!
-    if (total === 0) {
-      return {
-        disposition: 'DEFERRED',
-        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-        reason: 'Zero votes recorded; cannot confirm under default-deny',
-        votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
-      };
-    }
-
-    if (total >= 2 && unanimous && (rigor.score >= 0.60 || candidate.sourceVerified || candidate.rigorMetrics?.sourceVerified)) {
-      return {
-        disposition: 'REPORTABLE',
-        mappedVerdict: 'CONFIRMED',
-        reason: 'Consensus validated with verified quorum',
-        votesSummary: { total, supports: total, refutes: 0, unanimous: true }
-      };
-    }
-
-
-    return {
-      disposition: 'DEFERRED',
-      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-      reason: 'Consensus lacks quorum, unanimity, or mathematical rigor',
-      votesSummary: { total, supports: 0, refutes: 0, unanimous }
-    };
-  }
-
-  // 5. Default-Deny: 0 votes -> DEFERRED (Cannot self-certify)
+  // 4. Default-Deny: No independent verifier votes -> DEFERRED (Cannot self-certify)
   return {
     disposition: 'DEFERRED',
     mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-    reason: 'No verifier panel or consensus record; presumed unverified under default-deny',
+    reason: 'No independently recorded verifier votes; presumed unverified under default-deny',
     votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
   };
-
 }
+
 
 
 /**
@@ -643,6 +613,8 @@ export function finalizeScan({
   provenance = null,
   votes = []
 }) {
+  const safeVotes = Array.isArray(votes) ? votes : [];
+
   // 1. Coverage Reconciliation
   const coverageReconciliation = reconcileCoverage(manifest);
   const coverageStatus = coverageReconciliation.status;
@@ -653,10 +625,19 @@ export function finalizeScan({
   const canonicalFindings = [];
 
   for (let i = 0; i < candidates.length; i++) {
-    const raw = candidates[i];
+    const raw = { ...candidates[i] };
     const candidateId = raw.id || `SEC-${String(i + 1).padStart(3, '0')}`;
     raw.id = candidateId;
     const ruleId = raw.ruleId || 'SEC-VULN';
+
+    // Strip untrusted authority self-assertions from candidate ingress
+    delete raw.consensus;
+    delete raw.sourceVerified;
+    delete raw.dataflowVerified;
+    delete raw.isSingleCandidate;
+    delete raw.mitigationProofLine;
+    delete raw.mitigationReason;
+
 
     // If attackPath is supplied, validate schema and detect proof gaps
     if (raw.attackPath && typeof raw.attackPath === 'object') {
@@ -686,11 +667,12 @@ export function finalizeScan({
     const rigor = calculateRigor(raw.rigorMetrics);
 
     // Check for IMPACT lens calibration
-    const candidateVotes = votes.filter(v => v && (v.findingId === raw.id || v.findingId === candidateId));
+    const candidateVotes = safeVotes.filter(v => v && (v.findingId === raw.id || v.findingId === candidateId));
     const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
 
     // CVSS v4 Validation (calibrated by impact verifier if present)
     const cvss = validateCvssV4((impactVote && impactVote.cvssV4Vector) ? { vector: impactVote.cvssV4Vector } : raw.cvssV4);
+
 
 
     // Check if this is a credential/secret finding
@@ -718,8 +700,9 @@ export function finalizeScan({
         votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
       };
     } else {
-      dispositionResult = deriveFinalDisposition(raw, votes, rigor);
+      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor);
     }
+
 
     // Confidence Clamp
     const confidence = clampConfidence(
