@@ -72,7 +72,8 @@ export function getHardenedGitProvenance(repoRoot) {
       dirtyDiffSha256 = crypto.createHash('sha256').update(diffOut).digest('hex');
       dirtyFiles = statusOut
         .split('\n')
-        .map(line => line.trim().substring(3).trim())
+        .filter(line => line.length >= 4)
+        .map(line => line.substring(3).trim())
         .filter(Boolean);
     }
 
@@ -93,6 +94,20 @@ export function getHardenedGitProvenance(repoRoot) {
   }
 }
 
+/**
+ * Safely reads a file content from a specific git revision (e.g. baseline for deleted files).
+ */
+export function readGitFileAtRevision(repoRoot, revision, filePath) {
+  if (!repoRoot || !revision || !filePath) return null;
+  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const refSpec = `${revision}:${normalizedPath}`;
+  const res = runSafeGit(repoRoot, ['show', refSpec]);
+  if (res.status === 0 && res.stdout !== null) {
+    return res.stdout;
+  }
+  return null;
+}
+
 export function getFallbackProvenance() {
   return {
     repositoryUri: 'unknown',
@@ -106,4 +121,5 @@ export function getFallbackProvenance() {
     }
   };
 }
+
 

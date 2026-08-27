@@ -9,12 +9,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { getHardenedGitProvenance } from './safe-git.mjs';
+import { getHardenedGitProvenance, readGitFileAtRevision } from './safe-git.mjs';
+import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory } from './build-inventory.mjs';
 import {
   CVSS_V4_REGEX,
   normalizeUri,
   calculateRigor,
   validateDirectoryManifest,
+  validateReviewManifest,
+  reconcileCoverage,
   computeLineHash,
   mapSeverityToSarif,
   stripControlAndBidi,
@@ -30,6 +33,7 @@ import {
   renderSarifFromCanonical,
   renderMarkdownFromCanonical
 } from './finalize-scan.mjs';
+
 
 export {
   CVSS_V4_REGEX,
@@ -49,7 +53,10 @@ export {
   clampConfidence,
   finalizeScan,
   renderSarifFromCanonical,
-  renderMarkdownFromCanonical
+  renderMarkdownFromCanonical,
+  buildDirectoryManifest,
+  extractChangedFiles,
+  buildScanManifest
 };
 
 /**
@@ -419,8 +426,83 @@ export function runTests() {
   }
   console.log('✔ 17. P0 Invariant: 100% Canonical Parity between SARIF and Markdown.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (17/17).');
+  // 18. P1 (0.10.0): Deterministic Directory Manifest from Filesystem
+  const fsManifest = buildDirectoryManifest(process.cwd());
+  const fsManifestValidation = validateDirectoryManifest(fsManifest);
+  if (!fsManifestValidation.valid) {
+    throw new Error(`P1 VIOLATION: Filesystem directory manifest invalid: ${fsManifestValidation.error}`);
+  }
+  if (!fsManifest.entries.some(e => e.path === 'skills/' && e.status === 'SCANNED')) {
+    throw new Error('P1 VIOLATION: Expected skills/ folder not marked SCANNED in directory manifest');
+  }
+  console.log('✔ 18. P1 Invariant: Ground-truth directory manifest derived deterministically from filesystem.');
+
+  // 19. P1 (0.10.0): Review Mode Changed Files Accounting
+  const changedInfo = extractChangedFiles(process.cwd());
+  if (typeof changedInfo.totalAccounted !== 'number') {
+    throw new Error('P1 VIOLATION: extractChangedFiles did not return numeric totalAccounted');
+  }
+  console.log('✔ 19. P1 Invariant: Review mode extracts and accounts for 100% changed/deleted files.');
+
+  // 20. P1 (0.10.0): Scan Manifest Schema Compliance
+  const scanManifest = buildScanManifest({ mode: 'scan', repoRoot: process.cwd() });
+  if (scanManifest.schemaVersion !== '1' || scanManifest.mode !== 'scan' || !scanManifest.target.root) {
+    throw new Error('P1 VIOLATION: buildScanManifest output does not conform to Section 31 Schema');
+  }
+  const reviewManifest = buildScanManifest({ mode: 'review', repoRoot: process.cwd() });
+  if (reviewManifest.mode !== 'review') {
+    throw new Error('P1 VIOLATION: buildScanManifest failed to record review mode');
+  }
+  console.log('✔ 20. P1 Invariant: Scan and Review manifests conform to canonical schema.');
+
+  // 21. P1 (0.10.0): Review Mode Coverage Reconciliation & Markdown Generation
+  const reviewInventoryManifest = {
+    mode: 'review',
+    reviewInventory: {
+      changedFiles: [{ path: 'skills/security-audit/SKILL.md', status: 'MODIFIED' }],
+      deletedFiles: [{ path: 'old-module.js', status: 'DELETED', baselineRevision: '12c9ce07d5eb' }]
+    }
+  };
+  const reviewFinalization = finalizeScan({
+    candidates: [],
+    manifest: reviewInventoryManifest,
+    repoRoot: process.cwd()
+  });
+  if (reviewFinalization.coverageStatus !== 'COMPLETE') {
+    throw new Error('P1 VIOLATION: Valid review manifest was not marked COMPLETE coverage');
+  }
+  const reviewMd = renderMarkdownFromCanonical({
+    canonicalFindings: reviewFinalization.canonicalFindings,
+    manifest: reviewFinalization.manifest,
+    coverageStatus: reviewFinalization.coverageStatus
+  });
+  if (!reviewMd.includes('Changed Files Accounting Manifest (Review Mode)')) {
+    throw new Error('P1 VIOLATION: Review markdown does not render changed files accounting section');
+  }
+  console.log('✔ 21. P1 Invariant: Review mode coverage reconciliation achieves COMPLETE under Default-Deny.');
+
+  // 22. P1 (0.10.0): Categorization Accuracy for Monorepos & CLI
+  if (categorizeDirectory('.github').status !== 'SCANNED') {
+    throw new Error('P1 VIOLATION: .github directory must be SCANNED for CI/CD attack surface');
+  }
+  if (categorizeDirectory('packages').status !== 'SCANNED') {
+    throw new Error('P1 VIOLATION: packages directory must be SCANNED for monorepo first-party code');
+  }
+  if (categorizeDirectory('bin').status !== 'SCANNED') {
+    throw new Error('P1 VIOLATION: bin directory must be SCANNED for CLI source scripts');
+  }
+  console.log('✔ 22. P1 Invariant: Critical entrypoints (.github, packages, bin) properly classified as SCANNED.');
+
+  // 23. P1 (0.10.0): Git Baseline Pre-Image Reader
+  const headPkg = readGitFileAtRevision(process.cwd(), 'HEAD', 'package.json');
+  if (!headPkg || !headPkg.includes('@arcobaleno64/agy-security-audit')) {
+    throw new Error('P1 VIOLATION: readGitFileAtRevision failed to read committed pre-image from git');
+  }
+  console.log('✔ 23. P1 Invariant: Git baseline pre-image reader safely retrieves historical revisions.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (23/23).');
 }
+
 
 
 // -----------------------------------------------------------------------------

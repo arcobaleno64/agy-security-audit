@@ -47,33 +47,42 @@ When launched, the skill inspects explicit user flags or prompts for customizati
    - `Export to Project`: Write copy to `./reports/security-audit.sarif` for CI/CD.
 
 ### Dimension 1: Audit Entry Modes
-1. **`Scan Codebase`**: Comprehensive whole-repository scan with complete Directory Accounting reconciliation.
-2. **`Scan Changes`**: Focused scan scoped to git working diff, branch PR, or a specific commit hash.
-3. **`Suggest Patches`**: Dual-track remediation patch generation for verified findings under the Patch Jail.
+1. **`review` (Diff Security Review)**: Modeled after `/security-review`. Focused scan scoped to git working diff, branch PR, or commit hash with 100% changed-file accounting. See [review.md](./jobs/review.md).
+2. **`scan` (Repository Security Scan)**: Modeled after Claude Security Standard Scan. Comprehensive whole-repository or scoped directory scan with deterministic Directory Accounting. See [scan.md](./jobs/scan.md).
+3. **`patch` (Remediation Patches)**: Dual-track remediation patch generation for verified findings under the Patch Jail.
 
 ### Dimension 2: Four-Stage Pipeline
 ```
-[Stage 1: Directory Accounting & Threat Modeling]
+[Stage 1: Deterministic Inventory & Threat Modeling]
                        │
                        ▼
-[Stage 2: 3-Tier Triage & High-Risk Sink Hunting]
+[Stage 2: 3-Tier Triage & Component-Aware Discovery]
                        │
                        ▼
 [Stage 3: Elastic Swarm Double-Blind Consensus Verification]
                        │
                        ▼
-[Stage 4: SARIF 2.1.0 & Brain Artifacts Reporting]
+[Stage 4: Deterministic Finalizer & Canonical Reporting]
 ```
 
 ---
 
 ## Pipeline Execution Guide
 
-### Stage 1: Directory Accounting & Surface Modeling
-1. Read the specification: [threat-modeling.md](./references/threat-modeling.md).
-2. Scan repository directories and build `scratch/directory-manifest.json`:
-   - Categorize every top-level and major subfolder into: `SCANNED`, `EXCLUDED_VENDORED`, `EXCLUDED_GENERATED`, `EXCLUDED_NON_CODE`, `EXCLUDED_TEST`.
-   - Any unaccounted folder halts the run with `UNACCOUNTED_DIRECTORY_ERROR`.
+### Stage 1: Deterministic Inventory & Surface Modeling
+1. Run `build-inventory.mjs` to derive ground-truth inventory and manifest:
+   - For `scan` mode:
+     ```bash
+     node skills/security-audit/scripts/build-inventory.mjs --mode scan --output-dir-manifest scratch/directory-manifest.json --output-manifest scratch/scan-manifest.json
+     ```
+   - For `review` mode:
+     ```bash
+     node skills/security-audit/scripts/build-inventory.mjs --mode review --output-manifest scratch/review-manifest.json
+     ```
+2. Read the job specifications:
+   - [jobs/review.md](./jobs/review.md) for diff reviews.
+   - [jobs/scan.md](./jobs/scan.md) for full scans.
+   - [threat-modeling.md](./references/threat-modeling.md) for surface modeling.
 3. Detect project manifests (e.g. `package.json`, `go.mod`, `pom.xml`) and inspect security posture.
 
 ### Stage 2: Triage & Multi-Sink Vulnerability Hunting
@@ -106,12 +115,13 @@ When launched, the skill inspects explicit user flags or prompts for customizati
 ### Stage 4: Reporting & Artifact Generation
 1. Execute `render-sarif.mjs` to produce standardized outputs:
    ```bash
-   node .agents/skills/security-audit/scripts/render-sarif.mjs \
+   node skills/security-audit/scripts/render-sarif.mjs \
      --input scratch/verified-findings.json \
      --manifest scratch/directory-manifest.json \
      --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
      --output-md scratch/AGY-SECURITY-RESULTS.md
    ```
+
 2. Save the Markdown report as a **Brain Artifact** in `<appDataDir>\brain\<conversation-id>\AGY-SECURITY-RESULTS.md` via `write_to_file`.
 3. If remediation patches were requested, review [patching-jail.md](./references/patching-jail.md) and produce dual-track outputs in `scratch/patches/` with `git apply --check` validation.
 

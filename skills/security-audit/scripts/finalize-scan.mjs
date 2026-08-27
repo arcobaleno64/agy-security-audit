@@ -172,6 +172,57 @@ export function validateDirectoryManifest(manifest) {
 }
 
 /**
+ * Validates Review Manifest according to Review mode standards.
+ */
+export function validateReviewManifest(manifest) {
+  if (!manifest || typeof manifest !== 'object') {
+    return { valid: false, error: 'Review manifest must be a valid object.' };
+  }
+  const inventory = manifest.reviewInventory || manifest;
+  const changed = Array.isArray(inventory.changedFiles) ? inventory.changedFiles : [];
+  const deleted = Array.isArray(inventory.deletedFiles) ? inventory.deletedFiles : [];
+
+  if (!Array.isArray(inventory.changedFiles) && !Array.isArray(inventory.deletedFiles)) {
+    return { valid: false, error: 'Review manifest must contain changedFiles or deletedFiles array.' };
+  }
+
+  for (const f of changed) {
+    if (!f.path) return { valid: false, error: 'Changed file entry missing path property.' };
+  }
+  for (const f of deleted) {
+    if (!f.path) return { valid: false, error: 'Deleted file entry missing path property.' };
+  }
+
+  return { valid: true, totalAccounted: changed.length + deleted.length };
+}
+
+/**
+ * Reconciles coverage across scan and review manifests.
+ */
+export function reconcileCoverage(manifest) {
+  if (!manifest) {
+    return { valid: false, status: 'UNCHECKABLE', mode: 'none', error: 'No coverage manifest provided.' };
+  }
+  if (manifest.mode === 'review' || manifest.reviewInventory || (Array.isArray(manifest.changedFiles) && !Array.isArray(manifest.entries))) {
+    const res = validateReviewManifest(manifest);
+    return {
+      valid: res.valid,
+      status: res.valid ? 'COMPLETE' : 'PARTIAL',
+      mode: 'review',
+      error: res.error || null
+    };
+  }
+  const res = validateDirectoryManifest(manifest);
+  return {
+    valid: res.valid,
+    status: res.valid ? 'COMPLETE' : 'PARTIAL',
+    mode: 'scan',
+    error: res.error || null
+  };
+}
+
+
+/**
  * Validates that a path does not escape the repository boundary via path traversal.
  */
 export function isPathContained(repoRoot, filePath) {
@@ -424,11 +475,10 @@ export function finalizeScan({
   votes = []
 }) {
   // 1. Coverage Reconciliation
-  const manifestValidation = validateDirectoryManifest(manifest);
-  let coverageStatus = 'COMPLETE';
-  if (!manifestValidation.valid) {
-    coverageStatus = manifest ? 'PARTIAL' : 'UNCHECKABLE';
-  }
+  const coverageReconciliation = reconcileCoverage(manifest);
+  const coverageStatus = coverageReconciliation.status;
+  const coverageMode = coverageReconciliation.mode;
+
 
   // 2. Process Candidates into Canonical Findings
   const canonicalFindings = [];
@@ -538,18 +588,21 @@ export function finalizeScan({
     deferredCount,
     suppressedCount,
     coverageStatus,
-    manifestValid: manifestValidation.valid,
+    manifestValid: coverageReconciliation.valid,
+    coverageMode,
     canDeclareClean
   };
 
   return {
     summary,
     coverageStatus,
+    coverageMode,
     manifest,
-    manifestValidation,
+    manifestValidation: coverageReconciliation,
     provenance: provenance || getHardenedGitProvenance(repoRoot),
     canonicalFindings
   };
+
 }
 
 /**
@@ -702,17 +755,38 @@ export function renderMarkdownFromCanonical({
   md += '- **Audit Axiom**: **Presumption of Non-Pass (Default-Deny)**\n\n';
   md += '---\n\n';
 
-  // Directory Reconciliation Section
-  md += '## 1. Directory Reconciliation Manifest\n\n';
-  if (manifest && Array.isArray(manifest.entries)) {
-    md += '| Directory Path | Audit Status | Files | Reconciliation Reason |\n';
-    md += '| :--- | :--- | :--- | :--- |\n';
-    for (const e of manifest.entries) {
-      md += `| \`${sanitizeTableCell(e.path)}\` | **${sanitizeTableCell(e.status)}** | ${Number(e.fileCount) || 0} | ${sanitizeTableCell(e.reason)} |\n`;
+  // Coverage Reconciliation Section
+  if (manifest && (manifest.mode === 'review' || manifest.reviewInventory || (Array.isArray(manifest.changedFiles) && !Array.isArray(manifest.entries)))) {
+    md += '## 1. Changed Files Accounting Manifest (Review Mode)\n\n';
+    const inv = manifest.reviewInventory || manifest;
+    const changed = Array.isArray(inv.changedFiles) ? inv.changedFiles : [];
+    const deleted = Array.isArray(inv.deletedFiles) ? inv.deletedFiles : [];
+    if (changed.length === 0 && deleted.length === 0) {
+      md += '*No files modified or deleted in target diff.*\n';
+    } else {
+      md += '| File Path | Status | Details |\n';
+      md += '| :--- | :--- | :--- |\n';
+      for (const f of changed) {
+        md += `| \`${sanitizeTableCell(f.path)}\` | **${sanitizeTableCell(f.status)}** | ${f.originalPath ? `Renamed from \`${sanitizeTableCell(f.originalPath)}\`` : 'Active in change diff'} |\n`;
+      }
+      for (const f of deleted) {
+        md += `| \`${sanitizeTableCell(f.path)}\` | **${sanitizeTableCell(f.status)}** | Baseline: \`${sanitizeTableCell(f.baselineRevision ? f.baselineRevision.substring(0, 12) : 'HEAD')}\` |\n`;
+      }
     }
   } else {
-    md += '> [!WARNING]\n> No Directory Reconciliation Manifest provided. Default-deny flags this audit as unverified coverage.\n';
+    // Directory Reconciliation Section (Scan Mode)
+    md += '## 1. Directory Reconciliation Manifest\n\n';
+    if (manifest && Array.isArray(manifest.entries)) {
+      md += '| Directory Path | Audit Status | Files | Reconciliation Reason |\n';
+      md += '| :--- | :--- | :--- | :--- |\n';
+      for (const e of manifest.entries) {
+        md += `| \`${sanitizeTableCell(e.path)}\` | **${sanitizeTableCell(e.status)}** | ${Number(e.fileCount) || 0} | ${sanitizeTableCell(e.reason)} |\n`;
+      }
+    } else {
+      md += '> [!WARNING]\n> No Directory Reconciliation Manifest provided. Default-deny flags this audit as unverified coverage.\n';
+    }
   }
+
 
   if (coverageStatus !== 'COMPLETE') {
     md += '\n> [!WARNING]\n> **Incomplete Coverage**: Under Default-Deny, repository cannot be certified clean when coverage is PARTIAL or UNCHECKABLE.\n';
@@ -859,7 +933,23 @@ if (isDirectExecution) {
       fs.writeFileSync(outputJsonPath, JSON.stringify(finalization.canonicalFindings, null, 2), 'utf8');
       console.log(`✔ Generated Canonical Findings JSON: ${outputJsonPath}`);
     }
+
+    const outputCoveragePath = getArg('--output-coverage');
+    if (outputCoveragePath) {
+      const coveragePayload = {
+        schemaVersion: '1',
+        coverageStatus: finalization.coverageStatus,
+        canDeclareClean: finalization.summary.canDeclareClean,
+        coverageMode: manifest?.mode || (manifest?.reviewInventory ? 'review' : 'scan'),
+        manifest: finalization.manifest,
+        provenance: finalization.provenance
+      };
+      fs.mkdirSync(path.dirname(outputCoveragePath), { recursive: true });
+      fs.writeFileSync(outputCoveragePath, JSON.stringify(coveragePayload, null, 2), 'utf8');
+      console.log(`✔ Generated Coverage JSON: ${outputCoveragePath}`);
+    }
   } catch (err) {
+
     console.error('Error in finalize-scan:', err.message);
     process.exit(1);
   }
