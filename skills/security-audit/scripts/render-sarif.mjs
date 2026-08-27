@@ -173,7 +173,16 @@ export function runTests() {
   if (cvssRes.valid || cvssRes.vector !== null) {
     throw new Error('Invalid CVSS v4 vector was not rejected fail-closed');
   }
+  // P1-01 Suffix /GARBAGE rejection
+  if (CVSS_V4_REGEX.test(validVector + '/GARBAGE')) {
+    throw new Error('P1-01 VIOLATION: Suffix /GARBAGE accepted by CVSS_V4_REGEX');
+  }
+  const garbageRes = validateCvssV4({ vector: validVector + '/GARBAGE', score: 9.0 });
+  if (garbageRes.valid) {
+    throw new Error('P1-01 VIOLATION: Suffix /GARBAGE accepted by validateCvssV4');
+  }
   console.log('✔ 2. CVSS v4.0 vector validation and fail-closed rejection tests passed.');
+
 
   // 3. Path normalization & RFC 3986 test
   const winPath = 'src\\controllers\\auth [admin].ts';
@@ -1081,8 +1090,36 @@ export function runTests() {
   }
   console.log('✔ 55. P0-04 Invariant: Custom agents located at plugin root with verified least-privilege capabilities.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (55/55).');
+  // 56. P1-01 Invariant: Strict fail-closed score boundaries (no clamping, reject out-of-bounds, no fabricated score)
+  const score99Res = validateCvssV4({ vector: validVector, score: 99 });
+  if (score99Res.valid || score99Res.score !== null) {
+    throw new Error('P1-01 VIOLATION: Out-of-bounds score 99 was not rejected fail-closed');
+  }
+  const scoreNegRes = validateCvssV4({ vector: validVector, score: -1 });
+  if (scoreNegRes.valid || scoreNegRes.score !== null) {
+    throw new Error('P1-01 VIOLATION: Negative score -1 was not rejected fail-closed');
+  }
+  const scoreInfRes = validateCvssV4({ vector: validVector, score: Infinity });
+  if (scoreInfRes.valid || scoreInfRes.score !== null) {
+    throw new Error('P1-01 VIOLATION: Infinity score was not rejected fail-closed');
+  }
+  const scoreNanRes = validateCvssV4({ vector: validVector, score: NaN });
+  if (scoreNanRes.valid || scoreNanRes.score !== null) {
+    throw new Error('P1-01 VIOLATION: NaN score was not rejected fail-closed');
+  }
+  const missingScoreRes = validateCvssV4({ vector: validVector });
+  if (!missingScoreRes.valid || missingScoreRes.score !== null) {
+    throw new Error('P1-01 VIOLATION: Missing score must remain null without fabricating arbitrary numbers');
+  }
+  const validScoreRes = validateCvssV4({ vector: validVector, score: 9.3 });
+  if (!validScoreRes.valid || validScoreRes.score !== 9.3 || validScoreRes.severity !== 'CRITICAL') {
+    throw new Error('P1-01 VIOLATION: Valid score 9.3 failed validation');
+  }
+  console.log('✔ 56. P1-01 Invariant: CVSS v4 strictly fails closed on invalid scores and avoids score fabrication.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (56/56).');
 }
+
 
 
 

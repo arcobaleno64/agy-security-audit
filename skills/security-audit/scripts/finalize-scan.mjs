@@ -16,7 +16,8 @@ import { buildDirectoryManifest, extractChangedFiles } from './build-inventory.m
 
 
 
-export const CVSS_V4_REGEX = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]/;
+export const CVSS_V4_REGEX = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]$/;
+
 
 // Common secret patterns for deterministic redaction
 export const SECRET_PATTERNS = [
@@ -470,7 +471,7 @@ export function normalizeUri(repoRoot, filePath) {
 }
 
 /**
- * Validates CVSS v4 vector fail-closed. Never substitutes a fake high-severity vector.
+ * Validates CVSS v4 vector fail-closed. Never substitutes a fake high-severity vector or clamped invalid scores.
  */
 export function validateCvssV4(cvssObj) {
   if (!cvssObj || typeof cvssObj !== 'object') {
@@ -478,7 +479,7 @@ export function validateCvssV4(cvssObj) {
   }
 
   const rawVector = cvssObj.vector;
-  if (!rawVector || !CVSS_V4_REGEX.test(rawVector)) {
+  if (!rawVector || typeof rawVector !== 'string' || !CVSS_V4_REGEX.test(rawVector.trim())) {
     return {
       valid: false,
       vector: null,
@@ -488,16 +489,41 @@ export function validateCvssV4(cvssObj) {
     };
   }
 
-  const rawScore = typeof cvssObj.score === 'number' ? cvssObj.score : null;
-  const clampedScore = rawScore !== null ? Math.min(10.0, Math.max(0.0, rawScore)) : null;
+  let validatedScore = null;
+  if (cvssObj.score !== undefined && cvssObj.score !== null) {
+    if (
+      typeof cvssObj.score !== 'number' ||
+      !Number.isFinite(cvssObj.score) ||
+      Number.isNaN(cvssObj.score) ||
+      cvssObj.score < 0.0 ||
+      cvssObj.score > 10.0
+    ) {
+      return {
+        valid: false,
+        vector: null,
+        score: null,
+        severity: 'UNRATED',
+        error: `Invalid CVSS score: ${cvssObj.score}. Must be a finite number between 0.0 and 10.0.`
+      };
+    }
+    validatedScore = Number(cvssObj.score.toFixed(1));
+  }
+
+  let severity = 'UNRATED';
+  if (cvssObj.severity && typeof cvssObj.severity === 'string') {
+    severity = cvssObj.severity.toUpperCase();
+  } else if (validatedScore !== null) {
+    severity = validatedScore >= 9.0 ? 'CRITICAL' : validatedScore >= 7.0 ? 'HIGH' : validatedScore >= 4.0 ? 'MEDIUM' : validatedScore > 0 ? 'LOW' : 'NONE';
+  }
 
   return {
     valid: true,
-    vector: rawVector,
-    score: clampedScore,
-    severity: cvssObj.severity || (clampedScore >= 9.0 ? 'CRITICAL' : clampedScore >= 7.0 ? 'HIGH' : clampedScore >= 4.0 ? 'MEDIUM' : 'LOW')
+    vector: rawVector.trim(),
+    score: validatedScore,
+    severity
   };
 }
+
 
 /**
  * Unifies multi-run discovery candidate sets using deterministic fingerprints.
