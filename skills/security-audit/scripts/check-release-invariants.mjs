@@ -8,7 +8,20 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execFileSync } from 'node:child_process';
+import {
+  deriveFinalDisposition,
+  reconcileCoverage,
+  validateReviewManifest,
+  validateDirectoryManifest,
+  validateCvssV4,
+  redactSecrets,
+  stripControlAndBidi,
+  renderSarifFromCanonical
+} from './finalize-scan.mjs';
+import { verifyRemediation } from './validate-patch.mjs';
+import { HARDENED_GIT_ENV, getHardenedGitProvenance } from './safe-git.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -143,11 +156,257 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
     }
   }
 
+  // 6. Authoritative Security Invariants Gate (P2-01)
+  const securityInvariants = [
+    {
+      id: 'SEC-INV-01',
+      name: 'no self-certified consensus',
+      check: () => {
+        const candidate = {
+          id: 'INV-1',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
+          consensus: { verdict: 'CONFIRMED' }
+        };
+        const res = deriveFinalDisposition(candidate, []);
+        if (res.disposition === 'REPORTABLE' || res.mappedVerdict === 'CONFIRMED') {
+          throw new Error('Self-asserted candidate.consensus was accepted as REPORTABLE/CONFIRMED without verifier ballots');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-02',
+      name: 'zero votes cannot REPORTABLE',
+      check: () => {
+        const candidate = {
+          id: 'INV-2',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 }
+        };
+        const res = deriveFinalDisposition(candidate, []);
+        if (res.disposition !== 'DEFERRED' || res.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+          throw new Error(`Zero-vote candidate did not default-deny to DEFERRED: ${JSON.stringify(res)}`);
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-03',
+      name: 'raw sourceVerified cannot self-certify',
+      check: () => {
+        const candidate = {
+          id: 'INV-3',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
+          sourceVerified: true,
+          dataflowVerified: true,
+          isSingleCandidate: true
+        };
+        const res = deriveFinalDisposition(candidate, []);
+        if (res.disposition !== 'DEFERRED') {
+          throw new Error('Raw candidate evidence flags granted authority without independent verifier ballots');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-04',
+      name: 'filesystem coverage reconciliation',
+      check: () => {
+        const fakeManifest = { entries: [{ path: 'agents/', status: 'SCANNED' }] };
+        const res = reconcileCoverage(fakeManifest, repoRoot);
+        if (res.status === 'COMPLETE') {
+          throw new Error('Incomplete filesystem manifest falsely achieved COMPLETE coverage');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-05',
+      name: 'git diff coverage reconciliation',
+      check: () => {
+        const identicalRevs = {
+          mode: 'review',
+          base: 'HEAD',
+          head: 'HEAD',
+          reviewInventory: { changedFiles: [], deletedFiles: [] }
+        };
+        const res = reconcileCoverage(identicalRevs, repoRoot);
+        if (res.status === 'COMPLETE') {
+          throw new Error('Review manifest with identical base/head revisions falsely achieved COMPLETE coverage');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-06',
+      name: 'deleted-file accounting',
+      check: () => {
+        const fakeDeletedManifest = {
+          mode: 'review',
+          reviewInventory: {
+            changedFiles: [],
+            deletedFiles: [{ path: 'unaccounted-fake-deleted-file.js', status: 'DELETED' }]
+          }
+        };
+        const res = validateReviewManifest(fakeDeletedManifest, repoRoot);
+        if (res.status === 'COMPLETE') {
+          throw new Error('Fictitious deleted file entry in review inventory was accepted as COMPLETE');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-07',
+      name: 'canonical-only renderer',
+      check: () => {
+        const canonicalFinding = {
+          id: 'INV-7',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
+          disposition: 'DEFERRED',
+          mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+          title: 'Unverified Finding'
+        };
+        const sarif = renderSarifFromCanonical({ canonicalFindings: [canonicalFinding] });
+        if (sarif.runs[0].results.length !== 1 || sarif.runs[0].results[0].properties.disposition !== 'DEFERRED') {
+          throw new Error('Canonical renderer failed to preserve canonical finding disposition');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-08',
+      name: 'all verifier REFUTES evidence-bound',
+      check: () => {
+        const candidate = { id: 'INV-8', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 } };
+        const unverifiedRefute = [
+          { findingId: 'INV-8', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unverified claim with no evidence' }
+        ];
+        const res = deriveFinalDisposition(candidate, unverifiedRefute, { score: 0.8 }, repoRoot);
+        if (res.disposition === 'SUPPRESSED') {
+          throw new Error('Unverified REFUTES ballot without concrete code evidence suppressed finding to FALSE_POSITIVE');
+        }
+        if (res.disposition !== 'DEFERRED') {
+          throw new Error('Unverified REFUTES ballot did not fail closed to DEFERRED');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-09',
+      name: 'verify-fix requires all 3 lenses',
+      check: () => {
+        const finding = { id: 'INV-9', ruleId: 'CWE-89' };
+        // 1 DEFENSES vote only -> REJECTED
+        const oneVote = [
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:1' }
+        ];
+        const res1 = verifyRemediation(finding, oneVote);
+        if (res1.verified) {
+          throw new Error('Remediation verified with only 1 lens instead of all 3 required lenses');
+        }
+        // 2 votes only (DEFENSES + REACHABILITY) -> REJECTED
+        const twoVotes = [
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:1' },
+          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES' }
+        ];
+        const res2 = verifyRemediation(finding, twoVotes);
+        if (res2.verified) {
+          throw new Error('Remediation verified with only 2 lenses instead of all 3 required lenses');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-10',
+      name: 'CVSS exact vector rejection',
+      check: () => {
+        const validVector = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+        const validRes = validateCvssV4({ vector: validVector });
+        if (!validRes.valid || validRes.score !== null) {
+          throw new Error('Valid CVSS v4 vector was unexpectedly rejected');
+        }
+
+        const badVectorWithSuffix = `${validVector}/EXTRA`;
+        const res = validateCvssV4({ vector: badVectorWithSuffix });
+        if (res.valid) {
+          throw new Error('CVSS v4 vector with illegal suffix was accepted (missing $ anchor)');
+        }
+        const outOfBounds = validateCvssV4({ score: 11.5, vector: validVector });
+        if (outOfBounds.valid) {
+          throw new Error('Out of bounds CVSS score (11.5) was accepted or clamped instead of fail-closed rejection');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-11',
+      name: 'no raw-secret leakage',
+      check: () => {
+        const rawSecret = 'AKIAIOSFODNN7EXAMPLE';
+        const text = `const awsKey = "${rawSecret}";`;
+        const redacted = redactSecrets(text);
+        if (redacted.includes(rawSecret)) {
+          throw new Error(`Raw secret leaked into redacted output: ${redacted}`);
+        }
+        if (!redacted.includes('[REDACTED_AWS_ACCESS_KEY')) {
+          throw new Error(`Redacted secret lacks fingerprint prefix: ${redacted}`);
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-12',
+      name: 'Git hostile config cannot execute',
+      check: () => {
+        if (!HARDENED_GIT_ENV.GIT_CONFIG_GLOBAL || !HARDENED_GIT_ENV.GIT_CONFIG_SYSTEM) {
+          throw new Error('HARDENED_GIT_ENV does not isolate global/system git config');
+        }
+        if (HARDENED_GIT_ENV.GIT_EXTERNAL_DIFF !== '') {
+          throw new Error('HARDENED_GIT_ENV does not neutralize GIT_EXTERNAL_DIFF execution hook');
+        }
+        if (HARDENED_GIT_ENV.GIT_PAGER !== 'cat' || HARDENED_GIT_ENV.PAGER !== 'cat') {
+          throw new Error('HARDENED_GIT_ENV does not neutralize GIT_PAGER/PAGER hooks');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-13',
+      name: 'Markdown / ANSI / Bidi injection blocked',
+      check: () => {
+        const bidiPayload = 'Normal Text \u202E Reversed Injection';
+        const sanitizedBidi = stripControlAndBidi(bidiPayload);
+        if (sanitizedBidi.includes('\u202E')) {
+          throw new Error('stripControlAndBidi failed to strip Unicode Bidi override character');
+        }
+        const ansiPayload = '\u001b[31mRed Alert\u001b[0m';
+        const sanitizedAnsi = stripControlAndBidi(ansiPayload);
+        if (sanitizedAnsi.includes('\u001b')) {
+          throw new Error('stripControlAndBidi failed to strip ANSI escape code');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-14',
+      name: 'ZIP-clean test harness',
+      check: () => {
+        // 1. Assert zero release artifacts depend on .git presence
+        for (const req of REQUIRED_FILES) {
+          if (req.includes('.git')) {
+            throw new Error(`Release invariant violation: REQUIRED_FILES includes git path: ${req}`);
+          }
+        }
+        // 2. Assert fallback git provenance operates safely when .git is absent
+        const nonGitDir = path.join(os.tmpdir(), 'sec-audit-zip-clean-check');
+        const nonGitProvenance = getHardenedGitProvenance(nonGitDir);
+        if (nonGitProvenance.branch !== 'unknown' || nonGitProvenance.revisionId !== '0000000000000000000000000000000000000000') {
+          throw new Error('getHardenedGitProvenance failed to produce safe fallback in non-git directory');
+        }
+      }
+    }
+  ];
+
+  for (const inv of securityInvariants) {
+    try {
+      inv.check();
+    } catch (err) {
+      errors.push(`Security Invariant Violation [${inv.id}: ${inv.name}]: ${err.message}`);
+    }
+  }
+
   return {
     passed: errors.length === 0,
     errors,
     warnings,
-    verifiedFilesCount: REQUIRED_FILES.length
+    verifiedFilesCount: REQUIRED_FILES.length,
+    verifiedInvariantsCount: securityInvariants.length
   };
 
 }
@@ -169,6 +428,7 @@ if (isDirectExecution) {
     process.exit(1);
   }
 
-  console.log(`\n✔ Release Invariants Gate PASSED! (${result.verifiedFilesCount} required specifications and scripts verified, 0 external dependencies, all automated invariants green).`);
+  console.log(`\n✔ Release Invariants Gate PASSED! (${result.verifiedFilesCount} required specifications and scripts verified, ${result.verifiedInvariantsCount} authoritative security invariants verified, 0 external dependencies, all automated invariants green).`);
 }
+
 
