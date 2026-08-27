@@ -877,7 +877,18 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       };
     }
 
+    // If lens ballots were submitted but the 3-Lens panel is incomplete (missing required lens), fail-closed under Default-Deny
+    if (lenses.size > 0 && !isThreeLens) {
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: `Incomplete 3-Lens panel: received [${Array.from(lenses).join(', ')}]; missing required lenses under default-deny`,
+        votesSummary: { total, supports, refutes, unanimous: false, isThreeLens: false, lenses: Array.from(lenses) }
+      };
+    }
+
     // General Persona Evaluation: Decisive counterevidence refutation always suppresses
+
     if (validDecisiveMitigationVote) {
       return {
         disposition: 'SUPPRESSED',

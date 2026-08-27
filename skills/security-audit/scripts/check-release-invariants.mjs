@@ -131,12 +131,25 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
 
+  // 5. Validate Orchestration & Verification Invariant Consistency (P1-04)
+  const skillPath = path.resolve(repoRoot, 'skills/security-audit/SKILL.md');
+  if (fs.existsSync(skillPath)) {
+    const skillContent = fs.readFileSync(skillPath, 'utf8');
+    if (skillContent.includes('--workers')) {
+      errors.push('SKILL.md contains legacy --workers parameter; must use --concurrency');
+    }
+    if (!skillContent.includes('Fixed 3-Lens')) {
+      errors.push('SKILL.md must document Fixed 3-Lens verification panel');
+    }
+  }
+
   return {
     passed: errors.length === 0,
     errors,
     warnings,
     verifiedFilesCount: REQUIRED_FILES.length
   };
+
 }
 
 // -----------------------------------------------------------------------------

@@ -1248,8 +1248,42 @@ export function runTests() {
   }
   console.log('✔ 57. P1-02 Invariant: All REFUTES decisions strictly enforce verifiable evidence binding.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (57/57).');
+  // 58. P1-04 Invariant: Orchestration consistency & unified Fixed 3-Lens verification
+  const skillFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/SKILL.md'), 'utf8');
+  if (skillFile.includes('--workers')) {
+    throw new Error('P1-04 VIOLATION: SKILL.md still references legacy --workers flag instead of --concurrency');
+  }
+  if (!skillFile.includes('Fixed 3-Lens Consensus Verification')) {
+    throw new Error('P1-04 VIOLATION: SKILL.md Stage 3 not aligned with Fixed 3-Lens verification');
+  }
+  const verifierProtocolFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/references/verifier-protocol.md'), 'utf8');
+  if (!verifierProtocolFile.includes('Fixed 3-Lens Verification Panel')) {
+    throw new Error('P1-04 VIOLATION: verifier-protocol.md not aligned with Fixed 3-Lens Verification Panel');
+  }
+  const swarmConsensusFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/references/swarm-consensus.md'), 'utf8');
+  if (!swarmConsensusFile.includes('Fixed 3-Lens Verification Panel')) {
+    throw new Error('P1-04 VIOLATION: swarm-consensus.md not aligned with Fixed 3-Lens Verification Panel');
+  }
+  // 58.2 Incomplete 3-Lens panel (missing 1 lens) strictly fails closed to DEFERRED
+  const partialLensCandidate = {
+    id: 'SEC-PARTIAL-LENS',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+  };
+  const partialLensVotes = [
+    { findingId: 'SEC-PARTIAL-LENS', lens: 'REACHABILITY', decision: 'SUPPORTS' },
+    { findingId: 'SEC-PARTIAL-LENS', lens: 'DEFENSES', decision: 'SUPPORTS' }
+    // IMPACT missing
+  ];
+  const partialDisp = deriveFinalDisposition(partialLensCandidate, partialLensVotes, { score: 0.90 });
+  if (partialDisp.disposition !== 'DEFERRED' || partialDisp.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('P1-04 VIOLATION: Incomplete 3-Lens panel (2/3 supports) dropped through to legacy confirmation instead of DEFERRED!');
+  }
+  console.log('✔ 58. P1-04 Invariant: SKILL.md, verifier-protocol, and swarm-consensus completely aligned to Fixed 3-Lens architecture.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (58/58).');
 }
+
+
 
 
 

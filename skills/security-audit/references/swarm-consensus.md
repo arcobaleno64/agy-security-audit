@@ -4,103 +4,114 @@
 
 The consensus engine operates strictly under the **Default-Deny** axiom:
 - **Null Hypothesis**: Every candidate risk or audited component defaults to `NON_PASS / UNVERIFIED`.
-- **Burden of Proof**: The burden of proof rests entirely on the party asserting safety or refutation. A finding cannot be dismissed as `FALSE_POSITIVE` without an affirmative, reproducible proof of mitigation (exact code line and barrier mechanism).
-- **Fallback on Deadlock**: If consensus cannot be achieved, or if subagents time out, the finding automatically falls back to `NON_PASS / NEEDS_MANUAL_REVIEW`.
+- **Burden of Proof**: The burden of proof rests entirely on the party asserting safety or refutation. A finding cannot be dismissed as `FALSE_POSITIVE` without an affirmative, reproducible proof of mitigation (exact in-repo file path and line number).
+- **Fallback on Deadlock**: If consensus cannot be achieved, or if subagents time out or fail to produce ballots, the finding automatically falls back to `NON_PASS / NEEDS_MANUAL_REVIEW`.
 
 ---
 
-## 2. Elastic Sliding Worker Pool & Quota Throttling
+## 2. Elastic Discovery Concurrency Window (`--concurrency`)
 
-To fulfill the user's intent of an "unbounded subagent pool" without causing local OS thread exhaustion or API 429 rate limit cascades, subagent execution is abstracted into an **Elastic Task Queue with a Sliding Concurrency Window**:
+To enable scalable codebase exploration without causing local OS thread exhaustion or API 429 rate limit cascades, candidate discovery across the **Component × Family Matrix** is abstracted into a **Sliding Concurrency Window**:
 
 ```
-[Finding Candidates Queue]
-        │
-        ▼ (Concurrency Window: W = 3..6 workers)
-[Subagent Worker 1] [Subagent Worker 2] [Subagent Worker 3] ... [Worker N]
-        │
-        ▼ (AIMD Rate Limiter: Halve W on 429, increment W on clean batch)
+[Component × Vulnerability Family Matrix]
+                    │
+                    ▼ (Concurrency Window: C = 2..8 workers)
+[Discovery Worker 1] [Discovery Worker 2] ... [Discovery Worker N]
+                    │
+                    ▼
+[Candidate Findings Store: scratch/candidate-findings.json]
+                    │
+                    ▼
+[Fixed 3-Lens Panel: REACHABILITY, DEFENSES, IMPACT]
+                    │
+                    ▼
 [Private Ballot Store: scratch/votes/{finding_id}/ballot_{uuid}.json]
 ```
 
-### AIMD Throttle Specifications
-- **Concurrency Range**: $W_{\text{active}} \in [3, 6]$, absolute ceiling 8.
-- **AIMD Rules**:
-  - On API 429 / ResourceExhausted: $W \leftarrow \max(2, \lfloor W / 2 \rfloor)$, sleep with exponential backoff + full jitter.
-  - On consecutive successful batches without rate errors: $W \leftarrow \min(6, W + 1)$.
+### Concurrency Characteristics
+- **Concurrency Range**: $C_{\text{active}} \in [2, 8]$.
+- **Scope**: Concurrency controls discovery speed, token consumption, and parallelism; it does **NOT** alter verification assurance or thresholds.
 - **Token Budget Guardrail**: Maximum 300k tokens per single finding verification pass.
 
 ---
 
 ## 3. Double-Blind Private Ballot Protocol
 
-To eliminate Cascading Hallucinations and Conformity Bias, reviewers must never see each other's reasoning or scores.
+To eliminate Cascading Hallucinations and Conformity Bias, verifiers must never see each other's reasoning or scores.
 
 ### Private Ballot Channels
 1. The coordinator dispatches independent verification tasks via `invoke_subagent`.
-2. Each subagent writes its completed vote to a dedicated, unguessable file path:
+2. Each verifier writes its completed vote to a dedicated, unguessable file path:
    `scratch/votes/{finding_id}/ballot_{uuid}.json`
-3. Subagents are given read access **only** to the source code and candidate coordinate, strictly prohibited from inspecting `scratch/votes/`.
+3. Verifiers are given read access **only** to the source code and candidate coordinate, strictly prohibited from inspecting `scratch/votes/` or other verifiers' ballots.
 
 ---
 
-## 4. Four Cognitive Diversity Personas
+## 4. Cognitive Diversity Discovery Personas (Stage 2)
 
-To prevent Sybil collapse and shared model blindspots, reviewer subagents are assigned distinct, orthogonal personas:
+During Stage 2 Discovery, subagents explore the Component $\times$ Family matrix using distinct, orthogonal personas to uncover diverse vulnerability archetypes:
 
 ### Persona 1: The Exploit Hacker (Offensive / Penetration)
-- **Role System Prompt**:
-  > You are an offensive exploit researcher. Your sole objective is to prove that untrusted input from the entry source can reach the vulnerable sink without being effectively neutralized. Disregard comments, docstrings, or assumed frameworks. Seek any viable character escaping bypass, type confusion, or injection gadget.
+- **Focus**: Seeks unrefuted source-to-sink taint flows and character escaping bypasses.
 
 ### Persona 2: The Paranoiac Defense Architect (Boundary / Evasion)
-- **Role System Prompt**:
-  > You are a paranoid defensive security architect. Even if a sanitizer or validation check exists, assume it can be bypassed under edge-case inputs (e.g., ReDoS, Unicode normalization collisions, null-byte truncations, double-encoding, case folding). Identify gaps where the sanitizer fails to cover the entire input domain.
+- **Focus**: Attacks sanitizers for edge-case bypasses (e.g. ReDoS, Unicode collisions, null-byte truncations, double-encoding).
 
 ### Persona 3: The Logic & State Auditor (State Machine / Business Logic)
-- **Role System Prompt**:
-  > You are a distributed systems and business logic auditor. Focus entirely on timing, authorization state machines, IDOR, race conditions (TOCTOU), double-spend, and missing access control barriers across multi-step execution flows.
+- **Focus**: Audits timing, authorization state machines, IDOR, race conditions (TOCTOU), and missing access controls.
 
 ### Persona 4: The Language Specification Formalist (Semantics & Spec)
-- **Role System Prompt**:
-  > You are a programming language specification specialist. Focus on language-level edge cases: JavaScript prototype pollution, Python variable scope leakage, C# type conversion quirks, dynamic attribute lookups, and compiler/runtime specific vulnerabilities.
+- **Focus**: Probes language-level quirks: prototype pollution, variable scope leakage, implicit type conversions, and compiler/runtime edge cases.
 
 ---
 
-## 5. Consensus Scoring & Minority Escalation
+## 5. Fixed 3-Lens Verification Panel (Stage 3)
 
-### Ballot Schema
+In Stage 3, candidate findings are evaluated strictly by the **Fixed 3-Lens Verifier Panel**:
+- `REACHABILITY Lens` (`agents/verifier-reachability.md`): Confirms untrusted source entry and unbroken flow to sink.
+- `DEFENSES Lens` (`agents/verifier-defenses.md`): Confirms absence or bypassability of sanitizers/validators.
+- `IMPACT Lens` (`agents/verifier-impact.md`): Calibrates authentic blast radius, privilege boundary transgression, and CVSS v4 vector.
+
+### 3-Lens Ballot Schema
 ```json
 {
   "findingId": "SEC-001",
-  "persona": "ExploitHacker",
-  "verdict": "CONFIRMED | NEEDS_MANUAL_REVIEW | FALSE_POSITIVE",
-  "confidence": 0.85,
-  "concreteTaintPath": "Source (req.query.id, line 10) -> sanitizedId (line 12, regex bypassable) -> db.query (line 25)",
-  "mitigationProofLine": null,
+  "lens": "REACHABILITY | DEFENSES | IMPACT",
+  "decision": "SUPPORTS | REFUTES",
+  "reason": "Detailed technical rationale",
+  "evidence": [
+    {
+      "path": "src/api/routes.ts",
+      "line": 42,
+      "role": "entrypoint | guard | sink | impact-boundary"
+    }
+  ],
   "nonce": "X-NONCE-38f9b2"
 }
 ```
 
-### Table of Verdict Rules
-1. **`CONFIRMED`** (Vulnerability Proven):
-   - Confidence-weighted score $\ge 67\%$ (2/3 supermajority).
-   - Must include a concrete, non-empty taint flow pathway.
-2. **`FALSE_POSITIVE`** (Affirmatively Refuted):
-   - Confidence-weighted score $\ge 75\%$ (3/4 supermajority).
-   - **Mandatory Rebuttal**: Must explicitly cite the exact file and line number where mitigation occurs, and prove that the input domain is fully contained. Without this proof, confidence is capped at 0.2.
-3. **`MINORITY ESCALATION`** (Anti-Groupthink Override):
-   - If any specialist persona produces an unrefuted, verifiable taint path with confidence $\ge 0.80$, the finding **CANNOT** be dismissed by the majority. It is automatically escalated to `NEEDS_MANUAL_REVIEW` (or referred to a `Model: "pro"` Chief Adjudicator).
-4. **`NEEDS_MANUAL_REVIEW`** (Presumption of Non-Pass):
-   - Default for all split decisions, lack of quorum, low confidence, or timeouts.
+### Table of Verdict Rules (3-Lens Conjunctive Verification)
+1. **`CONFIRMED` (`REPORTABLE`)**:
+   - Requires unanimous 3-Lens support (`supports === 3`) under Default-Deny.
+   - Must include a concrete, verified taint flow pathway.
+2. **`FALSE_POSITIVE` (`SUPPRESSED`)**:
+   - Decisive refutation by any lens backed by verified in-repo evidence (`path` + positive line number):
+     - `REACHABILITY`: Proves entrypoint is uncalled, dead code, or internal test mock.
+     - `DEFENSES`: Proves affirmative defense barrier or input validation invariant.
+     - `IMPACT`: Proves zero demonstrable security harm or strict containment.
+   - Any refutation lacking verified evidence strictly defaults to `DEFERRED` (silence/unsupported claims are not approval).
+3. **`NEEDS_MANUAL_REVIEW` (`DEFERRED`)**:
+   - Default for all split decisions, lack of quorum, missing ballots, unverified refutations, or unclosed proof gaps.
 
 ---
 
-## 6. Deadman Watchdog & Quorum Degraded Finalization
+## 6. Deadman Watchdog & Default-Deny Completion
 
 1. **Watchdog Timer**:
    - Coordinator sets a watchdog timer via `schedule(DurationSeconds=180, Prompt="Watchdog: Subagent batch timeout")`.
    - On completion, the timer task is cancelled immediately.
-2. **Quorum Threshold**:
-   - Minimum quorum: $Q_{\min} = \max(2, \lceil N \times 0.6 \rceil)$ (at least 60% ballots returned).
-   - If $N_{\text{valid}} \ge Q_{\min}$: Finalize vote with `DEGRADED_QUORUM` annotation.
-   - If $N_{\text{valid}} < Q_{\min}$: Vote is invalidated; status immediately sealed as `NEEDS_MANUAL_REVIEW (INSUFFICIENT_QUORUM)`.
+2. **Quorum & Missing Ballots**:
+   - In 3-Lens verification, all 3 lenses (`REACHABILITY`, `DEFENSES`, `IMPACT`) are strictly required.
+   - Silence is not approval: if any lens times out or fails to return a ballot, the candidate cannot be confirmed or suppressed; it is sealed as `DEFERRED / NEEDS_MANUAL_REVIEW` under Default-Deny.
+
