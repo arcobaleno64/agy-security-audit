@@ -781,20 +781,49 @@ export function runTests() {
   }
   console.log('✔ 36. P2 Invariant: Stale baseline check safely inspects target file divergence.');
 
-  // 37. P2 (0.12.0): Remediation Verification via DEFENSES Lens
+  // 37. P1-03: Remediation Verification strictly requires complete 3-Lens panel under Default-Deny
   const findingToVerify = { id: 'SEC-REMED', ruleId: 'CWE-89' };
-  const verifiedVotes = [
+
+  // 37.1 1 DEFENSES only -> REJECTED
+  const defensesOnlyVotes = [
     { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' }
   ];
-  const remediationResult = verifyRemediation(findingToVerify, verifiedVotes);
+  const defOnlyResult = verifyRemediation(findingToVerify, defensesOnlyVotes);
+  if (defOnlyResult.verified) {
+    throw new Error('P1-03 VIOLATION: Single DEFENSES vote alone certified remediation without REACHABILITY and IMPACT!');
+  }
+
+  // 37.2 DEFENSES + REACHABILITY only -> REJECTED
+  const defAndReachVotes = [
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked' }
+  ];
+  const defAndReachResult = verifyRemediation(findingToVerify, defAndReachVotes);
+  if (defAndReachResult.verified) {
+    throw new Error('P1-03 VIOLATION: Missing IMPACT vote certified remediation!');
+  }
+
+  // 37.3 All 3 valid -> VERIFIED
+  const allThreeVotes = [
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked' },
+    { findingId: 'SEC-REMED', lens: 'IMPACT', decision: 'REFUTES', reason: 'Impact neutralized' }
+  ];
+  const remediationResult = verifyRemediation(findingToVerify, allThreeVotes);
   if (!remediationResult.verified) {
-    throw new Error('P2 VIOLATION: verifyRemediation failed to certify verified defense invariant');
+    throw new Error(`P1-03 VIOLATION: Complete 3-lens panel failed to certify remediation: ${remediationResult.reason}`);
   }
-  const unverifiedResult = verifyRemediation(findingToVerify, [{ findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'SUPPORTS' }]);
+
+  // 37.4 Active exploit dissent (e.g. REACHABILITY SUPPORTS) -> REJECTED
+  const unverifiedResult = verifyRemediation(findingToVerify, [
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/api.ts:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Bypass found' },
+    { findingId: 'SEC-REMED', lens: 'IMPACT', decision: 'REFUTES', reason: 'Impact neutralized' }
+  ]);
   if (unverifiedResult.verified) {
-    throw new Error('P2 VIOLATION: Unverified remediation was incorrectly certified!');
+    throw new Error('P1-03 VIOLATION: Unverified remediation was incorrectly certified!');
   }
-  console.log('✔ 37. P2 Invariant: Remediation verification requires affirmative DEFENSES proof.');
+  console.log('✔ 37. P1-03 Invariant: Remediation verification strictly requires complete 3-Lens panel under Default-Deny.');
 
   // 38. P2 (0.12.0): Patch Jail Security Rules (Bidi, CI/CD, Multi-file)
   const bidiPatch = `--- a/skills/security-audit/scripts/safe-git.mjs
@@ -826,12 +855,19 @@ export function runTests() {
   }
   console.log('✔ 39. P2 Invariant: detectStalePatch rejects CLI option injection fail-closed.');
 
-  // 40. P2 (0.12.0): 3-Lens Finding ID Binding and Active Exploit Dissent
+  // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Active Exploit Dissent
   const candidateA = { id: 'SEC-100' };
   const candidateB = { id: 'SEC-200' };
   const votesForA = [
-    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' }
+    { findingId: 'SEC-100', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'src/app.ts:50', mitigationReason: 'Sanitizer installed' },
+    { findingId: 'SEC-100', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable' },
+    { findingId: 'SEC-100', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm' }
   ];
+  // Ballots for A must verify candidate A
+  const candidateAVerified = verifyRemediation(candidateA, votesForA);
+  if (!candidateAVerified.verified) {
+    throw new Error('P1-03 VIOLATION: Valid 3-lens ballots for Candidate A failed verification!');
+  }
   // Ballots for A must not verify candidate B
   const crossBindingCheck = verifyRemediation(candidateB, votesForA);
   if (crossBindingCheck.verified) {

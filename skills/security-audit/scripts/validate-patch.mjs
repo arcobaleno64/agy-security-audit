@@ -189,7 +189,9 @@ export function detectStalePatch(repoRoot = process.cwd(), targetFiles = [], bas
 }
 
 /**
- * Validates candidate remediation against the 3-Lens panel under Default-Deny.
+ * Validates candidate remediation against the full 3-Lens panel under Default-Deny (P1-03).
+ * Requires all 3 lenses (DEFENSES, REACHABILITY, IMPACT).
+ * Missing votes fail verification fail-closed (silence is not approval).
  */
 export function verifyRemediation(finding, verifierVotes = []) {
   if (!finding || typeof finding !== 'object') {
@@ -197,51 +199,93 @@ export function verifyRemediation(finding, verifierVotes = []) {
   }
 
   const findingId = finding.id || finding.findingId;
+  if (!findingId) {
+    return { verified: false, reason: 'Finding missing concrete identifier' };
+  }
 
   // Strict task-binding: only inspect votes matching this specific finding
-  const relevantVotes = verifierVotes.filter(v => v && (v.findingId === findingId || (!v.findingId && verifierVotes.length <= 3)));
+  const safeVotes = Array.isArray(verifierVotes) ? verifierVotes : [];
+  const relevantVotes = safeVotes.filter(v => v && v.findingId === findingId);
 
+  // 1. Strict Requirement: All 3 Lenses Must Be Present
   const defensesVote = relevantVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'DEFENSES');
-  if (!defensesVote) {
-    return { verified: false, reason: 'No DEFENSES lens vote provided for fix verification' };
+  const reachabilityVote = relevantVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'REACHABILITY');
+  const impactVote = relevantVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
+
+  const missingLenses = [];
+  if (!defensesVote) missingLenses.push('DEFENSES');
+  if (!reachabilityVote) missingLenses.push('REACHABILITY');
+  if (!impactVote) missingLenses.push('IMPACT');
+
+  if (missingLenses.length > 0) {
+    return {
+      verified: false,
+      reason: `Incomplete 3-Lens panel: missing required vote(s) from [${missingLenses.join(', ')}]. Silence is not approval under default-deny.`
+    };
   }
 
-  const decision = String(defensesVote.decision || defensesVote.verdict || '').toUpperCase();
-  // Strict conjunction: must provide non-empty proof line AND non-empty reason
-  const hasProof = Boolean(
-    defensesVote.mitigationProofLine &&
-    typeof defensesVote.mitigationProofLine === 'string' &&
-    defensesVote.mitigationProofLine.trim().length > 0 &&
-    defensesVote.mitigationReason &&
-    typeof defensesVote.mitigationReason === 'string' &&
-    defensesVote.mitigationReason.trim().length > 0
+  // 2. DEFENSES Lens Verification
+  const defDecision = String(defensesVote.decision || defensesVote.verdict || '').toUpperCase();
+  const isDefRefutes = ['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(defDecision);
+
+  const proofLine = defensesVote.mitigationProofLine
+    ? String(defensesVote.mitigationProofLine).trim()
+    : (Array.isArray(defensesVote.evidence) && defensesVote.evidence[0]
+        ? (typeof defensesVote.evidence[0] === 'object' ? `${defensesVote.evidence[0].path}:${defensesVote.evidence[0].line}` : String(defensesVote.evidence[0]))
+        : null);
+  const proofReason = defensesVote.mitigationReason
+    ? String(defensesVote.mitigationReason).trim()
+    : (defensesVote.reason ? String(defensesVote.reason).trim() : null);
+
+  const hasDefProof = Boolean(
+    proofLine &&
+    proofLine.length > 0 &&
+    proofReason &&
+    proofReason.length > 0
   );
 
-  // In fix verification, decision must strictly be REFUTES (affirming the defense neutralizes the finding)
-  if (decision !== 'REFUTES' || !hasProof) {
+  if (!isDefRefutes || !hasDefProof) {
     return {
       verified: false,
-      reason: 'DEFENSES lens must vote REFUTES with affirmative mitigationProofLine and mitigationReason'
+      reason: 'DEFENSES lens must vote REFUTES with affirmative mitigation proof (mitigationProofLine and mitigationReason)'
     };
   }
 
-  // 3-Lens consensus: REACHABILITY or IMPACT must not dissent with confirmed active exploit
-  const reachabilityDissent = relevantVotes.some(v => v.lens && String(v.lens).toUpperCase() === 'REACHABILITY' && ['CONFIRMED', 'SUPPORTS'].includes(String(v.decision || v.verdict).toUpperCase()));
-  const impactDissent = relevantVotes.some(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT' && ['CONFIRMED', 'SUPPORTS'].includes(String(v.decision || v.verdict).toUpperCase()));
-
-  if (reachabilityDissent || impactDissent) {
+  // 3. REACHABILITY Lens Verification
+  const reachDecision = String(reachabilityVote.decision || reachabilityVote.verdict || '').toUpperCase();
+  if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(reachDecision)) {
     return {
       verified: false,
-      reason: 'REACHABILITY or IMPACT lens confirms that attack path remains active despite patch'
+      reason: 'REACHABILITY lens confirms that attack path remains active despite patch'
+    };
+  }
+  if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(reachDecision)) {
+    return {
+      verified: false,
+      reason: `REACHABILITY lens decision '${reachDecision}' does not refute reachability under default-deny`
     };
   }
 
+  // 4. IMPACT Lens Verification
+  const impactDecision = String(impactVote.decision || impactVote.verdict || '').toUpperCase();
+  if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(impactDecision)) {
+    return {
+      verified: false,
+      reason: 'IMPACT lens confirms that security consequence remains obtainable despite patch'
+    };
+  }
+  if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(impactDecision)) {
+    return {
+      verified: false,
+      reason: `IMPACT lens decision '${impactDecision}' does not refute security impact under default-deny`
+    };
+  }
 
   return {
     verified: true,
-    reason: 'DEFENSES lens confirms affirmative mitigation invariant established without dissent',
-    mitigationProofLine: defensesVote.mitigationProofLine.trim(),
-    mitigationReason: defensesVote.mitigationReason.trim()
+    reason: 'Full 3-Lens panel (DEFENSES, REACHABILITY, IMPACT) unanimously verifies remediation under default-deny',
+    mitigationProofLine: proofLine,
+    mitigationReason: proofReason
   };
 }
 

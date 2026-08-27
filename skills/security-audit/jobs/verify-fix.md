@@ -22,8 +22,10 @@ The `verify-fix` job automates the rigorous verification of candidate remediatio
 - Ensure 100% of test suites pass without regressions.
 
 ### 4. 3-Lens Panel Re-evaluation
-- Dispatch the 3-Lens Verifier Panel against the patched code:
-  - **DEFENSES Lens**: Must vote `REFUTES` with explicit `mitigationProofLine` pointing to the newly established defense.
-  - **REACHABILITY / IMPACT Lens**: Must confirm the attack path is blocked or neutralized.
-- A patch is approved ONLY when the finding disposition transitions from `REPORTABLE` to `SUPPRESSED` (`FALSE_POSITIVE` / mitigated).
+- Dispatch the complete 3-Lens Verifier Panel against the patched code:
+  - **DEFENSES Lens**: Must vote `REFUTES` with explicit `mitigationProofLine` and `mitigationReason` establishing the defensive barrier.
+  - **REACHABILITY Lens**: Must vote `REFUTES` confirming the attack path no longer reaches the vulnerable sink.
+  - **IMPACT Lens**: Must vote `REFUTES` confirming security consequence is unobtainable or neutralized.
+- **Default-Deny Invariant**: All 3 lenses are strictly required (`DEFENSES`, `REACHABILITY`, `IMPACT`). Missing votes fail verification fail-closed (silence != approval). A patch is certified ONLY when all 3 lenses confirm the finding is neutralized without dissent.
+
 
