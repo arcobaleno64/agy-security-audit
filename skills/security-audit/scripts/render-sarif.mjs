@@ -35,8 +35,11 @@ import {
   unionCandidates,
   computeFindingFingerprint,
   renderSarifFromCanonical,
-  renderMarkdownFromCanonical
+  renderMarkdownFromCanonical,
+  normalizeDirectoryPath
 } from './finalize-scan.mjs';
+
+
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
@@ -479,11 +482,14 @@ export function runTests() {
   console.log('✔ 20. P1 Invariant: Scan and Review manifests conform to canonical schema.');
 
   // 21. P1 (0.10.0): Review Mode Coverage Reconciliation & Markdown Generation
+  const realDiffForTest21 = extractChangedFiles(process.cwd(), { base: 'HEAD~1', head: 'HEAD' });
   const reviewInventoryManifest = {
     mode: 'review',
+    base: 'HEAD~1',
+    head: 'HEAD',
     reviewInventory: {
-      changedFiles: [{ path: 'skills/security-audit/SKILL.md', status: 'MODIFIED' }],
-      deletedFiles: [{ path: 'old-module.js', status: 'DELETED', baselineRevision: '12c9ce07d5eb' }]
+      changedFiles: realDiffForTest21.changedFiles,
+      deletedFiles: realDiffForTest21.deletedFiles
     }
   };
   const reviewFinalization = finalizeScan({
@@ -503,6 +509,7 @@ export function runTests() {
     throw new Error('P1 VIOLATION: Review markdown does not render changed files accounting section');
   }
   console.log('✔ 21. P1 Invariant: Review mode coverage reconciliation achieves COMPLETE under Default-Deny.');
+
 
   // 22. P1 (0.10.0): Categorization Accuracy for Monorepos & CLI
   if (categorizeDirectory('.github').status !== 'SCANNED') {
@@ -885,9 +892,105 @@ export function runTests() {
   }
   console.log('✔ 44. P0-01 Invariant: Strict task-binding prevents unassigned ballot leakage.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (44/44).');
+  // 45. P0-02 Invariant: Omitted directory results in PARTIAL coverage (Test A)
+  const fullFsManifest = buildDirectoryManifest(process.cwd());
+  const omittedEntries = fullFsManifest.entries.filter(e => normalizeDirectoryPath(e.path) !== 'skills/');
+  const omittedScanManifest = { entries: omittedEntries };
+  const omittedRes = reconcileCoverage(omittedScanManifest, process.cwd());
+  if (omittedRes.status === 'COMPLETE' || !omittedRes.missing.includes('skills/')) {
+    throw new Error(`P0-02 VIOLATION: Omitted directory skills/ was not detected as PARTIAL: ${JSON.stringify(omittedRes)}`);
+  }
+  console.log('✔ 45. P0-02 Invariant: Omitted directory results in PARTIAL coverage with missing list.');
 
+  // 46. P0-02 Invariant: Fake complete manifest ({ entries: [{ path: './' }] }) cannot achieve COMPLETE (Test B)
+  const fakeCompleteManifest = {
+    entries: [
+      { path: './', status: 'SCANNED' }
+    ]
+  };
+  const fakeScanRes = finalizeScan({ candidates: [], manifest: fakeCompleteManifest, repoRoot: process.cwd() });
+  if (fakeScanRes.coverageStatus === 'COMPLETE' || fakeScanRes.canDeclareClean) {
+    throw new Error(`P0-02 VIOLATION: Fake manifest claimed COMPLETE coverage or declared clean: ${JSON.stringify(fakeScanRes)}`);
+  }
+  console.log('✔ 46. P0-02 Invariant: Fake complete manifest is rejected as PARTIAL under filesystem reconciliation.');
+
+  // 47. P0-02 Invariant: Review mode missing changed file results in PARTIAL (Test C)
+  const realDiffFor47 = extractChangedFiles(process.cwd(), { base: 'HEAD~1', head: 'HEAD' });
+  const partialChangedList = realDiffFor47.changedFiles.slice(1);
+  const partialReviewManifest = {
+    mode: 'review',
+    base: 'HEAD~1',
+    head: 'HEAD',
+    reviewInventory: {
+      changedFiles: partialChangedList,
+      deletedFiles: realDiffFor47.deletedFiles
+    }
+  };
+  const partialReviewRes = reconcileCoverage(partialReviewManifest, process.cwd());
+  if (partialReviewRes.status === 'COMPLETE' || partialReviewRes.missingChanged.length === 0) {
+    throw new Error(`P0-02 VIOLATION: Review manifest missing changed files was accepted as COMPLETE: ${JSON.stringify(partialReviewRes)}`);
+  }
+  console.log('✔ 47. P0-02 Invariant: Review mode missing changed file rejected as PARTIAL.');
+
+  // 48. P0-02 Invariant: Review mode fake/missing deleted file (Test D)
+  const fakeDeletedManifest = {
+    mode: 'review',
+    base: 'HEAD~1',
+    head: 'HEAD',
+    reviewInventory: {
+      changedFiles: realDiffFor47.changedFiles,
+      deletedFiles: [{ path: 'unaccounted-fake-deleted.js', status: 'DELETED' }]
+    }
+  };
+  const fakeDeletedRes = reconcileCoverage(fakeDeletedManifest, process.cwd());
+  if (fakeDeletedRes.status === 'COMPLETE' || fakeDeletedRes.unexpectedDeleted.length === 0) {
+    throw new Error(`P0-02 VIOLATION: Review manifest with fictitious deleted file was accepted as COMPLETE: ${JSON.stringify(fakeDeletedRes)}`);
+  }
+  console.log('✔ 48. P0-02 Invariant: Review mode deleted file discrepancy rejected as PARTIAL.');
+
+  // 49. P0-02 Hardening: Null or non-existent repoRoot strictly fails closed to UNCHECKABLE
+
+  const nullRootRes = finalizeScan({ candidates: [], manifest: fullFsManifest, repoRoot: null });
+  if (nullRootRes.coverageStatus !== 'UNCHECKABLE' || nullRootRes.canDeclareClean) {
+    throw new Error(`P0-02 VIOLATION: Null repoRoot did not fail closed to UNCHECKABLE: ${JSON.stringify(nullRootRes)}`);
+  }
+  const nonExistentRes = finalizeScan({ candidates: [], manifest: fullFsManifest, repoRoot: '/path/does/not/exist' });
+  if (nonExistentRes.coverageStatus !== 'UNCHECKABLE' || nonExistentRes.canDeclareClean) {
+    throw new Error(`P0-02 VIOLATION: Non-existent repoRoot did not fail closed to UNCHECKABLE: ${JSON.stringify(nonExistentRes)}`);
+  }
+  console.log('✔ 49. P0-02 Invariant: Null or non-existent repoRoot strictly fails closed to UNCHECKABLE.');
+
+  // 50. P0-02 Hardening: False Exclusion / Categorization Fabrication is rejected as PARTIAL
+  const falseExclusionEntries = fullFsManifest.entries.map(e => {
+    if (normalizeDirectoryPath(e.path) === 'skills/') {
+      return { ...e, status: 'EXCLUDED_VENDORED', reason: 'Fictitious vendor exclusion' };
+    }
+    return e;
+  });
+  const falseExclusionManifest = { entries: falseExclusionEntries };
+  const falseExclusionRes = finalizeScan({ candidates: [], manifest: falseExclusionManifest, repoRoot: process.cwd() });
+  if (falseExclusionRes.coverageStatus === 'COMPLETE' || falseExclusionRes.canDeclareClean) {
+    throw new Error(`P0-02 VIOLATION: False exclusion of skills/ was accepted as COMPLETE: ${JSON.stringify(falseExclusionRes)}`);
+  }
+  console.log('✔ 50. P0-02 Invariant: False exclusion of core source directories is rejected as PARTIAL.');
+
+  // 51. P0-02 Hardening: Review mode identical base/head revision manipulation rejected as PARTIAL
+  const identicalRevManifest = {
+    mode: 'review',
+    base: 'HEAD',
+    head: 'HEAD',
+    reviewInventory: { changedFiles: [], deletedFiles: [] }
+  };
+  const identicalRevRes = finalizeScan({ candidates: [], manifest: identicalRevManifest, repoRoot: process.cwd() });
+  if (identicalRevRes.coverageStatus === 'COMPLETE' || identicalRevRes.canDeclareClean) {
+    throw new Error(`P0-02 VIOLATION: Identical review revisions (HEAD...HEAD) accepted as COMPLETE: ${JSON.stringify(identicalRevRes)}`);
+  }
+  console.log('✔ 51. P0-02 Invariant: Identical base/head revision manipulation rejected as PARTIAL.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (51/51).');
 }
+
+
 
 
 

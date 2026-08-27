@@ -12,6 +12,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getHardenedGitProvenance, runSafeGit } from './safe-git.mjs';
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
+import { buildDirectoryManifest, extractChangedFiles } from './build-inventory.mjs';
+
 
 
 export const CVSS_V4_REGEX = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]/;
@@ -134,14 +136,46 @@ export function calculateRigor(metrics = {}) {
 }
 
 /**
- * Validates Directory Reconciliation Manifest according to Directory Accounting standards.
+ * Normalizes a directory path for deterministic reconciliation.
  */
-export function validateDirectoryManifest(manifest) {
-  if (!manifest || !Array.isArray(manifest.entries)) {
-    return { valid: false, error: 'Manifest must contain an "entries" array.' };
+export function normalizeDirectoryPath(p) {
+  if (!p || typeof p !== 'string') return '';
+  let clean = p.replace(/\\/g, '/').trim();
+  if (clean === '.' || clean === './' || clean === '/') return './';
+  clean = clean.replace(/^\.\//, '').replace(/^\/+/, '');
+  if (!clean.endsWith('/')) {
+    clean += '/';
   }
-  if (manifest.entries.length === 0) {
-    return { valid: false, error: 'UNACCOUNTED_DIRECTORY_ERROR: Directory manifest cannot be empty.' };
+  return clean;
+}
+
+/**
+ * Normalizes a repo-relative file path.
+ */
+export function normalizeFilePath(p) {
+  if (!p || typeof p !== 'string') return '';
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '').trim();
+}
+
+/**
+ * Validates Directory Reconciliation Manifest according to Directory Accounting standards
+ * and performs authoritative reconciliation against the real filesystem when repoRoot is supplied.
+ */
+export function validateDirectoryManifest(manifest, repoRoot = null) {
+  if (!manifest || typeof manifest !== 'object') {
+    return { valid: false, status: 'UNCHECKABLE', error: 'Manifest must be an object.' };
+  }
+
+  // Unwrap directoryManifest if nested
+  const rawEntries = Array.isArray(manifest.entries)
+    ? manifest.entries
+    : (manifest.directoryManifest && Array.isArray(manifest.directoryManifest.entries) ? manifest.directoryManifest.entries : null);
+
+  if (!rawEntries) {
+    return { valid: false, status: 'UNCHECKABLE', error: 'Manifest must contain an "entries" array.' };
+  }
+  if (rawEntries.length === 0) {
+    return { valid: false, status: 'PARTIAL', error: 'UNACCOUNTED_DIRECTORY_ERROR: Directory manifest cannot be empty.' };
   }
 
   const validStatuses = new Set([
@@ -152,76 +186,260 @@ export function validateDirectoryManifest(manifest) {
     'EXCLUDED_TEST'
   ]);
 
-  for (const entry of manifest.entries) {
-    if (!entry.path) {
-      return { valid: false, error: 'Directory entry missing "path" property.' };
+  const claimedMap = new Map();
+  const duplicates = [];
+
+  for (const entry of rawEntries) {
+    if (!entry || !entry.path) {
+      return { valid: false, status: 'PARTIAL', error: 'Directory entry missing "path" property.' };
     }
+    const norm = normalizeDirectoryPath(entry.path);
+    if (claimedMap.has(norm)) {
+      duplicates.push(norm);
+    }
+    claimedMap.set(norm, entry);
+
     if (!validStatuses.has(entry.status)) {
       return {
         valid: false,
+        status: 'PARTIAL',
         error: `UNACCOUNTED_DIRECTORY_ERROR: Directory "${entry.path}" has invalid or unaccounted status "${entry.status}".`
       };
     }
     if (entry.status.startsWith('EXCLUDED_') && (!entry.reason || entry.reason.trim().length === 0)) {
       return {
         valid: false,
+        status: 'PARTIAL',
         error: `UNACCOUNTED_DIRECTORY_ERROR: Excluded directory "${entry.path}" lacks explicit audit reason.`
       };
     }
   }
 
-  return { valid: true };
+  if (duplicates.length > 0) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      duplicates,
+      error: `UNACCOUNTED_DIRECTORY_ERROR: Duplicate directory entries found: [${duplicates.join(', ')}]`
+    };
+  }
+
+  // If repoRoot is omitted or null, syntax is valid but coverage cannot be verified
+  if (!repoRoot || typeof repoRoot !== 'string' || !fs.existsSync(path.resolve(repoRoot))) {
+    return {
+      valid: true,
+      status: 'UNCHECKABLE',
+      missing: [],
+      unexpected: [],
+      error: 'UNCHECKABLE: Authoritative repoRoot is required to reconcile filesystem coverage.'
+    };
+  }
+
+  // Authoritative Filesystem Reconciliation (P0-02)
+  let actualManifest;
+  try {
+    actualManifest = buildDirectoryManifest(repoRoot);
+  } catch (e) {
+    return {
+      valid: false,
+      status: 'UNCHECKABLE',
+      error: `FS_RECONCILIATION_ERROR: Failed to inspect filesystem at ${repoRoot}: ${e.message}`
+    };
+  }
+
+  const actualMap = new Map();
+  for (const actualEntry of actualManifest.entries) {
+    actualMap.set(normalizeDirectoryPath(actualEntry.path), actualEntry);
+  }
+
+  const missing = [];
+  for (const actualPath of actualMap.keys()) {
+    if (!claimedMap.has(actualPath)) {
+      missing.push(actualPath);
+    }
+  }
+
+  const unexpected = [];
+  for (const claimedPath of claimedMap.keys()) {
+    if (!actualMap.has(claimedPath)) {
+      unexpected.push(claimedPath);
+    }
+  }
+
+  // Check for False Exclusion / Categorization Fabrication
+  const statusMismatches = [];
+  let hasScannedCodeDirectory = false;
+
+  for (const [actualPath, actualEntry] of actualMap.entries()) {
+    const claimedEntry = claimedMap.get(actualPath);
+    if (claimedEntry) {
+      if (actualEntry.status === 'SCANNED') {
+        if (claimedEntry.status !== 'SCANNED') {
+          statusMismatches.push({ path: actualPath, expected: actualEntry.status, claimed: claimedEntry.status });
+        } else {
+          hasScannedCodeDirectory = true;
+        }
+      }
+    }
+  }
+
+  if (statusMismatches.length > 0) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      statusMismatches,
+      missing,
+      unexpected,
+      error: `UNACCOUNTED_DIRECTORY_ERROR: Source code directory falsely excluded: [${statusMismatches.map(m => `${m.path} claimed ${m.claimed}`).join(', ')}]`
+    };
+  }
+
+  if (!hasScannedCodeDirectory) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      error: 'UNACCOUNTED_DIRECTORY_ERROR: Complete scan must include at least one SCANNED source code directory.'
+    };
+  }
+
+  if (missing.length > 0 || unexpected.length > 0) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      missing,
+      unexpected,
+      error: `UNACCOUNTED_DIRECTORY_ERROR: Directory reconciliation mismatch. Missing: [${missing.join(', ')}]; Unexpected: [${unexpected.join(', ')}]`
+    };
+  }
+
+  return { valid: true, status: 'COMPLETE', missing: [], unexpected: [] };
 }
 
 /**
- * Validates Review Manifest according to Review mode standards.
+ * Validates Review Manifest according to Review mode standards
+ * and performs authoritative reconciliation against actual Git diff when repoRoot is supplied.
  */
-export function validateReviewManifest(manifest) {
+export function validateReviewManifest(manifest, repoRoot = null) {
   if (!manifest || typeof manifest !== 'object') {
-    return { valid: false, error: 'Review manifest must be a valid object.' };
+    return { valid: false, status: 'UNCHECKABLE', error: 'Review manifest must be a valid object.' };
   }
   const inventory = manifest.reviewInventory || manifest;
-  const changed = Array.isArray(inventory.changedFiles) ? inventory.changedFiles : [];
-  const deleted = Array.isArray(inventory.deletedFiles) ? inventory.deletedFiles : [];
+  const changed = Array.isArray(inventory.changedFiles) ? inventory.changedFiles : null;
+  const deleted = Array.isArray(inventory.deletedFiles) ? inventory.deletedFiles : null;
 
-  if (!Array.isArray(inventory.changedFiles) && !Array.isArray(inventory.deletedFiles)) {
-    return { valid: false, error: 'Review manifest must contain changedFiles or deletedFiles array.' };
+  if (!changed && !deleted) {
+    return { valid: false, status: 'PARTIAL', error: 'Review manifest must contain changedFiles or deletedFiles array.' };
   }
 
-  for (const f of changed) {
-    if (!f.path) return { valid: false, error: 'Changed file entry missing path property.' };
+  const claimedChangedList = changed || [];
+  const claimedDeletedList = deleted || [];
+
+  for (const f of claimedChangedList) {
+    if (!f || !f.path) return { valid: false, status: 'PARTIAL', error: 'Changed file entry missing path property.' };
   }
-  for (const f of deleted) {
-    if (!f.path) return { valid: false, error: 'Deleted file entry missing path property.' };
+  for (const f of claimedDeletedList) {
+    if (!f || !f.path) return { valid: false, status: 'PARTIAL', error: 'Deleted file entry missing path property.' };
   }
 
-  return { valid: true, totalAccounted: changed.length + deleted.length };
+  // If repoRoot is omitted or null, syntax is valid but coverage cannot be verified
+  if (!repoRoot || typeof repoRoot !== 'string' || !fs.existsSync(path.resolve(repoRoot))) {
+    return {
+      valid: true,
+      status: 'UNCHECKABLE',
+      totalAccounted: claimedChangedList.length + claimedDeletedList.length,
+      error: 'UNCHECKABLE: Authoritative repoRoot is required to reconcile git review coverage.'
+    };
+  }
+
+  // Authoritative Git Diff Reconciliation (P0-02)
+  const baseRev = manifest.base || inventory.base || manifest.baselineRevision || inventory.baselineRevision || null;
+  const headRev = manifest.head || inventory.head || manifest.targetRevision || inventory.targetRevision || null;
+
+  if (baseRev && headRev && baseRev === headRev) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      error: `REVIEW_RECONCILIATION_ERROR: Identical revisions specified (${baseRev}...${headRev}) which trivially suppresses review diff.`
+    };
+  }
+
+  let actualChanged = [];
+  let actualDeleted = [];
+  try {
+    const actualDiff = extractChangedFiles(repoRoot, { base: baseRev, head: headRev });
+    actualChanged = actualDiff.changedFiles.map(f => normalizeFilePath(f.path));
+    actualDeleted = actualDiff.deletedFiles.map(f => normalizeFilePath(f.path));
+  } catch (e) {
+    return {
+      valid: false,
+      status: 'UNCHECKABLE',
+      error: `GIT_ACCOUNTING_ERROR: ${e.message}`
+    };
+  }
+
+  const claimedChanged = claimedChangedList.map(f => normalizeFilePath(f.path));
+  const claimedDeleted = claimedDeletedList.map(f => normalizeFilePath(f.path));
+
+  const missingChanged = actualChanged.filter(f => !claimedChanged.includes(f));
+  const missingDeleted = actualDeleted.filter(f => !claimedDeleted.includes(f));
+  const unexpectedChanged = claimedChanged.filter(f => !actualChanged.includes(f));
+  const unexpectedDeleted = claimedDeleted.filter(f => !actualDeleted.includes(f));
+
+  if (missingChanged.length > 0 || missingDeleted.length > 0 || unexpectedChanged.length > 0 || unexpectedDeleted.length > 0) {
+    return {
+      valid: false,
+      status: 'PARTIAL',
+      missingChanged,
+      missingDeleted,
+      unexpectedChanged,
+      unexpectedDeleted,
+      error: `REVIEW_RECONCILIATION_ERROR: Changed/deleted files mismatch against git diff. Missing changed: [${missingChanged.join(', ')}], Missing deleted: [${missingDeleted.join(', ')}], Unexpected changed: [${unexpectedChanged.join(', ')}], Unexpected deleted: [${unexpectedDeleted.join(', ')}]`
+    };
+  }
+
+  return {
+    valid: true,
+    status: 'COMPLETE',
+    totalAccounted: claimedChangedList.length + claimedDeletedList.length,
+    missingChanged: [],
+    missingDeleted: [],
+    unexpectedChanged: [],
+    unexpectedDeleted: []
+  };
 }
 
 /**
- * Reconciles coverage across scan and review manifests.
+ * Reconciles coverage across scan and review manifests against authoritative filesystem/git ground truth.
  */
-export function reconcileCoverage(manifest) {
+export function reconcileCoverage(manifest, repoRoot = null) {
   if (!manifest) {
     return { valid: false, status: 'UNCHECKABLE', mode: 'none', error: 'No coverage manifest provided.' };
   }
   if (manifest.mode === 'review' || manifest.reviewInventory || (Array.isArray(manifest.changedFiles) && !Array.isArray(manifest.entries))) {
-    const res = validateReviewManifest(manifest);
+    const res = validateReviewManifest(manifest, repoRoot);
     return {
       valid: res.valid,
-      status: res.valid ? 'COMPLETE' : 'PARTIAL',
+      status: res.valid ? res.status : (res.status || 'PARTIAL'),
       mode: 'review',
-      error: res.error || null
+      error: res.error || null,
+      missingChanged: res.missingChanged || [],
+      missingDeleted: res.missingDeleted || [],
+      unexpectedChanged: res.unexpectedChanged || [],
+      unexpectedDeleted: res.unexpectedDeleted || []
     };
   }
-  const res = validateDirectoryManifest(manifest);
+  const res = validateDirectoryManifest(manifest, repoRoot);
   return {
     valid: res.valid,
-    status: res.valid ? 'COMPLETE' : 'PARTIAL',
+    status: res.valid ? res.status : (res.status || 'PARTIAL'),
     mode: 'scan',
-    error: res.error || null
+    error: res.error || null,
+    missing: res.missing || [],
+    unexpected: res.unexpected || [],
+    duplicates: res.duplicates || []
   };
 }
+
 
 
 /**
@@ -611,14 +829,22 @@ export function finalizeScan({
   manifest = null,
   repoRoot = process.cwd(),
   provenance = null,
-  votes = []
+  votes = [],
+  expectedMode = null
 }) {
   const safeVotes = Array.isArray(votes) ? votes : [];
+  const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
 
-  // 1. Coverage Reconciliation
-  const coverageReconciliation = reconcileCoverage(manifest);
-  const coverageStatus = coverageReconciliation.status;
+  // 1. Coverage Reconciliation against real repoRoot
+  const coverageReconciliation = reconcileCoverage(manifest, safeRepoRoot);
+  let coverageStatus = coverageReconciliation.status;
   const coverageMode = coverageReconciliation.mode;
+
+  if (expectedMode && coverageMode !== expectedMode) {
+    coverageStatus = 'PARTIAL';
+  }
+
+
 
 
   // 2. Process Candidates into Canonical Findings
@@ -957,15 +1183,17 @@ export function renderMarkdownFromCanonical({
   } else {
     // Directory Reconciliation Section (Scan Mode)
     md += '## 1. Directory Reconciliation Manifest\n\n';
-    if (manifest && Array.isArray(manifest.entries)) {
+    const entries = manifest && (Array.isArray(manifest.entries) ? manifest.entries : (manifest.directoryManifest && Array.isArray(manifest.directoryManifest.entries) ? manifest.directoryManifest.entries : null));
+    if (entries) {
       md += '| Directory Path | Audit Status | Files | Reconciliation Reason |\n';
       md += '| :--- | :--- | :--- | :--- |\n';
-      for (const e of manifest.entries) {
+      for (const e of entries) {
         md += `| \`${sanitizeTableCell(e.path)}\` | **${sanitizeTableCell(e.status)}** | ${Number(e.fileCount) || 0} | ${sanitizeTableCell(e.reason)} |\n`;
       }
     } else {
       md += '> [!WARNING]\n> No Directory Reconciliation Manifest provided. Default-deny flags this audit as unverified coverage.\n';
     }
+
   }
 
 
