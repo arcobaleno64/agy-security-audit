@@ -115,6 +115,70 @@ export function redactSecrets(text) {
 }
 
 /**
+ * Authoritative Finding Types (R2-P0-11)
+ * Separates genuine security vulnerabilities from proactive hardening and informational notes.
+ */
+export const VALID_FINDING_TYPES = new Set(['VULNERABILITY', 'HARDENING', 'INFORMATIONAL']);
+
+export function validateFindingType(rawType, fallbackRuleId = '', fallbackTitle = '') {
+  if (typeof rawType === 'string' && VALID_FINDING_TYPES.has(rawType.toUpperCase().trim())) {
+    return { valid: true, findingType: rawType.toUpperCase().trim() };
+  }
+  // Derive fallback findingType based on weakness characteristics
+  const combined = `${fallbackRuleId} ${fallbackTitle}`.toLowerCase();
+  if (/\b(?:hardening|defense-in-depth|rate[_-]?limit|strict[_-]?csp|best[_-]?practice|misuse[_-]?resistance)\b/i.test(combined) &&
+      !/\b(?:injection|bypass|flaw|vulnerab|exploit)\b/i.test(combined)) {
+    return { valid: true, findingType: 'HARDENING' };
+  }
+  if (/\b(?:info|informational|verbose|debug|disclosure-low|note)\b/i.test(combined) &&
+      !/\b(?:information\s+disclosure|cwe-200|credential\s+disclosure|secret\s+disclosure)\b/i.test(combined)) {
+    return { valid: true, findingType: 'INFORMATIONAL' };
+  }
+  return { valid: true, findingType: 'VULNERABILITY' };
+}
+
+/**
+ * Authoritative Safe Proof Policy (R2-P0-12)
+ * Categorizes evidence verification mechanisms while strictly prohibiting live exploits,
+ * credential reuse, persistence, or destructive commands.
+ */
+export const VALID_PROOF_KINDS = new Set([
+  'STATIC_TRACE',
+  'UNIT_TEST',
+  'BENIGN_REPRODUCTION',
+  'CONFIG_EVIDENCE',
+  'DEPENDENCY_EVIDENCE',
+  'EXTERNAL_SCANNER_EVIDENCE',
+  'MANUAL_ATTESTATION'
+]);
+
+export const PROHIBITED_PROOF_PATTERNS = [
+  /(?:rm\s+-(?:r[fF]|f[rR]|r\s+-f|f\s+-r)\s+[/~*]|format\s+[a-z]:|dd\s+if=|mkfs|shutdown\s+-[hr]|drop\s+database|rd\s+\/s\s+\/q|del\s+\/s\s+\/q|Remove-Item\s+.*-Recurse)/i,
+  /(?:curl|wget|fetch)\s+https?:\/\/(?:evil|attacker|exfil|burpcollaborator|oast)/i,
+  /(?:nc|ncat)\s+(?:evil|attacker|exfil|burpcollaborator|oast|[0-9a-z.-]+\s+[0-9]{2,5})/i,
+  /(?:live[_-]?exploit|credential[_-]?reuse|uncontrolled[_-]?probe)/i
+];
+
+export function validateSafeProof(proof, proofKind = 'STATIC_TRACE') {
+  const rawKind = typeof proofKind === 'string' ? proofKind.toUpperCase().trim() : 'STATIC_TRACE';
+  const safeKind = VALID_PROOF_KINDS.has(rawKind) ? rawKind : 'STATIC_TRACE';
+
+  const proofStr = typeof proof === 'string' ? proof : JSON.stringify(proof || '');
+  for (const pattern of PROHIBITED_PROOF_PATTERNS) {
+    if (pattern.test(proofStr)) {
+      return {
+        valid: false,
+        safe: false,
+        proofKind: safeKind,
+        error: 'PROHIBITED_PROOF_VIOLATION: Proof violates defensive safety policy (live exploit, destructive command, or unauthorized probing detected).'
+      };
+    }
+  }
+
+  return { valid: true, safe: true, proofKind: safeKind };
+}
+
+/**
  * Calculates evidence sufficiency completeness score in [0.0, 1.0].
  * Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS (R2-P0-07).
  */
@@ -1734,6 +1798,32 @@ export function finalizeScan({
       finalReason = `Lineage validation failure: ${lineageRes.error}`;
     }
 
+    // R2-P0-11: Finding Type Calibration (VULNERABILITY, HARDENING, INFORMATIONAL)
+    const typeRes = validateFindingType(raw.findingType, ruleId, raw.title);
+    const safeFindingType = typeRes.findingType;
+
+    // R2-P0-12: Safe Defensive Proof Policy Check
+    const rawProof = [
+      raw.proof,
+      typeof raw.attackPath === 'string' ? raw.attackPath : JSON.stringify(raw.attackPath || ''),
+      raw.evidence,
+      raw.poc
+    ].filter(Boolean).join('\n');
+    const proofRes = validateSafeProof(rawProof, raw.proofKind || 'STATIC_TRACE');
+    const safeProofKind = proofRes.proofKind;
+
+    if (!proofRes.valid) {
+      finalDisposition = 'DEFERRED';
+      finalVerdict = 'NEEDS_MANUAL_REVIEW';
+      finalReason = proofRes.error;
+    }
+
+    // R2-P0-11: Hardening / Informational findings cannot be elevated to CRITICAL or HIGH vulnerability
+    let finalSeverity = severity;
+    if (safeFindingType !== 'VULNERABILITY' && ['CRITICAL', 'HIGH'].includes(finalSeverity)) {
+      finalSeverity = 'LOW';
+    }
+
     const resolvedLineage = {
       ...lineageRes.lineage,
       lineageId: authoritativeLineageId
@@ -1749,7 +1839,9 @@ export function finalizeScan({
       disposition: finalDisposition,
       verdict: finalVerdict,
       dispositionReason: finalReason,
-      severity,
+      severity: finalSeverity,
+      findingType: safeFindingType,
+      proofKind: safeProofKind,
       confidenceScore: confidence.score,
       confidenceLevel: confidence.level,
       location: {
@@ -1779,7 +1871,9 @@ export function finalizeScan({
 
 
   // 3. Summary Statistics
-  const confirmedCount = canonicalFindings.filter(f => f.disposition === 'REPORTABLE').length;
+  const confirmedCount = canonicalFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length;
+  const hardeningCount = canonicalFindings.filter(f => f.findingType === 'HARDENING').length;
+  const informationalCount = canonicalFindings.filter(f => f.findingType === 'INFORMATIONAL').length;
   const deferredCount = canonicalFindings.filter(f => f.disposition === 'DEFERRED').length;
   const suppressedCount = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED').length;
 
@@ -1788,6 +1882,8 @@ export function finalizeScan({
   const summary = {
     totalCandidates: canonicalFindings.length,
     confirmedCount,
+    hardeningCount,
+    informationalCount,
     deferredCount,
     suppressedCount,
     coverageStatus,
@@ -1957,11 +2053,38 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       dispositionReason = `Presumption of Non-Pass: Invalid finding lineage: ${linRes.error}`;
     }
 
+    // R2-P0-11: Validate findingType
+    const typeRes = validateFindingType(raw.findingType, ruleId, title);
+    const safeFindingType = typeRes.findingType;
+
+    // R2-P0-12: Validate safe proof
+    const rawProof = [
+      raw.proof,
+      typeof raw.attackPath === 'string' ? raw.attackPath : JSON.stringify(raw.attackPath || ''),
+      raw.evidence,
+      raw.poc
+    ].filter(Boolean).join('\n');
+    const proofRes = validateSafeProof(rawProof, raw.proofKind);
+    const safeProofKind = proofRes.proofKind;
+
+    if (!proofRes.valid) {
+      disposition = 'DEFERRED';
+      verdict = 'NEEDS_MANUAL_REVIEW';
+      dispositionReason = `Presumption of Non-Pass: ${proofRes.error}`;
+    }
+
+    let finalSeverity = severity;
+    if (safeFindingType !== 'VULNERABILITY' && ['CRITICAL', 'HIGH'].includes(finalSeverity)) {
+      finalSeverity = 'LOW';
+    }
+
     validated.push({
       ...raw,
       id,
       ruleId,
-      severity,
+      severity: finalSeverity,
+      findingType: safeFindingType,
+      proofKind: safeProofKind,
       title,
       description,
       location: {
@@ -2023,7 +2146,8 @@ export function renderSarifFromCanonical({
         properties: {
           'security-severity': securitySeverity,
           cvssV4Vector: f.cvssV4?.vector || null,
-          tags: ['security', 'vulnerability', ...(f.tags || [])]
+          findingType: f.findingType || 'VULNERABILITY',
+          tags: ['security', String(f.findingType || 'vulnerability').toLowerCase(), ...(f.tags || [])]
         }
       });
     }
@@ -2061,6 +2185,8 @@ export function renderSarifFromCanonical({
       properties: {
         disposition: f.disposition,
         verdict: f.verdict,
+        findingType: f.findingType || 'VULNERABILITY',
+        proofKind: f.proofKind || 'STATIC_TRACE',
         confidenceScore: f.confidenceScore,
         confidenceLevel: f.confidenceLevel,
         cvssV4: f.cvssV4,
@@ -2092,7 +2218,7 @@ export function renderSarifFromCanonical({
       coverageStatus,
       auditAxiom: 'Presumption of Non-Pass (Default-Deny on Authority Claims)',
       auditIntent: auditIntent || 'DISCOVERY',
-      canDeclareClean: (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE').length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
+      canDeclareClean: (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
       directoryReconciliationManifest: manifest
     }
   };
@@ -2173,18 +2299,24 @@ export function renderMarkdownFromCanonical({
 
   const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
 
-  // Categorize canonical findings
-  const confirmed = safeFindings.filter(f => f.disposition === 'REPORTABLE');
+  // Categorize canonical findings (R2-P0-11)
+  const confirmed = safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType));
+  const hardening = safeFindings.filter(f => f.findingType === 'HARDENING' && f.disposition === 'REPORTABLE');
+  const informational = safeFindings.filter(f => f.findingType === 'INFORMATIONAL' && f.disposition === 'REPORTABLE');
   const manualReview = safeFindings.filter(f => f.disposition === 'DEFERRED');
   const falsePositives = safeFindings.filter(f => f.disposition === 'SUPPRESSED');
 
   md += '## 2. Findings Summary\n\n';
   md += `- **Confirmed Vulnerabilities (Reportable)**: ${confirmed.length}\n`;
+  md += `- **Advisory Hardening Opportunities**: ${hardening.length}\n`;
+  md += `- **Informational Security Notes**: ${informational.length}\n`;
   md += `- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: ${manualReview.length}\n`;
   md += `- **Affirmatively Refuted (Suppressed)**: ${falsePositives.length}\n\n`;
 
-  // Section 3: Confirmed
-  md += '## 3. Confirmed Vulnerabilities (High Assurance)\n\n';
+  let sectionNum = 3;
+
+  // Section: Confirmed
+  md += `## ${sectionNum++}. Confirmed Vulnerabilities (High Assurance)\n\n`;
   if (confirmed.length === 0) {
     if (coverageStatus === 'COMPLETE') {
       if (manualReview.length > 0) {
@@ -2198,6 +2330,8 @@ export function renderMarkdownFromCanonical({
   } else {
     for (const f of confirmed) {
       md += `### [${sanitizeInlineText(f.severity)}] ${sanitizeInlineText(f.title)}\n\n`;
+      md += `- **Finding Type**: \`${sanitizeInlineText(f.findingType || 'VULNERABILITY')}\`\n`;
+      md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       if (f.lineageId) {
@@ -2223,8 +2357,38 @@ export function renderMarkdownFromCanonical({
     }
   }
 
-  // Section 4: Deferred / Needs Manual Review
-  md += '## 4. Needs Manual Review (Presumption of Non-Pass / Deferred)\n\n';
+  // Section: Advisory Hardening Opportunities (R2-P0-11)
+  if (hardening.length > 0) {
+    md += `## ${sectionNum++}. Advisory Hardening Opportunities\n\n`;
+    for (const f of hardening) {
+      md += `### [HARDENING] ${sanitizeInlineText(f.title)}\n\n`;
+      md += `- **Finding Type**: \`HARDENING\`\n`;
+      md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
+      md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
+      md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
+      if (f.description) {
+        md += `\n**Recommendation**:\n${sanitizeBlockText(f.description)}\n\n`;
+      }
+    }
+  }
+
+  // Section: Informational Security Notes (R2-P0-11)
+  if (informational.length > 0) {
+    md += `## ${sectionNum++}. Informational Security Notes\n\n`;
+    for (const f of informational) {
+      md += `### [INFORMATIONAL] ${sanitizeInlineText(f.title)}\n\n`;
+      md += `- **Finding Type**: \`INFORMATIONAL\`\n`;
+      md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
+      md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
+      md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
+      if (f.description) {
+        md += `\n**Note**:\n${sanitizeBlockText(f.description)}\n\n`;
+      }
+    }
+  }
+
+  // Section: Deferred / Needs Manual Review
+  md += `## ${sectionNum++}. Needs Manual Review (Presumption of Non-Pass / Deferred)\n\n`;
   if (manualReview.length === 0) {
     md += '*No open items pending manual review.*\n\n';
   } else {
@@ -2264,10 +2428,8 @@ export function renderMarkdownFromCanonical({
     }
   }
 
-
-
-  // Section 5: Affirmatively Refuted
-  md += '## 5. Affirmatively Refuted Items (Suppressed)\n\n';
+  // Section: Affirmatively Refuted
+  md += `## ${sectionNum++}. Affirmatively Refuted Items (Suppressed)\n\n`;
   if (falsePositives.length === 0) {
     md += '*No items affirmatively refuted.*\n\n';
   } else {
