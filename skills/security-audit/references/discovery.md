@@ -1,7 +1,7 @@
 # Component × Vulnerability Family Discovery Specification
 
 ## 1. Core Principles
-Modeled after Anthropic Claude Security discovery architecture, vulnerability discovery must NOT rely on naïve global sink grepping (e.g. `grep "eval"` and hope the model catches everything).
+Aligned with systematic component × vulnerability family matrix discovery, vulnerability discovery must NOT rely on naïve global sink grepping (e.g. `grep "eval"` and hope the model catches everything).
 Instead, discovery systematically maps **Identified Components** against **Vulnerability Families**.
 
 ---

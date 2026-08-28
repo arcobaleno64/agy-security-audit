@@ -1,7 +1,7 @@
 # Job Specification: `scan` (Standard Repository Security Scan)
 
 ## 1. Objective & Baseline
-Modeled after Anthropic Claude Security Standard Scan, the `scan` job conducts a comprehensive, structured security audit of an entire repository or explicitly scoped directories.
+Aligned with multi-stage security assurance standards, the `scan` job conducts a comprehensive, structured security audit of an entire repository or explicitly scoped directories.
 Its core objectives are:
 - **Exhaustive Directory Accounting**: Derive top-level directory categorization directly from filesystem ground truth.
 - **Component × Vulnerability-Family Discovery**: Replace naïve global sink grepping with component-aware threat surface exploration.

@@ -1,6 +1,6 @@
 # Threat Modeling & Directory Accounting Specification
 
-## 1. Directory Accounting & Reconciliation Manifest (NIST SP 800-115 & Claude Security Standard)
+## 1. Directory Accounting & Reconciliation Manifest (NIST SSDF SP 800-218 & Bounded Assurance)
 
 Under the **Presumption of Non-Pass (Default-Deny)** axiom, a codebase scan cannot be declared complete unless every single top-level and major sub-directory in the repository is explicitly accounted for in a **Directory Reconciliation Manifest** (`directory-manifest.json`).
 
