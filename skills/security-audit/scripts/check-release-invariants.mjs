@@ -31,6 +31,8 @@ import {
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest } from './build-inventory.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
+import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns } from './run-stability-eval.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -48,6 +50,8 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/validate-patch.mjs',
   'skills/security-audit/scripts/run-evals.mjs',
   'skills/security-audit/scripts/run-semantic-eval.mjs',
+  'skills/security-audit/scripts/run-discovery-eval.mjs',
+  'skills/security-audit/scripts/run-stability-eval.mjs',
   'skills/security-audit/scripts/check-release-invariants.mjs',
   'skills/security-audit/jobs/scan.md',
   'skills/security-audit/jobs/review.md',
@@ -140,7 +144,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
     errors.push(`Deterministic Adversarial Regression Suite failed: ${err.message}\n${err.stderr || ''}`);
   }
 
-  // 3.2 Check L1.5 Semantic Security Accuracy Benchmark (R1-P2-01)
+  // 3.2 Check L1.5 Disposition Ground-Truth Benchmark (R1-P2-01 / R2-P0-08)
   const semanticScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-semantic-eval.mjs');
   try {
     const stdout = execFileSync(process.execPath, [semanticScriptPath], {
@@ -148,11 +152,41 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    if (!stdout.includes('semantic security evaluations passed')) {
-      errors.push('L1.5 Semantic Security Reasoning Benchmark did not output clean pass signature');
+    if (!stdout.includes('disposition ground-truth invariant tests passed deterministically')) {
+      errors.push('L1.5 Disposition Ground-Truth Benchmark did not output clean pass signature');
     }
   } catch (err) {
-    errors.push(`L1.5 Semantic Security Reasoning Benchmark failed: ${err.message}\n${err.stderr || ''}`);
+    errors.push(`L1.5 Disposition Ground-Truth Benchmark failed: ${err.message}\n${err.stderr || ''}`);
+  }
+
+  // 3.3 Check Real Agent Discovery Evaluation Benchmark (R2-P0-08)
+  const discoveryScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-discovery-eval.mjs');
+  try {
+    const stdout = execFileSync(process.execPath, [discoveryScriptPath], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    if (!stdout.includes('Discovery evaluation suite completed successfully')) {
+      errors.push('Real Agent Discovery Evaluation Benchmark did not output clean pass signature');
+    }
+  } catch (err) {
+    errors.push(`Real Agent Discovery Evaluation Benchmark failed: ${err.message}\n${err.stderr || ''}`);
+  }
+
+  // 3.4 Check Multi-Run Stochastic Stability Benchmark (R2-P0-08)
+  const stabilityScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-stability-eval.mjs');
+  try {
+    const stdout = execFileSync(process.execPath, [stabilityScriptPath], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    if (!stdout.includes('Stability evaluation suite completed successfully')) {
+      errors.push('Multi-Run Stochastic Stability Benchmark did not output clean pass signature');
+    }
+  } catch (err) {
+    errors.push(`Multi-Run Stochastic Stability Benchmark failed: ${err.message}\n${err.stderr || ''}`);
   }
 
   // 4. Validate Plugin Custom Agents Capability & Tool Invariants (P0-04)
@@ -676,6 +710,64 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         });
         if (suff.score !== 1.0 || suff.sufficiencyLevel !== 'HIGH' || !suff.disclaimer) {
           throw new Error('calculateEvidenceSufficiency failed to produce valid sufficiency object with disclaimer');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-19',
+      name: 'Benchmark Truthfulness, Discovery Evaluation & Multi-Run Stability',
+      check: () => {
+        // 1. Jaccard similarity mathematical correctness
+        const set1 = ['A', 'B', 'C'];
+        const set2 = ['B', 'C', 'D'];
+        const sim = computeJaccardSimilarity(set1, set2); // 2 / 4 = 0.5
+        if (sim !== 0.5) {
+          throw new Error(`computeJaccardSimilarity failed: expected 0.5, got ${sim}`);
+        }
+        if (computeJaccardSimilarity(['X'], ['Y']) !== 0.0) {
+          throw new Error('computeJaccardSimilarity failed for disjoint sets');
+        }
+        if (computeJaccardSimilarity(['X'], ['X']) !== 1.0) {
+          throw new Error('computeJaccardSimilarity failed for identical sets');
+        }
+
+        // 2. evaluateDiscovery calculations
+        const mockTruth = [
+          { id: 'GT-01', cwe: 'CWE-89', file: 'src/db.js', targetLine: 10, expectedVerdict: 'VULNERABLE' },
+          { id: 'GT-02', cwe: 'CWE-79', file: 'src/view.js', targetLine: 20, expectedVerdict: 'SAFE' }
+        ];
+        const mockCandidates = [
+          { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } },
+          { ruleId: 'CWE-79', location: { uri: 'src/view.js', startLine: 20 } } // Spurious FP on safe site
+        ];
+        const discRes = evaluateDiscovery(mockCandidates, mockTruth);
+        if (discRes.candidateTP !== 1 || discRes.candidateFP !== 1 || discRes.candidateFN !== 0) {
+          throw new Error(`evaluateDiscovery metrics incorrect: TP=${discRes.candidateTP}, FP=${discRes.candidateFP}, FN=${discRes.candidateFN}`);
+        }
+        if (discRes.precision !== 0.5 || discRes.recall !== 1.0) {
+          throw new Error(`evaluateDiscovery precision/recall incorrect: P=${discRes.precision}, R=${discRes.recall}`);
+        }
+
+        // 2b. evaluateDiscovery rejects empty URI and prevents duplicate TP inflation (Findings 1 & 2)
+        const advCandidates = [
+          {},
+          { ruleId: 'CWE-89', location: { uri: '' } },
+          { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } },
+          { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } }
+        ];
+        const advRes = evaluateDiscovery(advCandidates, mockTruth);
+        if (advRes.candidateTP !== 1 || advRes.duplicateCandidateCount !== 1) {
+          throw new Error('evaluateDiscovery failed to reject empty URI or duplicate TP inflation');
+        }
+
+        // 3. evaluateStability calculations across simulated runs
+        const simRuns = [
+          [{ ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 }, symbol: 'q' }],
+          [{ ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 15 }, symbol: 'q' }] // shifted line
+        ];
+        const stabRes = evaluateStability(simRuns, repoRoot);
+        if (stabRes.meanJaccardSimilarity !== 1.0 || stabRes.totalUniqueLineages !== 1) {
+          throw new Error(`evaluateStability failed line-shift invariant: J=${stabRes.meanJaccardSimilarity}, unique=${stabRes.totalUniqueLineages}`);
         }
       }
     }

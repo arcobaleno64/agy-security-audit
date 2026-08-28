@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * run-semantic-eval.mjs
- * L1.5 Semantic Security Reasoning Accuracy Benchmark for AGY Security Audit.
- * Evaluates semantic security analysis against authentic complex vulnerability archetypes:
+ * L1.5 Disposition Ground-Truth Benchmark (Canonical Decision Invariants)
+ * Evaluates deterministic finalizer decision compliance, ballot reconciliation, and Default-Deny gating
+ * against ground-truth decision pairs across authentic complex vulnerability archetypes:
  * - Authorization Bypass (CWE-862)
  * - Cross-Tenant Data Access (CWE-639)
  * - Confused Deputy (CWE-441)
@@ -12,16 +13,19 @@
  * - Insecure Default (CWE-1188)
  * - Multi-Step Taint Flow (CWE-94)
  *
+ * NOTE: This benchmark measures canonical decision invariants under fixed ballots,
+ * NOT stochastic LLM discovery recall or agent hunting precision (R2-P0-08).
+ * Real discovery evaluation is benchmarked by run-discovery-eval.mjs and run-stability-eval.mjs.
+ *
  * Metrics computed:
  * - True Positives (TP)
  * - True Negatives (TN)
  * - False Positives (FP)
  * - False Negatives (FN)
- * - Precision: TP / (TP + FP)
- * - Recall: TP / (TP + FN)
- * - F1 Score: 2 * (Precision * Recall) / (Precision + Recall)
- * - Specificity: TN / (TN + FP)
- * - Accuracy: (TP + TN) / Total
+ * - Decision Precision: TP / (TP + FP)
+ * - Decision Recall: TP / (TP + FN)
+ * - Decision F1 Score: 2 * (Precision * Recall) / (Precision + Recall)
+ * - Decision Invariant Accuracy: (TP + TN) / Total
  * - Deterministic Stability (variance across repeated passes)
  */
 
@@ -34,10 +38,11 @@ import {
 } from './finalize-scan.mjs';
 
 /**
- * Runs the semantic benchmark against ground truth fixtures.
+ * Runs the disposition ground-truth benchmark against decision pairs.
  */
 export function runSemanticEval(repoRoot = process.cwd(), iterations = 2) {
-  console.log('Running L1.5 Semantic Security Reasoning Accuracy Benchmark...\n');
+  console.log('Running L1.5 Disposition Ground-Truth Benchmark (Canonical Decision Invariants)...\n');
+  console.log('  [Notice] Verifies canonical finalizer decision logic compliance; not stochastic agent discovery.\n');
   const groundTruthPath = path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
   if (!fs.existsSync(groundTruthPath)) {
     throw new Error(`Ground truth file not found at: ${groundTruthPath}`);
@@ -191,17 +196,18 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2) {
   const isStable = runSignatures.every(s => s === runSignatures[0]);
 
   console.log('\n================================================================');
-  console.log('L1.5 Semantic Security Accuracy Benchmark Metrics:');
-  console.log(`  Total Evaluation Cases: ${total} (8 Vulnerable, 4 Safe/Guarded)`);
-  console.log(`  True Positives (TP):    ${tp}`);
-  console.log(`  True Negatives (TN):    ${tn}`);
-  console.log(`  False Positives (FP):   ${fp}`);
-  console.log(`  False Negatives (FN):   ${fn}`);
-  console.log(`  Precision:              ${(precision * 100).toFixed(1)}%`);
-  console.log(`  Recall:                 ${(recall * 100).toFixed(1)}%`);
-  console.log(`  F1 Score:               ${f1.toFixed(3)}`);
-  console.log(`  Overall Accuracy:       ${(accuracy * 100).toFixed(1)}%`);
-  console.log(`  Run-to-Run Stability:   ${isStable ? '100% Deterministic' : 'Variance Detected'}`);
+  console.log('L1.5 Disposition Ground-Truth Benchmark Metrics:');
+  console.log('  Notice: Measures finalizer decision logic compliance; not LLM discovery rate.');
+  console.log(`  Total Ground-Truth Pairs: ${total} (8 Vulnerable, 4 Safe/Guarded)`);
+  console.log(`  True Positives (TP):      ${tp}`);
+  console.log(`  True Negatives (TN):      ${tn}`);
+  console.log(`  False Positives (FP):     ${fp}`);
+  console.log(`  False Negatives (FN):     ${fn}`);
+  console.log(`  Decision Precision:       ${(precision * 100).toFixed(1)}%`);
+  console.log(`  Decision Recall:          ${(recall * 100).toFixed(1)}%`);
+  console.log(`  Decision F1 Score:        ${f1.toFixed(3)}`);
+  console.log(`  Decision Invariant Rate:  ${(accuracy * 100).toFixed(1)}%`);
+  console.log(`  Run-to-Run Determinism:   ${isStable ? '100% Deterministic' : 'Variance Detected'}`);
   console.log('================================================================\n');
 
   return {
@@ -229,8 +235,8 @@ const isDirectExecution = process.argv[1] && process.argv[1].endsWith('run-seman
 if (isDirectExecution) {
   const result = runSemanticEval(process.cwd());
   if (result.failed > 0 || !result.isStable) {
-    console.error(`❌ Semantic Security Reasoning Benchmark FAILED.`);
+    console.error(`❌ Disposition Ground-Truth Benchmark FAILED.`);
     process.exit(1);
   }
-  console.log(`✔ All ${result.passed}/${result.total} semantic security evaluations passed with 100% precision, recall & accuracy!\n`);
+  console.log(`✔ All ${result.passed}/${result.total} disposition ground-truth invariant tests passed deterministically!\n`);
 }

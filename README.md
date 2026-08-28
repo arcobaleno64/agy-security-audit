@@ -35,7 +35,7 @@ Evidence-backed, multi-stage security assurance and vulnerability verification p
 ## 目錄結構
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, check:release (1.0.0)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.0)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
 ├── SECURITY.md                           # 誠實信任模型與沙箱邊界說明
 ├── agents/                               # 專責子代理定義 (位於外掛根目錄)
@@ -53,7 +53,7 @@ security-audit/
 │   ├── coverage-gap/                     # 5 大會計覆蓋邊界測試
 │   ├── git-config/                       # 5 大惡意 Git 配置隔離測試
 │   ├── patch-regression/                 # 5 大惡意補丁與陳舊基準測試
-│   └── semantic-benchmark/               # L1.5 語意安全推理基準 (8 漏洞 + 4 安全防護)
+│   └── semantic-benchmark/               # L1.5 配置地面真值基準 (12 決策不變量對照組)
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
 └── skills/
@@ -76,13 +76,15 @@ security-audit/
         └── scripts/
             ├── safe-git.mjs              # 防禦型 Git Provenance 與 Pre-image 提取
             ├── finalize-scan.mjs         # 確定性 Security Authority 與 Canonical Finalizer
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 69 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 70 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 校驗與證明缺口 (Proof Gap) 偵測
             ├── validate-patch.mjs        # 補丁語法、Patch Jail、過期檢測與修復驗證
             ├── run-evals.mjs             # 50 題確定性安全不變量與對抗迴歸套件
-            ├── run-semantic-eval.mjs     # L1.5 語意安全推理精確度基準測試
+            ├── run-semantic-eval.mjs     # L1.5 決策地面真值基準測試 (Disposition Ground-Truth)
+            ├── run-discovery-eval.mjs    # 真實代理發現評測套件 (Candidate TP/FP/FN/Recall/Precision)
+            ├── run-stability-eval.mjs    # 多輪隨機發現穩定度基準 (Jaccard 相似度與再現率統計)
             └── check-release-invariants.mjs # Section 24 發行不變量閘門 (100% 規格無殘留驗證)
 ```
 
@@ -91,16 +93,22 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 66 項全域安全不變量自動化測試：
+# 執行 70 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
 npm run test:evals
 
-# 執行 L1.5 語意安全推理精確度基準測試 (12 案例)：
+# 執行 L1.5 處置決策地面真值基準測試 (12 案例)：
 npm run test:semantic
 
-# 執行 Section 24 發行閘門檢驗 (檢查 32 項規格、15 項安全不變量與零外部依賴)：
+# 執行真實代理發現評測基準測試：
+npm run test:discovery
+
+# 執行多輪隨機發現穩定度基準測試：
+npm run test:stability
+
+# 執行 Section 24 發行閘門檢驗 (檢查 35 項規格、19 項安全不變量與零外部依賴)：
 npm run check:release
 ```
 

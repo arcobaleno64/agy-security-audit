@@ -61,6 +61,9 @@ import {
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
+import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns } from './run-stability-eval.mjs';
+import { runSemanticEval } from './run-semantic-eval.mjs';
 
 
 
@@ -1522,15 +1525,37 @@ export function runTests() {
         throw new Error(`P2-02 VIOLATION: run-evals.mjs failed in clean non-git extract directory:\n${evalsOut}`);
       }
 
-      // Execute run-semantic-eval.mjs inside cleanExtractDir (R1-P2-01)
+      // Execute run-semantic-eval.mjs inside cleanExtractDir (R1-P2-01 / R2-P0-08)
       const semanticScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-semantic-eval.mjs');
       const semanticOut = execFileSync(process.execPath, [semanticScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
         env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
       });
-      if (!semanticOut.includes('semantic security evaluations passed')) {
+      if (!semanticOut.includes('disposition ground-truth invariant tests passed deterministically')) {
         throw new Error(`R1-P2-01 VIOLATION: run-semantic-eval.mjs failed in clean non-git extract directory:\n${semanticOut}`);
+      }
+
+      // Execute run-discovery-eval.mjs inside cleanExtractDir (R2-P0-08)
+      const discoveryScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-discovery-eval.mjs');
+      const discoveryOut = execFileSync(process.execPath, [discoveryScriptInClean], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!discoveryOut.includes('Discovery evaluation suite completed successfully')) {
+        throw new Error(`R2-P0-08 VIOLATION: run-discovery-eval.mjs failed in clean non-git extract directory:\n${discoveryOut}`);
+      }
+
+      // Execute run-stability-eval.mjs inside cleanExtractDir (R2-P0-08)
+      const stabilityScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-stability-eval.mjs');
+      const stabilityOut = execFileSync(process.execPath, [stabilityScriptInClean], {
+        cwd: cleanExtractDir,
+        encoding: 'utf8',
+        env: { ...process.env, IS_ZIP_CLEAN_SUBTEST: '1' }
+      });
+      if (!stabilityOut.includes('Stability evaluation suite completed successfully')) {
+        throw new Error(`R2-P0-08 VIOLATION: run-stability-eval.mjs failed in clean non-git extract directory:\n${stabilityOut}`);
       }
 
       // Execute check-release-invariants.mjs inside the cleanExtractDir
@@ -2804,7 +2829,60 @@ export function runTests() {
 
   console.log('✔ 69. R2-P0-06 / 07 Invariant: CVSS v4.0 Base Metric Vector (no heuristic guesswork) & Evidence Sufficiency.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (69/69).');
+  // 70. R2-P0-08 Invariant: Benchmark Truthfulness, Real Discovery Evaluation, and Stochastic Stability.
+  // 70.1 computeJaccardSimilarity computes intersection over union
+  const setA = ['CWE-89:db.js', 'CWE-79:view.js'];
+  const setB = ['CWE-79:view.js', 'CWE-22:file.js'];
+  const jaccardSim = computeJaccardSimilarity(setA, setB); // 1 / 3 = 0.3333
+  if (Math.abs(jaccardSim - 0.3333) > 0.001) {
+    throw new Error(`R2-P0-08 VIOLATION: computeJaccardSimilarity failed: expected 0.3333, got ${jaccardSim}`);
+  }
+
+  // 70.2 evaluateDiscovery accurately scores candidates against ground truth
+  const sampleTruth = [
+    { id: 'T-01', cwe: 'CWE-89', file: 'src/db.js', targetLine: 10, expectedVerdict: 'VULNERABLE' },
+    { id: 'T-02', cwe: 'CWE-79', file: 'src/xss.js', targetLine: 20, expectedVerdict: 'SAFE' }
+  ];
+  const sampleCandidates = [
+    { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } },
+    { ruleId: 'CWE-79', location: { uri: 'src/xss.js', startLine: 20 } }
+  ];
+  const discRes = evaluateDiscovery(sampleCandidates, sampleTruth);
+  if (discRes.candidateTP !== 1 || discRes.candidateFP !== 1 || discRes.candidateFN !== 0) {
+    throw new Error(`R2-P0-08 VIOLATION: evaluateDiscovery metrics mismatch: TP=${discRes.candidateTP}, FP=${discRes.candidateFP}`);
+  }
+
+  // 70.2b evaluateDiscovery rejects empty URI and prevents duplicate TP inflation (Findings 1 & 2)
+  const adversarialCandidates = [
+    {}, // completely empty candidate
+    { ruleId: 'CWE-89', location: { uri: '' } }, // blank URI
+    { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } }, // 1st legit TP
+    { ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 } }  // duplicate report on same site
+  ];
+  const advRes = evaluateDiscovery(adversarialCandidates, sampleTruth);
+  if (advRes.candidateTP !== 1 || advRes.duplicateCandidateCount !== 1) {
+    throw new Error(`R2-P0-08 VIOLATION: Empty URI matched or duplicate candidate inflated TP: TP=${advRes.candidateTP}, dups=${advRes.duplicateCandidateCount}`);
+  }
+
+  // 70.3 evaluateStability accurately computes multi-run metrics
+  const mockRuns = [
+    [{ ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 10 }, symbol: 'f1' }],
+    [{ ruleId: 'CWE-89', location: { uri: 'src/db.js', startLine: 25 }, symbol: 'f1' }] // line shift
+  ];
+  const stabRes = evaluateStability(mockRuns, process.cwd());
+  if (stabRes.meanJaccardSimilarity !== 1.0 || stabRes.perfectRecurrenceCount !== 1) {
+    throw new Error('R2-P0-08 VIOLATION: evaluateStability failed to recognize line-shift invariant lineage');
+  }
+
+  // 70.4 runSemanticEval outputs truthful disposition benchmark metrics
+  const semResult = runSemanticEval(process.cwd(), 1);
+  if (semResult.failed > 0 || semResult.total !== 12) {
+    throw new Error('R2-P0-08 VIOLATION: runSemanticEval failed to pass 12 disposition ground-truth invariant cases');
+  }
+
+  console.log('✔ 70. R2-P0-08 Invariant: Benchmark Truthfulness, Real Discovery Evaluation, and Stochastic Stability.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (70/70).');
 
   } finally {
     gitFixture.cleanup();
