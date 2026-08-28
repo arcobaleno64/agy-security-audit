@@ -53,11 +53,11 @@ To eliminate Cascading Hallucinations and Conformity Bias, verifiers must never 
 
 During Stage 2 Discovery, subagents explore the Component $\times$ Family matrix using distinct, orthogonal personas to uncover diverse vulnerability archetypes:
 
-### Persona 1: The Exploit Hacker (Offensive / Penetration)
-- **Focus**: Seeks unrefuted source-to-sink taint flows and character escaping bypasses.
+### Persona 1: The Dataflow Risk Analyst
+- **Focus**: Traces source-to-sink dataflows and identifies missing input neutralization.
 
-### Persona 2: The Paranoiac Defense Architect (Boundary / Evasion)
-- **Focus**: Attacks sanitizers for edge-case bypasses (e.g. ReDoS, Unicode collisions, null-byte truncations, double-encoding).
+### Persona 2: The Boundary Robustness Reviewer
+- **Focus**: Checks whether validation controls remain effective under edge cases (e.g. ReDoS, Unicode normalization collisions, null-byte truncations, encoding discrepancies).
 
 ### Persona 3: The Logic & State Auditor (State Machine / Business Logic)
 - **Focus**: Audits timing, authorization state machines, IDOR, race conditions (TOCTOU), and missing access controls.
@@ -71,7 +71,7 @@ During Stage 2 Discovery, subagents explore the Component $\times$ Family matrix
 
 In Stage 3, candidate findings are evaluated strictly by the **Fixed 3-Lens Verifier Panel**:
 - `REACHABILITY Lens` (`agents/verifier-reachability.md`): Confirms untrusted source entry and unbroken flow to sink.
-- `DEFENSES Lens` (`agents/verifier-defenses.md`): Confirms absence or bypassability of sanitizers/validators.
+- `DEFENSES Lens` (`agents/verifier-defenses.md`): Confirms absence, flaws, or residual gaps in sanitizers/validators.
 - `IMPACT Lens` (`agents/verifier-impact.md`): Calibrates authentic blast radius, privilege boundary transgression, and CVSS v4 vector.
 
 ### 3-Lens Ballot Schema

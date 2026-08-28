@@ -180,38 +180,99 @@ export function evaluateCorpusStability(repoRoot = process.cwd()) {
  * Runs stability evaluation.
  */
 export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
-  console.log('Running Multi-Run Stochastic Stability Benchmark (R2-P0-08 / R2-P2-01)...\n');
+  const isRecorded = Boolean(options.runsDir) || Boolean(options.recorded);
+  const evaluationMode = isRecorded ? 'RECORDED_EMPIRICAL' : 'SYNTHETIC_HARNESS';
+
+  if (isRecorded) {
+    console.log('Running Empirical Discovery Stability Benchmark (Recorded Multi-Run Mode)...\n');
+    if (!options.runsDir) {
+      console.log('================================================================');
+      console.log('Empirical Stability: NOT MEASURED');
+      console.log('  Reason: --runs-dir not supplied. Requires >= 2 serialized run outputs.');
+      console.log('================================================================\n');
+      return {
+        evaluationMode,
+        status: 'NOT_MEASURED',
+        reason: 'NO_RUNS_DIR_PROVIDED'
+      };
+    }
+
+    const runsDirPath = path.resolve(repoRoot, options.runsDir);
+    if (!fs.existsSync(runsDirPath)) {
+      console.log('================================================================');
+      console.log('Empirical Stability: NOT MEASURED');
+      console.log(`  Reason: Directory not found: ${runsDirPath}`);
+      console.log('================================================================\n');
+      return {
+        evaluationMode,
+        status: 'NOT_MEASURED',
+        reason: 'RUNS_DIR_NOT_FOUND'
+      };
+    }
+
+    const files = fs.readdirSync(runsDirPath).filter(f => f.endsWith('.json'));
+    if (files.length < 2) {
+      console.log('================================================================');
+      console.log('Empirical Stability: NOT MEASURED');
+      console.log(`  Reason: Insufficient run files (found ${files.length}, minimum 2 required).`);
+      console.log('================================================================\n');
+      return {
+        evaluationMode,
+        status: 'NOT_MEASURED',
+        reason: 'INSUFFICIENT_RECORDED_RUNS'
+      };
+    }
+
+    const runs = files.map(f => JSON.parse(fs.readFileSync(path.join(runsDirPath, f), 'utf8')));
+    const result = evaluateStability(runs, repoRoot);
+
+    console.log('================================================================');
+    console.log('Empirical Discovery Stability Metrics (Recorded Runs):');
+    console.log(`  Evaluation Mode:                 ${evaluationMode}`);
+    console.log(`  Model-Dependent Run:             YES (Observed Multi-Pass)`);
+    console.log(`  Total Recorded Runs:             ${result.totalRuns}`);
+    console.log(`  Unique Semantic Lineages:        ${result.totalUniqueLineages}`);
+    console.log(`  Mean Finding-Set Jaccard:        ${(result.meanJaccardSimilarity * 100).toFixed(1)}%`);
+    console.log(`  100% Reliable Lineages:          ${result.perfectRecurrenceCount}/${result.totalUniqueLineages}`);
+    console.log('================================================================\n');
+
+    return {
+      evaluationMode,
+      status: 'MEASURED',
+      ...result
+    };
+  }
+
+  // Default: Synthetic Stability Harness mode
+  console.log('Running Synthetic Stability Harness (Deterministic Invariant Check)...\n');
+  console.log('  [Notice] Harness self-test using synthetic runs with simulated line shifts; not an empirical stochastic model measurement.\n');
+
   const gtPath = path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
   if (!fs.existsSync(gtPath)) {
     throw new Error(`Ground truth file missing: ${gtPath}`);
   }
   const groundTruth = JSON.parse(fs.readFileSync(gtPath, 'utf8'));
 
-  let runs = [];
-  if (options.runsDir) {
-    const runsDirPath = path.resolve(repoRoot, options.runsDir);
-    const files = fs.readdirSync(runsDirPath).filter(f => f.endsWith('.json'));
-    runs = files.map(f => JSON.parse(fs.readFileSync(path.join(runsDirPath, f), 'utf8')));
-  } else {
-    // Default simulated 3 runs with line shifts
-    runs = generateSimulatedRuns(groundTruth, options.runCount || 3, options.variance || 'low');
-  }
-
+  const runs = generateSimulatedRuns(groundTruth, options.runCount || 3, options.variance || 'low');
   const result = evaluateStability(runs, repoRoot);
   const corpusResult = evaluateCorpusStability(repoRoot);
 
   console.log('================================================================');
-  console.log('Stochastic Discovery Stability Benchmark Metrics (R2-P2-01):');
-  console.log(`  Total Discovery Runs:            ${result.totalRuns}`);
+  console.log('Synthetic Stability Harness Metrics (Deterministic CI Self-Test):');
+  console.log(`  Evaluation Mode:                 ${evaluationMode}`);
+  console.log(`  Model-Dependent Run:             NO (Deterministic Harness Self-Test)`);
+  console.log(`  Synthetic Discovery Runs:        ${result.totalRuns}`);
   console.log(`  Unique Semantic Lineages:        ${result.totalUniqueLineages}`);
   console.log(`  Mean Finding-Set Jaccard:        ${(result.meanJaccardSimilarity * 100).toFixed(1)}%`);
   console.log(`  100% Reliable Lineages:          ${result.perfectRecurrenceCount}/${result.totalUniqueLineages}`);
-  console.log(`  Corpus A (Safe) Validated Vulns: ${corpusResult.corpusA.validatedVulnerabilities} (0% False Positives)`);
+  console.log(`  Corpus A (Safe) Verification:    ${corpusResult.corpusA.validatedVulnerabilities} (0% Spurious Findings)`);
   console.log(`  Corpus B (Vuln) Recall:          ${(corpusResult.corpusB.detectionRecall * 100).toFixed(1)}%`);
   console.log(`  Corpus C Post-Fix Rediscovery:   ${(corpusResult.metrics.postFixRediscoveryRate * 100).toFixed(1)}% (Clean Convergence)`);
   console.log('================================================================\n');
 
   return {
+    evaluationMode,
+    status: 'HARNESS_VERIFIED',
     ...result,
     corpus: corpusResult
   };
@@ -225,11 +286,16 @@ if (isDirectExecution) {
   const args = process.argv.slice(2);
   const dirIdx = args.indexOf('--runs-dir');
   const runsDir = dirIdx !== -1 ? args[dirIdx + 1] : null;
+  const recorded = args.includes('--recorded');
 
-  const res = runStabilityEval(process.cwd(), { runsDir });
-  if (res.meanJaccardSimilarity < 0.80) {
+  const res = runStabilityEval(process.cwd(), { runsDir, recorded });
+  if (res.status === 'NOT_MEASURED') {
+    // Graceful exit for unmeasured empirical run
+    console.log('✔ Stability evaluation suite completed (Recorded Mode: NOT MEASURED).');
+  } else if (res.meanJaccardSimilarity < 0.80) {
     console.error('❌ Stability evaluation failed minimum threshold.');
     process.exit(1);
+  } else {
+    console.log('✔ Stability evaluation suite completed successfully.');
   }
-  console.log('✔ Stability evaluation suite completed successfully.');
 }

@@ -150,7 +150,17 @@ export function generateSimulatedCandidates(groundTruth = [], profile = 'clean')
  * Runs discovery evaluation.
  */
 export function runDiscoveryEval(repoRoot = process.cwd(), options = {}) {
-  console.log('Running Real Agent Discovery Evaluation Benchmark (R2-P0-08)...\n');
+  const isRecorded = Boolean(options.candidatesFile);
+  const evaluationMode = isRecorded ? 'RECORDED_AGENT_RUN' : 'SIMULATED_CI';
+  const modelDependent = isRecorded;
+
+  if (isRecorded) {
+    console.log('Running Real Agent Discovery Evaluation Benchmark (Recorded Run)...\n');
+  } else {
+    console.log('Running Discovery Evaluation Harness — Simulated CI Mode...\n');
+    console.log('  [Notice] Harness verification using synthetic candidates; not an empirical LLM measurement.\n');
+  }
+
   const gtPath = path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
   if (!fs.existsSync(gtPath)) {
     throw new Error(`Ground truth file missing: ${gtPath}`);
@@ -158,7 +168,7 @@ export function runDiscoveryEval(repoRoot = process.cwd(), options = {}) {
   const groundTruth = JSON.parse(fs.readFileSync(gtPath, 'utf8'));
 
   let candidates = [];
-  if (options.candidatesFile) {
+  if (isRecorded) {
     const candPath = path.resolve(repoRoot, options.candidatesFile);
     if (!fs.existsSync(candPath)) {
       throw new Error(`Candidates file missing: ${candPath}`);
@@ -170,9 +180,13 @@ export function runDiscoveryEval(repoRoot = process.cwd(), options = {}) {
   }
 
   const evalResult = evaluateDiscovery(candidates, groundTruth, options);
+  evalResult.evaluationMode = evaluationMode;
+  evalResult.modelDependent = modelDependent;
 
   console.log('================================================================');
-  console.log('Agent Discovery Benchmark Metrics:');
+  console.log(isRecorded ? 'Real Agent Discovery Evaluation Metrics (Recorded Run):' : 'Discovery Evaluation Harness Metrics (Simulated CI):');
+  console.log(`  Evaluation Mode:        ${evaluationMode}`);
+  console.log(`  Model-Dependent Run:    ${modelDependent ? 'YES' : 'NO (Synthetic Harness Verification)'}`);
   console.log(`  Total Ground Truth:     ${evalResult.totalGroundTruth} (${evalResult.vulnerableCount} Vuln, ${evalResult.safeCount} Safe)`);
   console.log(`  Candidates Evaluated:   ${evalResult.totalCandidates}`);
   console.log(`  Candidate True Pos (TP): ${evalResult.candidateTP}`);

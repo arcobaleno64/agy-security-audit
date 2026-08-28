@@ -24,11 +24,8 @@
               "SCANNED_AGENT_CONTEXT",
               "SCANNED_TEST_EXECUTABLE",
               "EXCLUDED_VENDORED",
-              "EXCLUDED_GENERATED",
               "EXCLUDED_GENERATED_VERIFIED",
-              "EXCLUDED_STATIC_ASSET",
-              "EXCLUDED_NON_CODE",
-              "EXCLUDED_TEST"
+              "EXCLUDED_STATIC_ASSET"
             ]
           },
           "fileCount": { "type": "integer", "minimum": 0 },

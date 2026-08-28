@@ -88,16 +88,16 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 74 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 75 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
             ├── validate-patch.mjs        # 補丁語法、Patch Jail、過期檢測與修復驗證
             ├── run-evals.mjs             # 50 題確定性安全不變量與對抗迴歸套件
             ├── run-semantic-eval.mjs     # L1.5 決策地面真值基準測試 (Disposition Ground-Truth)
-            ├── run-discovery-eval.mjs    # 真實代理發現評測套件 (Candidate TP/FP/FN/Recall/Precision)
-            ├── run-stability-eval.mjs    # 多輪隨機發現穩定度基準 (3 語料庫 Jaccard 相似度與再現率統計)
-            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (47 規格 24 不變量驗證)
+            ├── run-discovery-eval.mjs    # 代理發現評測套件 (Simulated CI / Recorded Agent Run)
+            ├── run-stability-eval.mjs    # 發現穩定度基準 (Synthetic Harness / Recorded Run)
+            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (47 規格 25 不變量驗證)
 ```
 
 ---
@@ -105,7 +105,7 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 74 項全域安全不變量自動化測試：
+# 執行 75 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
@@ -114,13 +114,13 @@ npm run test:evals
 # 執行 L1.5 處置決策地面真值基準測試 (12 案例)：
 npm run test:semantic
 
-# 執行真實代理發現評測基準測試：
+# 執行代理發現評測基準測試 (Simulated CI)：
 npm run test:discovery
 
-# 執行多輪隨機發現穩定度基準測試 (3 種標準語料庫)：
+# 執行穩定度基準測試 (Synthetic Harness)：
 npm run test:stability
 
-# 執行 Section 24 發行閘門檢驗 (檢查 47 項規格、24 項安全不變量與零外部依賴)：
+# 執行 Section 24 發行閘門檢驗 (檢查 47 項規格、25 項安全不變量與零外部依賴)：
 npm run check:release
 ```
 

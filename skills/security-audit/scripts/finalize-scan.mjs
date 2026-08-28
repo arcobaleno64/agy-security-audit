@@ -487,12 +487,25 @@ export function normalizeFilePath(p) {
 }
 
 /**
- * Validates Directory Reconciliation Manifest according to Directory Accounting standards
- * and performs authoritative reconciliation against the real filesystem when repoRoot is supplied.
+ * Normalizes legacy directory exclusion statuses to current explicit categories (R3-P1-02).
  */
-export function validateDirectoryManifest(manifest, repoRoot = null) {
+export function normalizeDirectoryStatus(rawStatus) {
+  if (rawStatus === 'EXCLUDED_GENERATED') return 'EXCLUDED_GENERATED_VERIFIED';
+  if (rawStatus === 'EXCLUDED_NON_CODE') return 'EXCLUDED_STATIC_ASSET';
+  if (rawStatus === 'EXCLUDED_TEST') return 'SCANNED_TEST_EXECUTABLE';
+  return rawStatus;
+}
+
+/**
+ * Validates Directory Reconciliation Manifest (P0 Hardening & R2-P0-10 & R3-P1-02).
+ */
+export function validateDirectoryManifest(manifest, repoRoot = null, options = {}) {
+  if (repoRoot && typeof repoRoot === 'object' && !Array.isArray(repoRoot)) {
+    options = repoRoot;
+    repoRoot = options.repoRoot || null;
+  }
   if (!manifest || typeof manifest !== 'object') {
-    return { valid: false, status: 'UNCHECKABLE', error: 'Manifest must be an object.' };
+    return { valid: false, status: 'UNCHECKABLE', error: 'Directory manifest is null or not an object.' };
   }
 
   // Unwrap directoryManifest if nested
@@ -515,11 +528,8 @@ export function validateDirectoryManifest(manifest, repoRoot = null) {
     'SCANNED_AGENT_CONTEXT',
     'SCANNED_TEST_EXECUTABLE',
     'EXCLUDED_VENDORED',
-    'EXCLUDED_GENERATED',
     'EXCLUDED_GENERATED_VERIFIED',
-    'EXCLUDED_STATIC_ASSET',
-    'EXCLUDED_NON_CODE',
-    'EXCLUDED_TEST'
+    'EXCLUDED_STATIC_ASSET'
   ]);
 
   const claimedMap = new Map();
@@ -529,6 +539,9 @@ export function validateDirectoryManifest(manifest, repoRoot = null) {
     if (!entry || !entry.path) {
       return { valid: false, status: 'PARTIAL', error: 'Directory entry missing "path" property.' };
     }
+    // Migration normalization for legacy exclusion statuses (R3-P1-02)
+    entry.status = normalizeDirectoryStatus(entry.status);
+
     const norm = normalizeDirectoryPath(entry.path);
     if (claimedMap.has(norm)) {
       duplicates.push(norm);

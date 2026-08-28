@@ -29,7 +29,7 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
 7. **`state/business-logic`**: Race conditions (TOCTOU), integer overflow/underflow, double-spend, idempotency failures.
 8. **`dangerous-defaults/config`**: Permissive CORS (`*`), exposed debug flags, insecure TLS options, default credentials.
 9. **`native-memory-safety`**: Buffer over-reads, use-after-free, unsafe C/C++ bindings (FFI / N-API).
-10. **`ai/agent-trust-boundaries`**: Prompt injection into tool calls, untrusted workspace execution, unauthorized file modifications.
+10. **`ai/agent-trust-boundaries`**: Instruction-integrity risk affecting tool invocation, untrusted workspace execution, unauthorized file modifications.
 
 ---
 

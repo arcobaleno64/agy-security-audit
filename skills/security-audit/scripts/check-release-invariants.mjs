@@ -42,15 +42,16 @@ import {
   resolveStandardsMapping,
   detectDependencyBoundary,
   inferDefectManagement,
-  buildAuditBaseline
+  buildAuditBaseline,
+  normalizeDirectoryStatus
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './build-inventory.mjs';
 import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
-import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
-import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability } from './run-stability-eval.mjs';
+import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -1114,6 +1115,40 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const corpus = evaluateCorpusStability(repoRoot);
         if (corpus.corpusA.validatedVulnerabilities !== 0 || corpus.metrics.postFixRediscoveryRate !== 0.0) {
           throw new Error('evaluateCorpusStability detected false positives or regression in safe/remediated corpora');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-25',
+      name: 'Bounded Assurance, Measurement Integrity, & Legacy Exclusion Migration',
+      check: () => {
+        // 1. Purpose Boundary & Defensive Terminology in SKILL.md
+        const skillPath = path.resolve(repoRoot, 'skills/security-audit/SKILL.md');
+        const skillText = fs.readFileSync(skillPath, 'utf8');
+        if (!skillText.includes('## Purpose Boundary') || skillText.includes('--strictness')) {
+          throw new Error('SKILL.md missing Purpose Boundary or retains --strictness in public command syntax');
+        }
+        if (skillText.includes('Exploit Hacker') || skillText.includes('Vulnerability Hunting')) {
+          throw new Error('SKILL.md contains offensive persona or workflow terminology');
+        }
+
+        // 2. Discovery eval harness defaults to SIMULATED_CI mode
+        const disc = runDiscoveryEval(repoRoot);
+        if (disc.evaluationMode !== 'SIMULATED_CI' || disc.modelDependent !== false) {
+          throw new Error('runDiscoveryEval default mode is not declared as SIMULATED_CI');
+        }
+
+        // 3. Stability eval harness defaults to SYNTHETIC_HARNESS mode
+        const stab = runStabilityEval(repoRoot);
+        if (stab.evaluationMode !== 'SYNTHETIC_HARNESS' || stab.status !== 'HARNESS_VERIFIED') {
+          throw new Error('runStabilityEval default mode is not declared as SYNTHETIC_HARNESS');
+        }
+
+        // 4. Legacy exclusion migration normalization
+        if (normalizeDirectoryStatus('EXCLUDED_GENERATED') !== 'EXCLUDED_GENERATED_VERIFIED' ||
+            normalizeDirectoryStatus('EXCLUDED_NON_CODE') !== 'EXCLUDED_STATIC_ASSET' ||
+            normalizeDirectoryStatus('EXCLUDED_TEST') !== 'SCANNED_TEST_EXECUTABLE') {
+          throw new Error('normalizeDirectoryStatus failed to map legacy exclusion statuses');
         }
       }
     }

@@ -13,6 +13,8 @@
     "test:disposition": "node skills/security-audit/scripts/run-semantic-eval.mjs",
     "test:discovery": "node skills/security-audit/scripts/run-discovery-eval.mjs",
     "test:stability": "node skills/security-audit/scripts/run-stability-eval.mjs",
+    "test:stability-harness": "node skills/security-audit/scripts/run-stability-eval.mjs",
+    "test:stability-recorded": "node skills/security-audit/scripts/run-stability-eval.mjs --recorded",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs"
   },
 

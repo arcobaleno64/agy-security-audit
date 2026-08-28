@@ -1,4 +1,4 @@
-# Adversarial Verifier Protocol & Guardrails Specification
+# Independent Verifier Protocol & Guardrails Specification
 
 ## 1. Presumption of Non-Pass & Fixed 3-Lens Verification Panel
 
@@ -62,7 +62,7 @@ $$ES = 0.25 \cdot S_{\text{sink}} + 0.25 \cdot S_{\text{source}} + 0.25 \cdot \l
 - $S_{\text{source}} \in \{0, 1\}$: Untrusted entry source (HTTP parameter, CLI arg, header, IPC) identified.
 - $N_{\text{flow\_verified}} / N_{\text{flow\_total}} \in [0, 1]$: Ratio of taint steps explicitly verified in code.
 - $S_{\text{poc}} \in \{0, 1\}$: Syntactic taint constraint or benign sentinel demonstrated.
-- $S_{\text{mitigation}} \in \{0, 1\}$: Existing sanitizers analyzed and checked for bypassability.
+- $S_{\text{mitigation}} \in \{0, 1\}$: Existing sanitizers analyzed and checked for control effectiveness and residual gaps.
 
 Evidence Sufficiency serves as an objective gate for evidence completeness ($ES \ge 0.60$ required for reportability), ensuring no finding is confirmed without concrete evidence artifacts.
 

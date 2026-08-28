@@ -15,7 +15,7 @@ Dispatch 3 orthogonal verifiers concurrently:
 1. **REACHABILITY Lens** (`agents/verifier-reachability.md`):
    - Confirms entrypoint controllability and unbroken data/control flow to sink.
 2. **DEFENSES Lens** (`agents/verifier-defenses.md`):
-   - Confirms absence or bypassability of sanitizers, validators, or type constraints.
+   - Confirms absence, flaws, or residual gaps in sanitizers, validators, or type constraints.
    - If effective mitigation exists, must report `mitigationProofLine` and vote `REFUTES`.
 3. **IMPACT Lens** (`agents/verifier-impact.md`):
    - Calibrates authentic blast radius, privilege boundary transgression, and CVSS v4 vector.

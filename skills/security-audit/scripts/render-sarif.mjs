@@ -66,13 +66,14 @@ import {
   resolveStandardsMapping,
   detectDependencyBoundary,
   inferDefectManagement,
-  buildAuditBaseline
+  buildAuditBaseline,
+  normalizeDirectoryStatus
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
-import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
-import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability } from './run-stability-eval.mjs';
+import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval } from './run-semantic-eval.mjs';
 
 
@@ -3260,7 +3261,52 @@ export function runTests() {
 
   console.log('✔ 74. R2-P2 Invariant: Audit Baseline, Defect Management, Model Provenance, & Corpus Stability.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (74/74).');
+  // 75. R3-P0 / R3-P1 Invariant: Bounded Assurance, Defensive Terminology, Measurement Integrity, & Legacy Exclusion Migration
+  // 75.1 R3-P0-01 Purpose Boundary & Defensive Terminology
+  const skillContent75 = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/SKILL.md'), 'utf8');
+  if (!skillContent75.includes('## Purpose Boundary') || skillContent75.includes('--strictness')) {
+    throw new Error('R3-P0-01 / R3-P1-01 VIOLATION: SKILL.md missing Purpose Boundary or retains --strictness in public syntax');
+  }
+  if (skillContent75.includes('Exploit Hacker') || skillContent75.includes('Vulnerability Hunting')) {
+    throw new Error('R3-P0-01 VIOLATION: SKILL.md contains offensive persona or workflow framing');
+  }
+
+  // 75.2 R3-P0-02 Discovery Eval Benchmark Modes
+  const discSimRes75 = runDiscoveryEval(process.cwd());
+  if (discSimRes75.evaluationMode !== 'SIMULATED_CI' || discSimRes75.modelDependent !== false) {
+    throw new Error('R3-P0-02 VIOLATION: runDiscoveryEval default did not declare SIMULATED_CI evaluationMode');
+  }
+
+  // 75.3 R3-P0-03 Stability Eval Benchmark Modes
+  const stabHarnessRes75 = runStabilityEval(process.cwd());
+  if (stabHarnessRes75.evaluationMode !== 'SYNTHETIC_HARNESS' || stabHarnessRes75.status !== 'HARNESS_VERIFIED') {
+    throw new Error('R3-P0-03 VIOLATION: runStabilityEval default did not declare SYNTHETIC_HARNESS evaluationMode');
+  }
+  const stabRecordedUnmeasured = runStabilityEval(process.cwd(), { recorded: true });
+  if (stabRecordedUnmeasured.status !== 'NOT_MEASURED' || stabRecordedUnmeasured.evaluationMode !== 'RECORDED_EMPIRICAL') {
+    throw new Error('R3-P0-03 VIOLATION: runStabilityEval recorded mode did not return NOT_MEASURED when runsDir was missing');
+  }
+
+  // 75.4 R3-P1-02 Legacy Directory Exclusion Status Migration
+  if (normalizeDirectoryStatus('EXCLUDED_GENERATED') !== 'EXCLUDED_GENERATED_VERIFIED' ||
+      normalizeDirectoryStatus('EXCLUDED_NON_CODE') !== 'EXCLUDED_STATIC_ASSET' ||
+      normalizeDirectoryStatus('EXCLUDED_TEST') !== 'SCANNED_TEST_EXECUTABLE') {
+    throw new Error('R3-P1-02 VIOLATION: normalizeDirectoryStatus failed to migrate legacy exclusion statuses');
+  }
+  const legacyManifestTest = {
+    entries: [
+      { path: 'src/', status: 'SCANNED_RUNTIME', fileCount: 10, reason: 'Source code' },
+      { path: 'dist/', status: 'EXCLUDED_GENERATED', fileCount: 5, reason: 'Build output' }
+    ]
+  };
+  const valLegacyManifest = validateDirectoryManifest(legacyManifestTest);
+  if (!valLegacyManifest.valid || legacyManifestTest.entries[1].status !== 'EXCLUDED_GENERATED_VERIFIED') {
+    throw new Error('R3-P1-02 VIOLATION: validateDirectoryManifest failed to normalize legacy exclusion entry');
+  }
+
+  console.log('✔ 75. R3 Invariant: Bounded Assurance, Defensive Terminology, Measurement Integrity, & Legacy Exclusion Migration.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (75/75).');
 
   } finally {
     gitFixture.cleanup();

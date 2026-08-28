@@ -11,8 +11,8 @@ Every directory and file discovered in the repository must be reconciled into on
 | :--- | :--- | :--- |
 | `SCANNED_RUNTIME` | Active application business logic, APIs, and runtime components. | Must be indexed and audited through the 3-Lens verification pipeline. |
 | `SCANNED_BUILD` | Project build manifests, bundlers, compilers (`package.json`, `Cargo.toml`, etc.). | Scanned for dependency confusion, malicious lifecycle scripts, and pin tampering. |
-| `SCANNED_CI` | CI/CD workflows and deployment automation (`.github/`, Dockerfiles). | Scanned for pipeline poisoning, runner command injection, and secret exfiltration. |
-| `SCANNED_AGENT_CONTEXT` | Agent skills, rules, and prompt orchestration instructions (`AGENTS.md`, `SKILL.md`). | Scanned for prompt injection, jailbreaks, and tool-spoofing vectors. |
+| `SCANNED_CI` | CI/CD workflows and deployment automation (`.github/`, Dockerfiles). | Scanned for pipeline integrity failure, runner command injection, and secret disclosure risk. |
+| `SCANNED_AGENT_CONTEXT` | Agent skills, rules, and prompt orchestration instructions (`AGENTS.md`, `SKILL.md`). | Scanned for prompt injection, instruction-integrity risk affecting tool invocation, and trust-boundary evasion. |
 | `SCANNED_TEST_EXECUTABLE` | Test suites, test runners, and test helpers. | **NOT blanket excluded**; scanned for unsafe process execution, injection, and secrets. |
 | `EXCLUDED_VENDORED` | Third-party dependencies (`node_modules/`, `vendor/`). | Must match package manager declarations (`package-lock.json`, `Cargo.lock`, etc.). |
 | `EXCLUDED_GENERATED_VERIFIED` | Build output artifacts confirmed as generated from source (`dist/`, `build/`). | Verified against compiler build output configuration. |
