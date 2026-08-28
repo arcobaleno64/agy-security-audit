@@ -3348,7 +3348,7 @@ export function generateToolIntegrityManifest(toolRoot = null) {
   for (const rel of criticalScripts) {
     const full = path.resolve(resolvedTool, rel);
     if (fs.existsSync(full)) {
-      const content = fs.readFileSync(full, 'utf8');
+      const content = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n');
       digests[rel] = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
     }
   }
@@ -3423,7 +3423,7 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
   for (const rel of REQUIRED_CRITICAL_SCRIPTS) {
     const fullPath = path.resolve(resolvedTool, rel);
     if (fs.existsSync(fullPath)) {
-      const content = fs.readFileSync(fullPath, 'utf8');
+      const content = fs.readFileSync(fullPath, 'utf8').replace(/\r\n/g, '\n');
       const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
       scriptHashes[rel] = hash;
     }
