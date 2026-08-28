@@ -5,8 +5,8 @@
   "type": "object",
   "required": [
     "schemaVersion", "toolVersion", "targetRevision", "scopeFingerprint",
-    "surfaceFingerprint", "threatModelFingerprint", "coverageFingerprint",
-    "findingLineageIds", "completedAt"
+    "scopeFingerprint", "surfaceFingerprint", "threatModelFingerprint",
+    "coverageFingerprint", "executionEquivalenceKey", "findingLineageIds", "completedAt"
   ],
   "properties": {
     "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
@@ -16,6 +16,8 @@
     "surfaceFingerprint": { "type": "string" },
     "threatModelFingerprint": { "type": "string" },
     "coverageFingerprint": { "type": "string" },
+    "executionEquivalenceKey": { "type": "string" },
+    "executionEquivalence": { "type": "string", "enum": ["FULL", "PARTIAL"] },
     "findingLineageIds": {
       "type": "array",
       "items": { "type": "string" }

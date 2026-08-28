@@ -2,7 +2,7 @@
 /**
  * render-sarif.mjs
  * Generates SARIF 2.1.0 and Markdown reports for the AGY Security Audit Skill.
- * Implements objective mathematical rigor calculation, CVSS v4.0 verification,
+ * Implements objective Evidence Sufficiency calculation, CVSS v4.0 verification,
  * Git provenance hashing, and double-blind swarm consensus summaries.
  */
 
@@ -67,7 +67,13 @@ import {
   detectDependencyBoundary,
   inferDefectManagement,
   buildAuditBaseline,
-  normalizeDirectoryStatus
+  normalizeDirectoryStatus,
+  tokenizeSecretsForContext,
+  detokenizeSecrets,
+  computeExecutionEquivalenceKey,
+  validateRiskAcceptance,
+  verifyToolSelfIntegrity,
+  runCalibrationCanaries
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
@@ -248,7 +254,7 @@ export function runTests() {
   if (r0.score !== 0.0 || r0.assuranceLevel !== 'LOW_RIGOR') {
     throw new Error(`Rigor test failed for zero metrics: ${JSON.stringify(r0)}`);
   }
-  console.log('✔ 1. Mathematical Rigor calculation tests passed.');
+  console.log('✔ 1. Evidence Sufficiency calculation tests passed.');
 
   // 2. CVSS v4 vector validation test
   const validVector = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
@@ -958,7 +964,7 @@ export function runTests() {
     throw new Error(`P1-03 VIOLATION: Complete 3-lens panel failed to certify remediation: ${remediationResult.reason}`);
   }
 
-  // 37.4 Active exploit dissent (e.g. REACHABILITY SUPPORTS) -> REJECTED
+  // 37.4 Unresolved reachability / impact evidence (e.g. REACHABILITY SUPPORTS) -> REJECTED
   const unverifiedResult = verifyRemediation(findingToVerify, [
     { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
     { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Bypass found' },
@@ -1000,7 +1006,7 @@ export function runTests() {
   console.log('✔ 39. P2 Invariant: detectStalePatch rejects CLI option injection fail-closed.');
 
 
-  // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Active Exploit Dissent
+  // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Unresolved Reachability / Impact Evidence
   const candidateA = { id: 'SEC-100', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
   const candidateB = { id: 'SEC-200', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
   const votesForA = [
@@ -1053,7 +1059,7 @@ export function runTests() {
   ];
   const dissentCheck = verifyRemediation(candidateA, dissentedVotes, process.cwd());
   if (dissentCheck.verified) {
-    throw new Error('P2 VIOLATION: Patch was certified despite REACHABILITY and IMPACT active exploit dissent!');
+    throw new Error('P2 VIOLATION: Patch was certified despite REACHABILITY and IMPACT unresolved reachability/impact evidence!');
   }
   console.log('✔ 40. P2 Invariant: Fix verification enforces finding identity and 3-lens consensus.');
 
@@ -1116,8 +1122,8 @@ export function runTests() {
     }
   ];
   const realResult = deriveFinalDisposition(realBallotCandidate, realBallots, { score: 0.85 }, process.cwd());
-  if (realResult.disposition !== 'REPORTABLE' || realResult.mappedVerdict !== 'CONFIRMED') {
-    throw new Error(`P0-01 VIOLATION: Valid ballots with mathematical rigor failed to achieve REPORTABLE: ${JSON.stringify(realResult)}`);
+  if (realResult.disposition !== 'REPORTABLE' || !realResult.authoritativeRigor || realResult.authoritativeRigor.score < 0.6) {
+    throw new Error(`P0-01 VIOLATION: Valid ballots with evidence sufficiency failed to achieve REPORTABLE: ${JSON.stringify(realResult)}`);
   }
   console.log('✔ 43. P0-01 Invariant: Real task-bound ballots required to transition to REPORTABLE.');
 
@@ -3306,7 +3312,144 @@ export function runTests() {
 
   console.log('✔ 75. R3 Invariant: Bounded Assurance, Defensive Terminology, Measurement Integrity, & Legacy Exclusion Migration.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (75/75).');
+  // 76. R4 Invariants: Pre-Context Secret Protection, Capabilities Attestation, Equivalence Key, Accepted Risk Waivers, TCB Isolation, & Canaries
+  // 76.1 Pre-Context Secret Tokenization & Line-Preservation
+  const sourceWithSecret = `const awsKey = "AKIAIOSFODNN7EXAMPLE";
+const appName = "SecureService";
+const pemKey = "-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA0Y1+example+multiline+key
+-----END RSA PRIVATE KEY-----";
+export default appName;`;
+  const tokenized = tokenizeSecretsForContext(sourceWithSecret);
+  if (tokenized.secretCount !== 2) {
+    throw new Error(`R4-P1-01 VIOLATION: Expected 2 tokenized secrets, got ${tokenized.secretCount}`);
+  }
+  if (!tokenized.tokenizedText.includes('<SECRET:class=AWS_ACCESS_KEY:') || !tokenized.tokenizedText.includes('<SECRET:class=PRIVATE_KEY:')) {
+    throw new Error('R4-P1-01 VIOLATION: Tokenized source missing structured secret placeholders');
+  }
+  const originalLineCount = sourceWithSecret.split('\n').length;
+  const tokenizedLineCount = tokenized.tokenizedText.split('\n').length;
+  if (originalLineCount !== tokenizedLineCount) {
+    throw new Error(`R4-P1-01 VIOLATION: Line count mismatch! original=${originalLineCount}, tokenized=${tokenizedLineCount}`);
+  }
+  const restored = detokenizeSecrets(tokenized.tokenizedText, tokenized.secretsMap);
+  if (!restored.includes('AKIAIOSFODNN7EXAMPLE') || !restored.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+    throw new Error('R4-P1-01 VIOLATION: detokenizeSecrets failed to restore original values');
+  }
+
+  // 76.2 Capabilities Attestation
+  const conformantAtt = buildExecutionAttestation({
+    capabilities: {
+      required: ['repository.read'],
+      observed: ['repository.read'],
+      forbidden: ['filesystem.write'],
+      status: 'CONFORMANT'
+    }
+  });
+  if (conformantAtt.capabilities.status !== 'CONFORMANT' || conformantAtt.verdict !== 'COMPLETE') {
+    throw new Error('R4-P1-02 VIOLATION: Conformant capabilities failed to produce COMPLETE verdict');
+  }
+  const violatingAtt = buildExecutionAttestation({
+    capabilities: {
+      required: ['repository.read'],
+      observed: ['repository.read', 'filesystem.write'],
+      forbidden: ['filesystem.write']
+    }
+  });
+  if (violatingAtt.capabilities.status !== 'VIOLATION' || violatingAtt.verdict === 'COMPLETE') {
+    throw new Error('R4-P1-02 VIOLATION: Violating capabilities failed to be flagged as VIOLATION or failed to block COMPLETE');
+  }
+
+  // 76.3 Execution Equivalence Key
+  const eqKey1 = computeExecutionEquivalenceKey({
+    targetRevision: 'abc1234',
+    scopeFingerprint: 'scopeA',
+    surfaceFingerprint: 'surfA',
+    threatModelFingerprint: 'tmA',
+    coverageFingerprint: 'covA'
+  });
+  const eqKey2 = computeExecutionEquivalenceKey({
+    targetRevision: 'diffRev',
+    scopeFingerprint: 'scopeA',
+    surfaceFingerprint: 'surfA',
+    threatModelFingerprint: 'tmA',
+    coverageFingerprint: 'covA'
+  });
+  if (!eqKey1 || !eqKey2 || eqKey1 === eqKey2) {
+    throw new Error('R4-P1-03 VIOLATION: computeExecutionEquivalenceKey failed to produce distinct hash across revisions');
+  }
+  const baselineTest = buildAuditBaseline({ targetRevision: 'rev123', canonicalFindings: [] });
+  if (!baselineTest.executionEquivalenceKey || baselineTest.executionEquivalence !== 'PARTIAL') {
+    throw new Error('R4-P1-03 VIOLATION: buildAuditBaseline missing executionEquivalenceKey or partial status');
+  }
+
+  // 76.4 Accepted Risk / Waiver Workflow
+  const validWaiver = {
+    findingLineageId: 'LIN-TEST-123',
+    reason: 'Legacy integration requiring backward compatibility',
+    acceptedBy: 'sec-officer@company.internal',
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    compensatingControls: 'Internal network only, WAF filtering enabled'
+  };
+  const valWaiverRes = validateRiskAcceptance(validWaiver, 'LIN-TEST-123');
+  if (!valWaiverRes.valid) {
+    throw new Error(`R4-P2-01 VIOLATION: Valid waiver failed validation: ${valWaiverRes.reason}`);
+  }
+  const expiredWaiver = {
+    ...validWaiver,
+    expiresAt: new Date(Date.now() - 86400000).toISOString()
+  };
+  const valExpiredRes = validateRiskAcceptance(expiredWaiver, 'LIN-TEST-123');
+  if (valExpiredRes.valid) {
+    throw new Error('R4-P2-01 VIOLATION: Expired waiver was incorrectly accepted');
+  }
+
+  const findingWithWaiver = {
+    id: 'LIN-TEST-123',
+    ruleId: 'CWE-89',
+    title: 'SQL Query in Admin Tool',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    lineageId: 'LIN-TEST-123',
+    lineage: { lineageId: 'LIN-TEST-123', novelty: 'NEW_SURFACE' },
+    riskAcceptance: validWaiver
+  };
+  const scanWithWaiver = finalizeScan({
+    candidates: [findingWithWaiver],
+    repoRoot: process.cwd(),
+    waivers: [validWaiver]
+  });
+  const canonicalWaiverFinding = scanWithWaiver.canonicalFindings[0];
+  if (canonicalWaiverFinding.disposition !== 'ACCEPTED_RISK' || canonicalWaiverFinding.verdict !== 'ACCEPTED_RISK' || canonicalWaiverFinding.reasonCode !== 'RISK_ACCEPTED') {
+    throw new Error(`R4-P2-01 VIOLATION: Candidate with waiver was not mapped to ACCEPTED_RISK: ${JSON.stringify(canonicalWaiverFinding)}`);
+  }
+  const mdWaiver = renderMarkdownFromCanonical({ canonicalFindings: [canonicalWaiverFinding], repoRoot: process.cwd() });
+  if (!mdWaiver.includes('Accepted Risks & Documented Waivers (ACCEPTED_RISK)') || !mdWaiver.includes('sec-officer@company.internal')) {
+    throw new Error('R4-P2-01 VIOLATION: renderMarkdownFromCanonical failed to render Accepted Risks section');
+  }
+  const sarifWaiver = renderSarifFromCanonical({ canonicalFindings: [canonicalWaiverFinding], repoRoot: process.cwd() });
+  if (!sarifWaiver.runs[0].results[0].properties.riskAcceptance) {
+    throw new Error('R4-P2-01 VIOLATION: renderSarifFromCanonical failed to preserve riskAcceptance property');
+  }
+
+  // 76.5 Tool Self-Integrity & TCB
+  const sameRootCheck = verifyToolSelfIntegrity(process.cwd(), process.cwd());
+  if (sameRootCheck.valid || sameRootCheck.status !== 'TCB_ISOLATION_ERROR') {
+    throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed to reject identical tool and target root');
+  }
+  const validTcbCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd());
+  if (!validTcbCheck.valid || validTcbCheck.verifiedScriptsCount < 5) {
+    throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed on valid scripts');
+  }
+
+  // 76.6 Calibration Canaries
+  const canaryCheck = runCalibrationCanaries(process.cwd());
+  if (!canaryCheck.pass || canaryCheck.status !== 'CALIBRATED') {
+    throw new Error(`R4-P2-03 VIOLATION: runCalibrationCanaries failed: ${canaryCheck.error}`);
+  }
+
+  console.log('✔ 76. R4 Invariant: Pre-Context Secret Protection, Capabilities Attestation, Equivalence Key, Accepted Risk Waivers, TCB Isolation, & Canaries.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (76/76).');
 
   } finally {
     gitFixture.cleanup();

@@ -1,18 +1,20 @@
 # Security Policy & Trust Model
 
-## 1. Supported Trust Models & Scope of Authorization
+## 1. Supported Defensive Scopes & Trust Boundary
 
-The `security-audit` plugin operates under two explicit trust models:
+The `security-audit` plugin is strictly designed for defensive security assurance of software artifacts. It operates exclusively within authorized repository boundaries:
 
-### 1.1 `trusted-workspace`
-- **Target**: Code repositories fully authored or audited by the user/organization.
-- **Assumptions**: Local `.git/config`, build configurations, and project instructions contain no adversarial logic intended to exploit local tooling.
-- **Allowed Operations**: Static audit, hardened git provenance extraction, and local deterministic report finalization.
+### 1.1 Supported Target Scopes
+- `OWNED_REPOSITORY`: Repositories authored, owned, and maintained by the user or organization.
+- `CONTROLLED_REPOSITORY`: Infrastructure, internal services, and pipelines under direct administrative control.
+- `AUTHORIZED_INTERNAL_REPOSITORY`: Workspaces explicitly authorized for security review and assurance.
+- `LOCAL_TEST_FIXTURE`: Benign unit tests, integration test suites, and controlled evaluation fixtures.
+- `LOCAL_ADVERSARIAL_FIXTURE`: Hardened regression test cases (e.g. `evals/`) executed locally to verify scanner resilience against hostile inputs (e.g. malformed git configs, prompt injection, report breakouts).
 
-### 1.2 `untrusted-workspace`
-- **Target**: Third-party code, open-source pull requests, or adversarial bug-bounty samples.
-- **Requirement**: Execution must occur under Antigravity terminal sandboxing (`agy --sandbox`).
-- **Boundaries**: All tool invocations require strict authorization; dynamic command execution outside isolated containers is prohibited.
+### 1.2 Explicitly Unsupported & Prohibited Scopes
+- **No Third-Party Probing**: Auditing third-party websites, external APIs, or unauthorized repositories is strictly prohibited.
+- **No Bug-Bounty Targets**: The plugin is not designed or authorized for external bug-bounty target hunting or remote penetration testing.
+- **No Harmful Exploitation**: Execution never attempts live exploitation, credential stuffing, denial-of-service, data exfiltration, or persistence.
 
 ### 1.3 Authorized Defensive Use Only & Safe Proof Policy
 - **Authorized Scope**: `security-audit` is designed strictly for defensive security assurance of repositories owned, controlled, or explicitly authorized by the user or organization.
@@ -36,9 +38,10 @@ The `security-audit` plugin operates under two explicit trust models:
 - All Git operations are executed through `safe-git.mjs` with hardened environment variables (`GIT_CONFIG_GLOBAL=NUL`, `GIT_CONFIG_SYSTEM=NUL`, `PAGER=cat`, `GIT_TERMINAL_PROMPT=0`) and safe flags (`-c core.fsmonitor=false`, `--no-ext-diff`, `--no-textconv`).
 - No shell string interpolation is permitted.
 
-### 2.3 Secret Handling & Anti-Leakage
-- Plaintext secrets (AWS access keys, Bearer tokens, private keys, passwords, JWTs) are intercepted and masked by the deterministic finalizer (`finalize-scan.mjs`).
-- Credential leaks (`CWE-798`, secret tokens) automatically suppress source code line snippets in rendered reports, emitting only redacted fingerprints and location metadata.
+### 2.3 Pre-Context Secret Protection & Anti-Leakage
+- **Pre-Context Tokenization**: Raw plaintext secrets (AWS access keys, Bearer tokens, private keys, passwords, JWTs) are detected and tokenized locally before source code text is supplied to LLM inspection contexts (`tokenizeSecretsForContext`).
+- **Structure-Preserving Placeholders**: Secrets are replaced with structured identifiers (`<SECRET:class=...:hash=...>`) that preserve line numbers, line counts, and syntactic layout so dataflow continuity is maintained without exposing real secrets to model contexts.
+- **Deterministic Finalizer Masking**: Reports and SARIF files emitted by `finalize-scan.mjs` redact any residual or tokenized secrets, suppressing line snippets for credential leaks (`CWE-798`) and outputting only safe fingerprints and location metadata.
 
 ### 2.4 Markdown & Output Injection Defenses
 - Untrusted repository text (file names, code comments, payload strings) can contain ANSI escape sequences, Bidi override Unicode characters, Markdown heading injections (`#`), or code fence breakouts (```` ``` ```).

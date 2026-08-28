@@ -233,13 +233,13 @@ export function verifyRemediation(finding, verifierVotes = [], repoRoot = null, 
     };
   }
 
-  // 2. Active Exploit Dissent Check: any lens voting SUPPORTS/CONFIRMED immediately rejects
+  // 2. Unresolved Reachability / Impact Evidence Check: any lens voting SUPPORTS/CONFIRMED immediately rejects
   for (const v of [defensesVote, reachabilityVote, impactVote]) {
     const dec = String(v.decision || v.verdict || '').toUpperCase();
     if (['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(dec)) {
       return {
         verified: false,
-        reason: `${String(v.lens).toUpperCase()} lens confirms active exploit/impact despite patch`
+        reason: `${String(v.lens).toUpperCase()} lens confirms unresolved reachability/impact evidence despite patch`
       };
     }
     if (!['REFUTES', 'FALSE_POSITIVE', 'SUPPRESSED'].includes(dec)) {

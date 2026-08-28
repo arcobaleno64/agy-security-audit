@@ -26,6 +26,16 @@
     "coverageComplete": { "type": "boolean" },
     "delegationRequired": { "type": "boolean" },
     "delegationObserved": { "type": "boolean" },
-    "verdict": { "type": "string", "enum": ["COMPLETE", "INCOMPLETE", "DEGRADED"] }
+    "verdict": { "type": "string", "enum": ["COMPLETE", "INCOMPLETE", "DEGRADED"] },
+    "capabilities": {
+      "type": "object",
+      "required": ["required", "forbidden", "status"],
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } },
+        "observed": { "type": "array", "items": { "type": "string" } },
+        "forbidden": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["CONFORMANT", "VIOLATION", "UNKNOWN"] }
+      }
+    }
   }
 }

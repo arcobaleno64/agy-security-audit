@@ -105,7 +105,7 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 75 項全域安全不變量自動化測試：
+# 執行 76 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
@@ -120,7 +120,7 @@ npm run test:discovery
 # 執行穩定度基準測試 (Synthetic Harness)：
 npm run test:stability
 
-# 執行 Section 24 發行閘門檢驗 (檢查 47 項規格、25 項安全不變量與零外部依賴)：
+# 執行 Section 24 發行閘門檢驗 (檢查 47 項規格、26 項安全不變量與零外部依賴)：
 npm run check:release
 ```
 
@@ -130,11 +130,21 @@ npm run check:release
 
 本工具嚴格遵循誠實揭露原則，不進行誇大或誤導性宣稱：
 - **不宣稱「100% 準確率」或「絕對無漏洞」**：Clean 審查結果僅代表在**宣告範圍內完成定義覆蓋**、未發現具備驗證證據之可報告問題，並非全域安全證明。
-- **測試集透明度揭露**：
+- **測試集與基準測量透明度揭露**：
   - **確定性安全不變量與對抗迴歸套件**：50 案例（覆蓋 8 種邊界威脅），驗證確定性規則與防禦邊界（Invariant Rate: 100%）。
-  - **L1.5 處置決策地面真值基準**：12 案例（8 漏洞，4 安全防護），評測 Finalizer 決策邏輯，不代表真實 LLM 隨機發現率。
-  - **真實代理發現評測**：8 案例，評測發現候選之 TP/FP/FN、精確率與召回率。
-  - **隨機發現穩定度基準**：跨三種標準語料庫（Corpus A 安全集、Corpus B 漏洞集、Corpus C 修復對）執行多輪評測，計算 Finding-Set Jaccard 相似度與再現率。
+  - **L1.5 處置決策地面真值基準**：12 案例（8 漏洞，4 安全防護），評測 Finalizer 確定性處置決策邏輯，不代表真實 LLM 隨機發現率。
+  - **代理發現評測 Harness**：內建 8 個 vulnerable ground-truth cases，以 SIMULATED_CI 驗證評測管線；實際模型 discovery precision/recall 僅在提供 recorded agent candidates (`--candidates`) 後計算；本 release 未附 empirical model benchmark 時，公開結果標示為 NOT MEASURED。
+  - **穩定度評測 Harness**：synthetic mode 驗證 lineage/Jaccard/convergence 計算管線；empirical stability 需至少 2 組 recorded model runs (`--runs-dir`)；若未提供 recorded runs，公開狀態為 NOT MEASURED。
+
+| 基準測試項目 (Benchmark) | 語料規模 (Corpus) | 測量類型 (Measurement Type) | 公開狀態 (Status) |
+| :--- | :--- | :--- | :--- |
+| 確定性安全不變量 (Deterministic Invariants) | 50 案例 (8 類邊界威脅) | 確定性規則測量 (MEASURED) | 100% PASS |
+| 處置決策地面真值 (Disposition Ground Truth) | 12 案例 (8 弱點 / 4 防護) | 確定性決策測量 (MEASURED) | 100% PASS |
+| 代理發現評測 Harness (Discovery Harness) | 8 弱點真值案例 | 合成管線自檢 (SYNTHETIC PIPELINE TEST) | PASS (SIMULATED_CI) |
+| 實證代理發現 (Empirical Discovery) | 需提供 `--candidates` | 實體模型觀測 (RECORDED MODEL RUN) | NOT MEASURED (未附錄) |
+| 穩定度評測 Harness (Stability Harness) | 3 語料庫合成 pass | 合成管線自檢 (SYNTHETIC PIPELINE TEST) | PASS (SYNTHETIC_HARNESS) |
+| 實證隨機穩定度 (Empirical Stability) | 需提供 `--runs-dir` | 實體模型多輪觀測 (RECORDED MULTI-RUN) | NOT MEASURED (未附錄) |
+
 - **模型無關架構**：所有代理契約均採用資料架構與 JSON Schema 進行嚴格規格化，協調器與裁決核心不依賴任何特定 LLM 之專有隱藏行為。
 
 ---

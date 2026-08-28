@@ -14,8 +14,8 @@
     "ruleId": { "type": "string" },
     "title": { "type": "string" },
     "description": { "type": "string" },
-    "disposition": { "type": "string", "enum": ["REPORTABLE", "DEFERRED", "SUPPRESSED"] },
-    "verdict": { "type": "string", "enum": ["CONFIRMED", "NEEDS_MANUAL_REVIEW", "FALSE_POSITIVE"] },
+    "disposition": { "type": "string", "enum": ["REPORTABLE", "DEFERRED", "SUPPRESSED", "ACCEPTED_RISK"] },
+    "verdict": { "type": "string", "enum": ["CONFIRMED", "NEEDS_MANUAL_REVIEW", "FALSE_POSITIVE", "ACCEPTED_RISK"] },
     "dispositionReason": { "type": "string" },
     "reasonCode": {
       "type": "string",
@@ -30,7 +30,8 @@
         "PROHIBITED_PROOF",
         "UNVERIFIED_CLAIM",
         "AFFIRMATIVELY_VERIFIED",
-        "AFFIRMATIVELY_REFUTED"
+        "AFFIRMATIVELY_REFUTED",
+        "RISK_ACCEPTED"
       ]
     },
     "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNRATED"] },
@@ -93,6 +94,17 @@
         "toolVersion": { "type": "string" },
         "promptContractVersion": { "type": "string" },
         "systemPromptIntegrity": { "type": "string", "enum": ["VERIFIED", "UNKNOWN"] }
+      }
+    },
+    "riskAcceptance": {
+      "type": "object",
+      "required": ["findingLineageId", "reason", "acceptedBy", "expiresAt", "compensatingControls"],
+      "properties": {
+        "findingLineageId": { "type": "string" },
+        "reason": { "type": "string" },
+        "acceptedBy": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "compensatingControls": { "type": "string" }
       }
     }
   }

