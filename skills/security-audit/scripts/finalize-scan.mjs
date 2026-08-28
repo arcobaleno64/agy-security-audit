@@ -3727,6 +3727,7 @@ if (isDirectExecution) {
   const votesPath = getArg('--votes');
   const manifestPath = getArg('--manifest');
   const matrixPath = getArg('--matrix') || getArg('--discovery-matrix');
+  const externalSarifPath = getArg('--external-sarif');
   const repoRootArg = getArg('--repo-root') || process.cwd();
   const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
   const outputJsonPath = getArg('--output') || getArg('--output-json');
@@ -3734,8 +3735,54 @@ if (isDirectExecution) {
   const outputMdPath = getArg('--output-md');
   const outputCoveragePath = getArg('--output-coverage');
   const allowSelfAudit = args.includes('--self-audit');
+  const showHelp = args.includes('--help') || args.includes('-h');
 
-  if (inputPath) {
+  if (showHelp) {
+    console.log('Usage: node skills/security-audit/scripts/finalize-scan.mjs [options]');
+    console.log('');
+    console.log('Options:');
+    console.log('  --candidates <path>       Candidate findings JSON file');
+    console.log('  --votes <path>            Directory or JSON file with verifier votes');
+    console.log('  --manifest <path>         Directory manifest JSON');
+    console.log('  --matrix <path>           Discovery matrix JSON');
+    console.log('  --repo-root <path>        Repository root path (default: current directory)');
+    console.log('  --intent <DISCOVERY|...>  Audit intent');
+    console.log('  --self-audit              Allow self-audit mode (TCB overlap permit)');
+    console.log('  --external-sarif <path>   Ingest and display external scanner SARIF report');
+    console.log('  --output <path>           Write canonical findings JSON');
+    console.log('  --output-sarif <path>     Write finalized SARIF report');
+    console.log('  --output-md <path>        Write finalized Markdown report');
+    console.log('  --output-coverage <path>  Write coverage accounting JSON');
+    console.log('  --help                    Show this help message');
+    process.exit(0);
+  }
+
+  if (externalSarifPath && !inputPath) {
+    try {
+      const repoRoot = path.resolve(repoRootArg);
+      const ingested = ingestExternalEvidence(externalSarifPath, repoRoot);
+      console.log(`\n=== External Evidence Ingestion: ${externalSarifPath} ===`);
+      console.log(`Success:                 ${ingested.success}`);
+      console.log(`Total Findings Ingested: ${ingested.count}`);
+      if (ingested.findings && ingested.findings.length > 0) {
+        console.log('\nIngested Findings:');
+        ingested.findings.slice(0, 15).forEach((f, idx) => {
+          const locStr = f.location ? `${f.location.uri}:${f.location.startLine}` : 'unknown';
+          const toolStr = f.tool ? ` [${f.tool}]` : '';
+          console.log(`  [${idx + 1}] ${f.ruleId || 'N/A'}${toolStr} -> ${locStr}`);
+          if (f.evidenceHash) {
+            console.log(`      Evidence Hash: ${f.evidenceHash.slice(0, 16)}...`);
+          }
+        });
+        if (ingested.findings.length > 15) {
+          console.log(`  ... and ${ingested.findings.length - 15} more findings`);
+        }
+      }
+    } catch (err) {
+      console.error('Error ingesting external SARIF:', err.message);
+      process.exit(1);
+    }
+  } else if (inputPath) {
     try {
       const rawData = fs.readFileSync(inputPath, 'utf8');
       const candidates = JSON.parse(rawData);
@@ -3811,6 +3858,9 @@ if (isDirectExecution) {
       console.error('Error in finalize-scan:', err.message);
       process.exit(1);
     }
+  } else {
+    console.log('finalize-scan: missing required --candidates or --external-sarif argument.');
+    console.log('Run with --help for usage instructions.');
   }
 }
 
