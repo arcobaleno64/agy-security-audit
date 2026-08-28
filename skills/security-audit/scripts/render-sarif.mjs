@@ -18,6 +18,8 @@ import { buildThreatModel, generateDiscoveryMatrix } from './build-threat-model.
 import {
   CVSS_V4_REGEX,
   normalizeUri,
+  calculateEvidenceSufficiency,
+  deriveAuthoritativeEvidenceSufficiency,
   calculateRigor,
   validateDirectoryManifest,
   validateReviewManifest,
@@ -2704,7 +2706,105 @@ export function runTests() {
 
   console.log('✔ 68. R2-P0-04 / 05 Invariant: Finding Lineage, Novelty state machine, and Fingerprint v2 line-shift invariance.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (68/68).');
+  // 69. R2-P0-06 / 07 Invariant: CVSS v4.0 Base Metric Vector (no heuristic guesswork) & Evidence Sufficiency.
+  // 69.1 Valid vector with score: null yields severity: 'UNRATED' without guessing
+  const testVector = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+  const cvssUnscored = validateCvssV4({ vector: testVector, score: null });
+  if (!cvssUnscored.valid || cvssUnscored.score !== null || cvssUnscored.severity !== 'UNRATED') {
+    throw new Error(`R2-P0-06 VIOLATION: Unscored CVSS vector assigned guessed severity: got ${cvssUnscored.severity}`);
+  }
+
+  // 69.2 Zero-impact vector yields NONE
+  const zeroImpactVec = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N';
+  const cvssZero = validateCvssV4({ vector: zeroImpactVec, score: null });
+  if (!cvssZero.valid || cvssZero.severity !== 'NONE') {
+    throw new Error(`R2-P0-06 VIOLATION: Zero-impact vector was not NONE: got ${cvssZero.severity}`);
+  }
+
+  // 69.3 finalizeScan does NOT fallback invalid CVSS to MEDIUM; yields UNRATED
+  const invalidCvssScan = finalizeScan({
+    candidates: [{
+      id: 'SEC-BAD-CVSS-69',
+      ruleId: 'CWE-89',
+      title: 'Bad CVSS candidate',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      cvssV4: { vector: 'CVSS:4.0/AV:N/MALFORMED', score: 9.0 }
+    }],
+    repoRoot: process.cwd()
+  });
+  if (invalidCvssScan.canonicalFindings[0].severity !== 'UNRATED') {
+    throw new Error(`R2-P0-06 VIOLATION: finalizeScan fell back invalid CVSS to ${invalidCvssScan.canonicalFindings[0].severity} instead of UNRATED`);
+  }
+
+  // 69.3b validateCanonicalFindings defaults missing severity to UNRATED (no MEDIUM fallback)
+  const canonicalMissingSev = [{
+    id: 'SEC-NO-SEV',
+    ruleId: 'CWE-89',
+    title: 'Finding without severity',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+  }];
+  const validatedNoSev = validateCanonicalFindings(canonicalMissingSev, process.cwd());
+  if (validatedNoSev[0].severity !== 'UNRATED') {
+    throw new Error(`R2-P0-06 VIOLATION: validateCanonicalFindings fell back missing severity to ${validatedNoSev[0].severity} instead of UNRATED`);
+  }
+
+  // 69.4 mapSeverityToSarif('UNRATED', null) maps level warning and securitySeverity null
+  const unratedSarifMapping = mapSeverityToSarif('UNRATED', null);
+  if (unratedSarifMapping.level !== 'warning' || unratedSarifMapping.securitySeverity !== null) {
+    throw new Error(`R2-P0-06 VIOLATION: mapSeverityToSarif for UNRATED fabricated score: ${JSON.stringify(unratedSarifMapping)}`);
+  }
+
+  // 69.5 calculateEvidenceSufficiency returns structured completeness heuristic with disclaimer
+  const esResult = calculateEvidenceSufficiency({
+    sourceVerified: true,
+    sinkVerified: true,
+    dataflowVerifiedSteps: 3,
+    dataflowTotalSteps: 3,
+    pocSyntacticDemonstrated: true,
+    mitigationInspected: true
+  });
+  if (esResult.score !== 1.0 || esResult.sufficiencyLevel !== 'HIGH' || !esResult.disclaimer.includes('Internal heuristic')) {
+    throw new Error('R2-P0-07 VIOLATION: calculateEvidenceSufficiency returned invalid completeness object or missing disclaimer');
+  }
+
+  // 69.6 deriveAuthoritativeEvidenceSufficiency produces valid completeness object
+  const authEs = deriveAuthoritativeEvidenceSufficiency({
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+  }, [{
+    findingId: 'SEC-TEST',
+    decision: 'CONFIRMED',
+    _validatedEvidence: [
+      { path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'source' },
+      { path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'sink' }
+    ]
+  }], process.cwd());
+  if (authEs.score < 0.5 || !authEs.sourceVerified || !authEs.sinkVerified) {
+    throw new Error('R2-P0-07 VIOLATION: deriveAuthoritativeEvidenceSufficiency failed to compute sufficiency from ballots');
+  }
+
+  // 69.7 Markdown rendering displays Evidence Sufficiency with internal heuristic label
+  const mdEsFinding = {
+    id: 'SEC-ES-01',
+    ruleId: 'CWE-89',
+    severity: 'HIGH',
+    title: 'Evidence Sufficiency Test',
+    disposition: 'REPORTABLE',
+    verdict: 'CONFIRMED',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    evidenceSufficiency: esResult,
+    consensus: { supports: 3, totalVotes: 3, refutes: 0, unanimous: true }
+  };
+  const mdEsOutput = renderMarkdownFromCanonical({
+    canonicalFindings: [mdEsFinding],
+    repoRoot: process.cwd()
+  });
+  if (!mdEsOutput.includes('Evidence Sufficiency') || !mdEsOutput.includes('[Internal Heuristic]')) {
+    throw new Error('R2-P0-07 VIOLATION: Markdown output missing Evidence Sufficiency header or [Internal Heuristic] tag');
+  }
+
+  console.log('✔ 69. R2-P0-06 / 07 Invariant: CVSS v4.0 Base Metric Vector (no heuristic guesswork) & Evidence Sufficiency.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (69/69).');
 
   } finally {
     gitFixture.cleanup();

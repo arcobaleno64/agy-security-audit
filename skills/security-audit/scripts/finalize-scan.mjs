@@ -114,9 +114,10 @@ export function redactSecrets(text) {
 }
 
 /**
- * Calculates objective mathematical rigor score in [0.0, 1.0].
+ * Calculates evidence sufficiency completeness score in [0.0, 1.0].
+ * Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS (R2-P0-07).
  */
-export function calculateRigor(metrics = {}) {
+export function calculateEvidenceSufficiency(metrics = {}) {
   const sSink = metrics.sinkVerified ? 1.0 : 0.0;
   const sSource = metrics.sourceVerified ? 1.0 : 0.0;
   const flowTotal = Number(metrics.dataflowTotalSteps) || 0;
@@ -127,14 +128,35 @@ export function calculateRigor(metrics = {}) {
 
   const score = Number((0.25 * sSink + 0.25 * sSource + 0.25 * flowRatio + 0.15 * sPoc + 0.10 * sMitigation).toFixed(4));
 
+  let sufficiencyLevel = 'LOW';
   let assuranceLevel = 'LOW_RIGOR';
   if (score >= 0.85) {
+    sufficiencyLevel = 'HIGH';
     assuranceLevel = 'HIGH_RIGOR';
   } else if (score >= 0.60) {
+    sufficiencyLevel = 'MODERATE';
     assuranceLevel = 'MODERATE_RIGOR';
   }
 
-  return { score, assuranceLevel };
+  return {
+    score,
+    sufficiencyLevel,
+    assuranceLevel,
+    sourceVerified: Boolean(metrics.sourceVerified),
+    sinkVerified: Boolean(metrics.sinkVerified),
+    flowVerified: flowRatio >= 1.0,
+    defensesInspected: Boolean(metrics.mitigationInspected),
+    impactVerified: Boolean(metrics.pocSyntacticDemonstrated),
+    proofGaps: Number(metrics.proofGapsCount || 0),
+    disclaimer: 'Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.'
+  };
+}
+
+/**
+ * Backward-compatible alias for calculateEvidenceSufficiency.
+ */
+export function calculateRigor(metrics = {}) {
+  return calculateEvidenceSufficiency(metrics);
 }
 
 /**
@@ -674,22 +696,13 @@ export function validateCvssV4(cvssObj) {
   } else if (validatedScore !== null) {
     severity = validatedScore >= 9.0 ? 'CRITICAL' : validatedScore >= 7.0 ? 'HIGH' : validatedScore >= 4.0 ? 'MEDIUM' : validatedScore > 0 ? 'LOW' : 'NONE';
   } else {
-    // Derive qualitative severity from vector when score is null
+    // R2-P0-06: No heuristic guesswork on severity when score is null.
+    // Only zero-impact vector maps to NONE; all other unscored vectors remain UNRATED.
     const allImpactsNone = (
       metrics.VC === 'N' && metrics.VI === 'N' && metrics.VA === 'N' &&
       metrics.SC === 'N' && metrics.SI === 'N' && metrics.SA === 'N'
     );
-    if (allImpactsNone) {
-      severity = 'NONE';
-    } else if (metrics.AV === 'N' && metrics.AC === 'L' && metrics.PR === 'N' && metrics.VC === 'H' && metrics.VI === 'H') {
-      severity = 'CRITICAL';
-    } else if (metrics.VC === 'H' || metrics.VI === 'H') {
-      severity = 'HIGH';
-    } else if (metrics.VC === 'L' || metrics.VI === 'L' || metrics.VA === 'L') {
-      severity = 'MEDIUM';
-    } else {
-      severity = 'LOW';
-    }
+    severity = allImpactsNone ? 'NONE' : 'UNRATED';
   }
 
   // R1-P1-04: Strict consistency check between vector, score, and severity
@@ -964,7 +977,7 @@ export function validateVoteEvidence(vote, candidate = {}, repoRoot = null) {
 }
 
 /**
- * Derives authoritative mathematical rigor from validated evidence.
+ * Derives authoritative evidence sufficiency completeness from validated evidence (R2-P0-07).
  * Raw candidate.rigorMetrics is strictly treated as an untrusted hint and CANNOT self-certify authority (R1-P0-01).
  */
 export function deriveAuthoritativeRigor(candidate = {}, validSupportVotes = [], repoRoot = null) {
@@ -1008,9 +1021,19 @@ export function deriveAuthoritativeRigor(candidate = {}, validSupportVotes = [],
     assuranceLevel = 'MODERATE_RIGOR';
   }
 
+  const sufficiencyLevel = score >= 0.85 ? 'HIGH' : score >= 0.60 ? 'MODERATE' : 'LOW';
+
   return {
     score,
+    sufficiencyLevel,
     assuranceLevel,
+    sourceVerified: hasSource,
+    sinkVerified: hasSink,
+    flowVerified: flowRatio >= 1.0,
+    defensesInspected: hasControlInspection,
+    impactVerified: sPoc === 1.0,
+    proofGaps: (candidate.proofGaps && candidate.proofGaps.length) || 0,
+    disclaimer: 'Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.',
     metrics: {
       sinkVerified: hasSink,
       sourceVerified: hasSource,
@@ -1019,6 +1042,13 @@ export function deriveAuthoritativeRigor(candidate = {}, validSupportVotes = [],
       mitigationInspected: hasControlInspection
     }
   };
+}
+
+/**
+ * Derives authoritative evidence sufficiency completeness from validated evidence (R2-P0-07).
+ */
+export function deriveAuthoritativeEvidenceSufficiency(candidate = {}, validSupportVotes = [], repoRoot = null) {
+  return deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
 }
 
 /**
@@ -1605,8 +1635,8 @@ export function finalizeScan({
     const startLine = Number(raw.location?.startLine) >= 1 ? Number(raw.location?.startLine) : 1;
     const endLine = Number(raw.location?.endLine) >= startLine ? Number(raw.location?.endLine) : startLine;
 
-    // Mathematical Rigor
-    const rigor = calculateRigor(raw.rigorMetrics);
+    // Evidence Sufficiency (Internal Heuristic)
+    const rigor = calculateEvidenceSufficiency(raw.rigorMetrics);
 
     // Check for IMPACT lens calibration (strictly validating candidate identity, lens, and nonce)
     const candidateVotes = safeVotes.filter(v => {
@@ -1658,17 +1688,16 @@ export function finalizeScan({
     );
 
     // Severity determination (calibrated by impact verifier if available)
-    let severity = (impactVote && impactVote.calibratedSeverity)
-      ? String(impactVote.calibratedSeverity).toUpperCase()
-      : (cvss.valid && cvss.severity && cvss.severity !== 'UNRATED')
-        ? cvss.severity
-        : (raw.cvssV4 && !cvss.valid)
-          ? 'MEDIUM' // Default-deny clamp if submitted CVSS was invalid/contradictory
-          : String(raw.severity || 'MEDIUM').toUpperCase();
-    if (!['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(severity)) {
-      severity = 'MEDIUM';
+    let severity = 'UNRATED';
+    if (cvss.valid && cvss.severity && cvss.severity !== 'UNRATED') {
+      severity = cvss.severity;
+    } else if (impactVote && impactVote.calibratedSeverity && ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(String(impactVote.calibratedSeverity).toUpperCase())) {
+      severity = String(impactVote.calibratedSeverity).toUpperCase();
+    } else if (raw.severity && ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(String(raw.severity).toUpperCase())) {
+      severity = String(raw.severity).toUpperCase();
+    } else {
+      severity = 'UNRATED';
     }
-
 
     const locationFingerprint = computeFindingFingerprint(ruleId, normalizedRelativeUri, startLine);
     const sinkSymbol = raw.symbol || raw.sinkSymbol || raw.sink?.symbol || '';
@@ -1700,6 +1729,8 @@ export function finalizeScan({
       lineageId: authoritativeLineageId
     };
 
+    const authoritativeSufficiency = dispositionResult.authoritativeRigor || rigor;
+
     canonicalFindings.push({
       id: candidateId,
       ruleId,
@@ -1719,7 +1750,8 @@ export function finalizeScan({
         lineHash
       },
       cvssV4: cvss.valid ? { vector: cvss.vector, score: cvss.score, severity: cvss.severity } : null,
-      rigor: dispositionResult.authoritativeRigor || rigor,
+      evidenceSufficiency: authoritativeSufficiency,
+      rigor: authoritativeSufficiency,
       consensus: dispositionResult.votesSummary || {
         totalVotes: 0,
         unanimous: false,
@@ -1784,7 +1816,7 @@ export function finalizeScan({
 export function mapSeverityToSarif(severity, cvssScore) {
   const sev = String(severity || '').toUpperCase();
   let level = 'warning';
-  let defaultScore = '5.0';
+  let defaultScore = null;
 
   if (sev === 'CRITICAL') {
     level = 'error';
@@ -1798,9 +1830,12 @@ export function mapSeverityToSarif(severity, cvssScore) {
   } else if (sev === 'LOW') {
     level = 'note';
     defaultScore = '2.5';
+  } else if (sev === 'UNRATED') {
+    level = 'warning';
+    defaultScore = null;
   }
 
-  const numericScore = typeof cvssScore === 'number'
+  const numericScore = (typeof cvssScore === 'number' && !Number.isNaN(cvssScore))
     ? cvssScore.toFixed(1)
     : defaultScore;
 
@@ -1828,7 +1863,7 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
 
     const id = String(raw.id || raw.findingId || 'SEC-UNKNOWN');
     const ruleId = String(raw.ruleId || 'SEC-VULN');
-    const severity = String(raw.severity || 'MEDIUM').toUpperCase();
+    const severity = String(raw.severity || 'UNRATED').toUpperCase();
 
     // Re-apply secret redaction and sanitization across all text fields
     const title = redactSecrets(stripControlAndBidi(String(raw.title || 'Security Finding')));
@@ -1929,6 +1964,7 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       confidenceScore: raw.confidenceScore !== undefined ? raw.confidenceScore : 0.5,
       confidenceLevel: raw.confidenceLevel || 'LOW',
       cvssV4: validatedCvss,
+      evidenceSufficiency: raw.evidenceSufficiency || raw.rigor || calculateEvidenceSufficiency(raw.rigorMetrics),
       rigor,
       consensus,
       disposition,
@@ -2018,6 +2054,7 @@ export function renderSarifFromCanonical({
         confidenceScore: f.confidenceScore,
         confidenceLevel: f.confidenceLevel,
         cvssV4: f.cvssV4,
+        evidenceSufficiency: f.evidenceSufficiency || f.rigor,
         rigor: f.rigor,
         fingerprint: f.fingerprint,
         locationFingerprint: f.locationFingerprint || f.fingerprint,
@@ -2164,7 +2201,10 @@ export function renderMarkdownFromCanonical({
       if (f.cvssV4?.vector) {
         md += `- **CVSS v4.0**: \`${sanitizeInlineText(f.cvssV4.vector)}\`${f.cvssV4.score !== null ? ` (Score: ${f.cvssV4.score})` : ' (Score: Unrated / Vector-Only)'}\n`;
       }
-      md += `- **Mathematical Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
+      const suff3 = f.evidenceSufficiency || f.rigor;
+      const suffLevel3 = suff3?.sufficiencyLevel || suff3?.assuranceLevel || 'LOW';
+      const suffScore3 = suff3?.score !== undefined ? suff3.score : 'N/A';
+      md += `- **Evidence Sufficiency**: \`${suffScore3}\` (${suffLevel3}) [Internal Heuristic]\n`;
       md += `- **Verifier Consensus**: ${f.consensus.supports}/${f.consensus.totalVotes} votes support (unanimous=${f.consensus.unanimous})\n`;
       md += `\n**Description**:\n${sanitizeBlockText(f.description)}\n\n`;
       if (f.location.lineSnippet) {
@@ -2189,7 +2229,10 @@ export function renderMarkdownFromCanonical({
       if (f.lineage?.whyNow) {
         md += `- **Lineage Rationale (Why Now)**: ${sanitizeInlineText(f.lineage.whyNow)}\n`;
       }
-      md += `- **Calculated Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
+      const suff4 = f.evidenceSufficiency || f.rigor;
+      const suffLevel4 = suff4?.sufficiencyLevel || suff4?.assuranceLevel || 'LOW';
+      const suffScore4 = suff4?.score !== undefined ? suff4.score : 'N/A';
+      md += `- **Evidence Sufficiency**: \`${suffScore4}\` (${suffLevel4}) [Internal Heuristic]\n`;
       md += `- **Deferral Reason**: ${sanitizeInlineText(f.dispositionReason || 'Unproven taint flow or missing verifier consensus')}\n\n`;
       if (f.description) {
         md += `**Description**:\n${sanitizeBlockText(f.description)}\n\n`;

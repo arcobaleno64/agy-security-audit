@@ -32,7 +32,7 @@ Under the **Default-Deny** standard, findings are verified strictly by the **Fix
 1. **`CONFIRMED` (`REPORTABLE`)**:
    - Requires unanimous 3-Lens panel confirmation (`REACHABILITY` $\land \neg$`DEFENSES` $\land$ `IMPACT`).
    - Requires verified Sink and Source call sites and unbroken dataflow.
-   - Mathematical Rigor score $R \ge 0.60$ as evidence completeness check.
+   - Evidence Sufficiency completeness score $ES \ge 0.60$ as evidence completeness check.
 2. **`FALSE_POSITIVE` (`SUPPRESSED`)**:
    - Decisive refutation by any lens backed by verified in-repo evidence (`path` + positive line number):
      - `REACHABILITY`: Proves entrypoint is uncalled, dead code, or internal test mock.
@@ -45,11 +45,18 @@ Under the **Default-Deny** standard, findings are verified strictly by the **Fix
 
 ---
 
-## 2. Mathematical Rigor Index ($R \in [0.0, 1.0]$)
+## 2. Evidence Sufficiency Heuristic ($ES \in [0.0, 1.0]$)
 
-The rigor of a finding is calculated objectively by code in `finalize-scan.mjs` as **evidence completeness metadata** rather than a self-asserting security verdict:
+> [!NOTE]
+> **Scope & Authority Disclaimer**:
+> This score is an internal heuristic used for gating evidence completeness.
+> It is not CVSS, probability, exploit likelihood, formal mathematical verification,
+> or an industry-standard confidence metric. It ensures that findings cannot achieve
+> `REPORTABLE` disposition without verifiable source, sink, and taint path artifacts.
 
-$$R = 0.25 \cdot S_{\text{sink}} + 0.25 \cdot S_{\text{source}} + 0.25 \cdot \left(\frac{N_{\text{flow\_verified}}}{N_{\text{flow\_total}}}\right) + 0.15 \cdot S_{\text{poc}} + 0.10 \cdot S_{\text{mitigation}}$$
+The evidence sufficiency of a finding is calculated objectively by code in `finalize-scan.mjs` as **evidence completeness metadata** rather than a self-asserting security verdict:
+
+$$ES = 0.25 \cdot S_{\text{sink}} + 0.25 \cdot S_{\text{source}} + 0.25 \cdot \left(\frac{N_{\text{flow\_verified}}}{N_{\text{flow\_total}}}\right) + 0.15 \cdot S_{\text{poc}} + 0.10 \cdot S_{\text{mitigation}}$$
 
 - $S_{\text{sink}} \in \{0, 1\}$: Target sink AST call site locked with line number.
 - $S_{\text{source}} \in \{0, 1\}$: Untrusted entry source (HTTP parameter, CLI arg, header, IPC) identified.
@@ -57,7 +64,7 @@ $$R = 0.25 \cdot S_{\text{sink}} + 0.25 \cdot S_{\text{source}} + 0.25 \cdot \le
 - $S_{\text{poc}} \in \{0, 1\}$: Syntactic taint constraint or benign sentinel demonstrated.
 - $S_{\text{mitigation}} \in \{0, 1\}$: Existing sanitizers analyzed and checked for bypassability.
 
-Rigor serves as an objective gate for evidence completeness ($R \ge 0.60$ required for reportability), ensuring no finding is confirmed without concrete evidence artifacts.
+Evidence Sufficiency serves as an objective gate for evidence completeness ($ES \ge 0.60$ required for reportability), ensuring no finding is confirmed without concrete evidence artifacts.
 
 ---
 

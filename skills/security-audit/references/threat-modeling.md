@@ -20,11 +20,15 @@ Every directory discovered in the repository must be reconciled into exactly one
 
 ---
 
-## 2. CVSS v4.0 Base MacroVector Specification (FIRST Standard)
+## 2. CVSS v4.0 Base Metric Vector Specification (FIRST Standard)
 
-All findings must be calibrated against the official **FIRST CVSS v4.0** standard. Findings without a valid CVSS v4.0 MacroVector are rejected.
+All findings must be calibrated against the official **FIRST CVSS v4.0** standard. Findings without a valid CVSS v4.0 Base Metric Vector are rejected.
 
-### MacroVector Structure (11 Dimensions)
+> [!IMPORTANT]
+> **Base Metric Vector vs MacroVector**:
+> The 11 Base metrics form the foundational Base Metric Vector. MacroVectors are an internal lookup structure within the official FIRST scoring algorithm and must not be confused with the raw 11-dimension metric vector. If an official score calculator or verified external score is not available, the finding is assigned `score: null` and qualitative severity `UNRATED` without guessing or fabricating scores.
+
+### Base Metric Vector Structure (11 Dimensions)
 ```text
 CVSS:4.0/AV:[NALP]/AC:[LH]/AT:[NP]/PR:[NLH]/UI:[NPA]/VC:[HLN]/VI:[HLN]/VA:[HLN]/SC:[HLN]/SI:[HLN]/SA:[HLN]
 ```

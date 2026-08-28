@@ -68,15 +68,15 @@ security-audit/
         │   └── verify-fix.md             # 補丁驗證與防禦不變量確認合約
         ├── references/
         │   ├── discovery.md              # 9 大元件 × 10 大弱點家族矩陣
-        │   ├── threat-modeling.md        # 目錄會計核算制度與 CVSS v4.0 11 維向量
+        │   ├── threat-modeling.md        # 目錄會計核算制度與 CVSS v4.0 Base Metric Vector (11 維)
         │   ├── swarm-consensus.md        # 彈性子代理滑動池、4 大角色雙盲投票
-        │   ├── verifier-protocol.md      # 客觀數學嚴謹度、機密脫敏與防投毒 Nonce
+        │   ├── verifier-protocol.md      # 證據完備性啟發式指標 (Evidence Sufficiency)、機密脫敏與防投毒 Nonce
         │   ├── finding-lineage.md        # 雙指紋架構 (Fingerprint v2)、Lineage ID 與 Novelty 狀態機
         │   └── patching-jail.md          # 補丁拘束器與雙軌交付
         └── scripts/
             ├── safe-git.mjs              # 防禦型 Git Provenance 與 Pre-image 提取
             ├── finalize-scan.mjs         # 確定性 Security Authority 與 Canonical Finalizer
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 67 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 69 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 校驗與證明缺口 (Proof Gap) 偵測

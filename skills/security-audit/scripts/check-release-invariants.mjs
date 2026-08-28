@@ -24,7 +24,9 @@ import {
   validateDiscoveryMatrix,
   computeLineageFingerprint,
   validateFindingLineage,
-  computeFindingFingerprint
+  computeFindingFingerprint,
+  calculateEvidenceSufficiency,
+  deriveAuthoritativeEvidenceSufficiency
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest } from './build-inventory.mjs';
@@ -627,6 +629,53 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const fixWithWhy = validateFindingLineage({ novelty: 'FIX_INTRODUCED', whyNow: 'Fix introduced new parameter' });
         if (!fixWithWhy.valid) {
           throw new Error('validateFindingLineage rejected valid FIX_INTRODUCED with whyNow');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-18',
+      name: 'CVSS v4.0 Base Metric Vector (no heuristic guesswork) & Evidence Sufficiency',
+      check: () => {
+        // 1. CVSS v4 with score: null yields severity: 'UNRATED' (no heuristic deduction)
+        const unratedVector = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+        const unratedRes = validateCvssV4({ vector: unratedVector, score: null });
+        if (!unratedRes.valid || unratedRes.severity !== 'UNRATED') {
+          throw new Error(`validateCvssV4 guessed or altered severity for unscored vector: got ${unratedRes.severity}`);
+        }
+
+        // 2. Zero-impact vector yields NONE
+        const zeroVector = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N';
+        const zeroRes = validateCvssV4({ vector: zeroVector, score: null });
+        if (!zeroRes.valid || zeroRes.severity !== 'NONE') {
+          throw new Error(`validateCvssV4 failed to map zero-impact vector to NONE: got ${zeroRes.severity}`);
+        }
+
+        // 3. finalizeScan does NOT fallback invalid CVSS to MEDIUM; yields UNRATED
+        const badCvssRun = finalizeScan({
+          candidates: [{
+            id: 'SEC-BAD-CVSS',
+            ruleId: 'CWE-89',
+            title: 'Bad CVSS candidate',
+            location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+            cvssV4: { vector: 'CVSS:4.0/AV:N/INVALID', score: 5.0 }
+          }],
+          repoRoot
+        });
+        if (badCvssRun.canonicalFindings[0].severity !== 'UNRATED') {
+          throw new Error(`finalizeScan fell back invalid CVSS to ${badCvssRun.canonicalFindings[0].severity} instead of UNRATED`);
+        }
+
+        // 4. calculateEvidenceSufficiency returns structured completeness heuristic
+        const suff = calculateEvidenceSufficiency({
+          sourceVerified: true,
+          sinkVerified: true,
+          dataflowVerifiedSteps: 2,
+          dataflowTotalSteps: 2,
+          pocSyntacticDemonstrated: true,
+          mitigationInspected: true
+        });
+        if (suff.score !== 1.0 || suff.sufficiencyLevel !== 'HIGH' || !suff.disclaimer) {
+          throw new Error('calculateEvidenceSufficiency failed to produce valid sufficiency object with disclaimer');
         }
       }
     }
