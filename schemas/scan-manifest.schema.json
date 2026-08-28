@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/scan-manifest.schema.json",
+  "title": "Scan Manifest Schema",
+  "type": "object",
+  "required": ["schemaVersion", "mode", "entries"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+    "mode": { "type": "string", "enum": ["scan", "review"] },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "status"],
+        "properties": {
+          "path": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SCANNED",
+              "SCANNED_RUNTIME",
+              "SCANNED_BUILD",
+              "SCANNED_CI",
+              "SCANNED_AGENT_CONTEXT",
+              "SCANNED_TEST_EXECUTABLE",
+              "EXCLUDED_VENDORED",
+              "EXCLUDED_GENERATED",
+              "EXCLUDED_GENERATED_VERIFIED",
+              "EXCLUDED_STATIC_ASSET",
+              "EXCLUDED_NON_CODE",
+              "EXCLUDED_TEST"
+            ]
+          },
+          "fileCount": { "type": "integer", "minimum": 0 },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

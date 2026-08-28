@@ -31,8 +31,18 @@ import {
   VALID_FINDING_TYPES,
   validateSafeProof,
   VALID_PROOF_KINDS,
-  validateCanonicalFindings
+  validateCanonicalFindings,
+  FAILURE_REASON_CODES,
+  deriveReasonCode,
+  computeEvidenceSnapshot,
+  isEvidenceStale,
+  inferSecurityProperty,
+  ingestExternalEvidence,
+  buildExecutionAttestation,
+  resolveStandardsMapping,
+  detectDependencyBoundary
 } from './finalize-scan.mjs';
+import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './build-inventory.mjs';
 import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
@@ -54,11 +64,14 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/build-threat-model.mjs',
   'skills/security-audit/scripts/validate-attack-path.mjs',
   'skills/security-audit/scripts/validate-patch.mjs',
+  'skills/security-audit/scripts/standards-mapping.mjs',
   'skills/security-audit/scripts/run-evals.mjs',
   'skills/security-audit/scripts/run-semantic-eval.mjs',
   'skills/security-audit/scripts/run-discovery-eval.mjs',
   'skills/security-audit/scripts/run-stability-eval.mjs',
   'skills/security-audit/scripts/check-release-invariants.mjs',
+  'skills/security-audit/standards/standards-map.json',
+  'skills/security-audit/standards/applicability-profiles.json',
   'skills/security-audit/jobs/scan.md',
   'skills/security-audit/jobs/review.md',
   'skills/security-audit/jobs/validate.md',
@@ -72,6 +85,12 @@ const REQUIRED_FILES = [
   'skills/security-audit/references/verifier-protocol.md',
   'skills/security-audit/references/finding-lineage.md',
   'skills/security-audit/references/safe-proof-policy.md',
+  'schemas/scan-manifest.schema.json',
+  'schemas/threat-model.schema.json',
+  'schemas/candidate.schema.json',
+  'schemas/verifier-ballot.schema.json',
+  'schemas/canonical-finding.schema.json',
+  'schemas/execution-attestation.schema.json',
   'agents/threat-modeler.md',
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',
@@ -912,6 +931,134 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const validatedBad = validateCanonicalFindings([badCandidate], repoRoot);
         if (validatedBad[0].disposition !== 'DEFERRED' || !validatedBad[0].dispositionReason.includes('PROHIBITED_PROOF_VIOLATION')) {
           throw new Error('Candidate with prohibited proof pattern was not downgraded to DEFERRED fail-closed');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-22',
+      name: 'Standards Mapping, Security Property First, & Failure Taxonomy Invariant',
+      check: () => {
+        // 1. Standards mapping maps CWE-89 to ASVS for web-api, but filters for CLI
+        const webStd = resolveStandardsMapping('CWE-89', 'web-api');
+        const cliStd = resolveStandardsMapping('CWE-89', 'cli');
+        if (!webStd.cwe.includes('CWE-89') || webStd.asvs.length === 0 || cliStd.asvs.length !== 0) {
+          throw new Error('resolveStandardsMapping failed profile-aware standards resolution');
+        }
+
+        // 2. Security property first inference
+        const secProp = inferSecurityProperty('CWE-89', 'SQL Injection in Query');
+        const cmdProp = inferSecurityProperty('CUSTOM-EXEC-RULE', 'arbitrary command execution in subshell');
+        if (secProp !== 'INPUT_INTEGRITY_QUERY_CONFINEMENT' || cmdProp !== 'PROCESS_EXECUTION_INTEGRITY') {
+          throw new Error(`inferSecurityProperty returned unexpected properties: secProp=${secProp}, cmdProp=${cmdProp}`);
+        }
+
+        // 3. Failure taxonomy reason codes
+        const r1 = deriveReasonCode('REPORTABLE');
+        const r2 = deriveReasonCode('DEFERRED', 'PROHIBITED_PROOF_VIOLATION detected');
+        const r3 = deriveReasonCode('DEFERRED', 'Coverage is partial');
+        const r4 = deriveReasonCode('DEFERRED', 'orchestration incomplete / skipped stage');
+        const r5 = deriveReasonCode('DEFERRED', 'missing severity / unrated vector');
+        if (r1 !== 'AFFIRMATIVELY_VERIFIED' || r2 !== 'PROHIBITED_PROOF' || r3 !== 'COVERAGE_PARTIAL' ||
+            r4 !== 'ORCHESTRATION_INCOMPLETE' || r5 !== 'SEVERITY_UNRATED') {
+          throw new Error('deriveReasonCode produced non-standard reason codes');
+        }
+
+        // 4. Validate all 6 schemas in schemas/ are valid JSON and define schemaVersion
+        const schemaFiles = [
+          'scan-manifest.schema.json',
+          'threat-model.schema.json',
+          'candidate.schema.json',
+          'verifier-ballot.schema.json',
+          'canonical-finding.schema.json',
+          'execution-attestation.schema.json'
+        ];
+        for (const file of schemaFiles) {
+          const fullPath = path.resolve(repoRoot, 'schemas', file);
+          if (!fs.existsSync(fullPath)) {
+            throw new Error(`Schema file missing: schemas/${file}`);
+          }
+          const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+          if (!parsed.$schema || !parsed.title || !parsed.properties?.schemaVersion) {
+            throw new Error(`Schema schemas/${file} is missing required JSON Schema properties (including schemaVersion)`);
+          }
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-23',
+      name: 'Execution Attestation, Attack Path 2.0, & Dependency Boundary Invariant',
+      check: () => {
+        // 1. buildExecutionAttestation enforces stage completeness under default-deny
+        const attFull = buildExecutionAttestation({
+          repoRoot,
+          executedStages: ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'],
+          coverageComplete: true,
+          delegationObserved: true
+        });
+        const attDegraded = buildExecutionAttestation({
+          repoRoot,
+          executedStages: ['INVENTORY', 'FINALIZATION'],
+          coverageComplete: true,
+          delegationObserved: true
+        });
+        if (attFull.verdict !== 'COMPLETE' || attDegraded.verdict !== 'DEGRADED') {
+          throw new Error('buildExecutionAttestation failed stage completeness verdict derivation');
+        }
+
+        // 2. validateAttackPath enforces Schema 2.0 attributes and computes evidenceHash
+        const apTest = {
+          attackPathId: 'AP-INV-23',
+          attackerCapability: 'NETWORK_UNAUTHENTICATED',
+          entrypoint: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, symbol: 'main' },
+          source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
+          transformations: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 5, description: 'Step' }],
+          authorizationBoundary: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Auth boundary' },
+          defenseChecks: [],
+          sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Sink' },
+          impactBoundary: { target: 'host', blastRadius: 'local' },
+          preconditions: ['Precond'],
+          postconditions: ['Postcond']
+        };
+        const valAp = validateAttackPath(apTest, repoRoot);
+        if (!valAp.valid || valAp.schemaVersion !== '2.0' || !valAp.source.evidenceHash) {
+          throw new Error(`validateAttackPath failed Schema 2.0 validation: ${valAp.error}`);
+        }
+
+        // 2b. Negative tests: Tampered evidenceHash and invalid attackerCapability must be rejected
+        const badHashAp = { ...apTest, source: { ...apTest.source, evidenceHash: 'deadbeef00000000000000000000000000000000000000000000000000000000' } };
+        const valBadHash = validateAttackPath(badHashAp, repoRoot);
+        if (valBadHash.valid) {
+          throw new Error('validateAttackPath allowed tampered evidenceHash without rejection');
+        }
+
+        const badCapAp = { ...apTest, attackerCapability: 'INVALID_CAPABILITY_OVERRIDE' };
+        const valBadCap = validateAttackPath(badCapAp, repoRoot);
+        if (valBadCap.valid) {
+          throw new Error('validateAttackPath allowed invalid attackerCapability without rejection');
+        }
+
+        // 3. detectDependencyBoundary detects package manifests or lockfiles
+        const dep = detectDependencyBoundary(repoRoot);
+        if (!dep.hasDependencyEvidence || dep.count === 0) {
+          throw new Error('detectDependencyBoundary failed to detect repository package manifest or lockfile');
+        }
+
+        // 4. finalizeScan integration: missing votes marks VERIFICATION_PANEL skipped and results in DEGRADED
+        const mockCand = {
+          id: 'INV-23-CAND',
+          ruleId: 'CWE-89',
+          title: 'SQL Injection',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+        };
+        const finalizedNoVotes = finalizeScan({
+          candidates: [mockCand],
+          manifest: { files: [{ path: 'test.js', isScanned: true }] },
+          votes: [],
+          repoRoot
+        });
+        if (finalizedNoVotes.summary.execution.verdict === 'COMPLETE' ||
+            !finalizedNoVotes.summary.execution.skippedStages.includes('VERIFICATION_PANEL')) {
+          throw new Error('finalizeScan failed to reflect skipped verification stage in execution attestation');
         }
       }
     }

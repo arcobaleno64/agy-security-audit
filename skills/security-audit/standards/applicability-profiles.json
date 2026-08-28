@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Applicability profiles determining relevant security standards per repository archetype (R2-P1-01).",
+  "profiles": {
+    "web-api": {
+      "name": "Web API / Microservice",
+      "applicableStandards": ["CWE", "OWASP_ASVS_5_0", "OWASP_TOP_10_2021", "NIST_SSDF_1_1"],
+      "primaryStandard": "OWASP_ASVS_5_0"
+    },
+    "web-app": {
+      "name": "Full-Stack Web Application",
+      "applicableStandards": ["CWE", "OWASP_ASVS_5_0", "OWASP_TOP_10_2021", "NIST_SSDF_1_1"],
+      "primaryStandard": "OWASP_ASVS_5_0"
+    },
+    "cli": {
+      "name": "Command-Line Tool",
+      "applicableStandards": ["CWE", "NIST_SSDF_1_1"],
+      "primaryStandard": "CWE"
+    },
+    "library": {
+      "name": "Software Library / Package",
+      "applicableStandards": ["CWE", "NIST_SSDF_1_1"],
+      "primaryStandard": "CWE"
+    },
+    "agent-plugin": {
+      "name": "AI Agent Plugin / Tool Extension",
+      "applicableStandards": ["CWE", "OWASP_LLM_2025", "NIST_SSDF_1_1"],
+      "primaryStandard": "CWE"
+    },
+    "infra": {
+      "name": "Infrastructure as Code / Cloud Config",
+      "applicableStandards": ["CWE", "CIS_CONTROLS", "NIST_SSDF_1_1"],
+      "primaryStandard": "CWE"
+    },
+    "native": {
+      "name": "Native System Code (C/C++/Rust)",
+      "applicableStandards": ["CWE", "NIST_SSDF_1_1"],
+      "primaryStandard": "CWE"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/execution-attestation.schema.json",
+  "title": "Execution Attestation Schema",
+  "type": "object",
+  "required": [
+    "schemaVersion", "attestationId", "target", "requiredStages",
+    "executedStages", "coverageComplete", "delegationRequired", "delegationObserved", "verdict"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+    "attestationId": { "type": "string" },
+    "target": {
+      "type": "object",
+      "required": ["repositoryUri", "revision"],
+      "properties": {
+        "repositoryUri": { "type": "string" },
+        "revision": { "type": "string" }
+      }
+    },
+    "auditIntent": { "type": "string", "enum": ["DISCOVERY", "VALIDATION", "REGRESSION"] },
+    "requiredStages": { "type": "array", "items": { "type": "string" } },
+    "executedStages": { "type": "array", "items": { "type": "string" } },
+    "skippedStages": { "type": "array", "items": { "type": "string" } },
+    "failedStages": { "type": "array", "items": { "type": "string" } },
+    "coverageComplete": { "type": "boolean" },
+    "delegationRequired": { "type": "boolean" },
+    "delegationObserved": { "type": "boolean" },
+    "verdict": { "type": "string", "enum": ["COMPLETE", "INCOMPLETE", "DEGRADED"] }
+  }
+}

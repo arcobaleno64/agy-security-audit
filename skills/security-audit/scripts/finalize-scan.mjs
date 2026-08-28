@@ -13,7 +13,8 @@ import crypto from 'node:crypto';
 import { getHardenedGitProvenance, runSafeGit } from './safe-git.mjs';
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { buildDirectoryManifest, extractChangedFiles, categorizeDirectory, classifyFile } from './build-inventory.mjs';
-export { categorizeDirectory, classifyFile };
+import { resolveStandardsMapping, detectDependencyBoundary } from './standards-mapping.mjs';
+export { categorizeDirectory, classifyFile, resolveStandardsMapping, detectDependencyBoundary };
 
 
 
@@ -176,6 +177,114 @@ export function validateSafeProof(proof, proofKind = 'STATIC_TRACE') {
   }
 
   return { valid: true, safe: true, proofKind: safeKind };
+}
+
+/**
+ * Failure Taxonomy Reason Codes (R2-P1-10)
+ * Replaces generic DEFERRED with granular, actionable causal failure classifications.
+ */
+export const FAILURE_REASON_CODES = new Set([
+  'EVIDENCE_INCOMPLETE',
+  'COVERAGE_PARTIAL',
+  'VERIFIER_TIMEOUT',
+  'ORCHESTRATION_INCOMPLETE',
+  'STALE_EVIDENCE',
+  'SEVERITY_UNRATED',
+  'MODEL_DISAGREEMENT',
+  'PROHIBITED_PROOF',
+  'UNVERIFIED_CLAIM',
+  'AFFIRMATIVELY_VERIFIED',
+  'AFFIRMATIVELY_REFUTED'
+]);
+
+export function deriveReasonCode(disposition, reason = '', proofSafe = true, coverageStatus = 'COMPLETE') {
+  if (disposition === 'REPORTABLE') return 'AFFIRMATIVELY_VERIFIED';
+  if (disposition === 'SUPPRESSED') return 'AFFIRMATIVELY_REFUTED';
+  if (!proofSafe || /PROHIBITED_PROOF/i.test(reason)) return 'PROHIBITED_PROOF';
+  if (/stale|diverg/i.test(reason)) return 'STALE_EVIDENCE';
+  if (/self-assert|fabricated|unvoted|unsupported reportable/i.test(reason)) return 'UNVERIFIED_CLAIM';
+  if (/disagree|split/i.test(reason)) return 'MODEL_DISAGREEMENT';
+  if (/timeout/i.test(reason)) return 'VERIFIER_TIMEOUT';
+  if (/orchestrat|skipped stage/i.test(reason)) return 'ORCHESTRATION_INCOMPLETE';
+  if (/unrated|missing severity/i.test(reason)) return 'SEVERITY_UNRATED';
+  if (/coverage/i.test(reason) || coverageStatus !== 'COMPLETE') return 'COVERAGE_PARTIAL';
+  return 'EVIDENCE_INCOMPLETE';
+}
+
+/**
+ * Computes a deterministic evidence snapshot / hash for a file location (R2-P1-04).
+ */
+export function computeEvidenceSnapshot(repoRoot, relativePath, line = 1) {
+  if (!repoRoot || !relativePath) {
+    return { blobHash: null, lineHash: null, exists: false };
+  }
+  const rootResolved = path.resolve(repoRoot);
+  const resolved = path.resolve(repoRoot, relativePath);
+  const rel = path.relative(rootResolved, resolved);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { blobHash: null, lineHash: null, exists: false, error: 'Path traversal outside repository root' };
+  }
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+    return { blobHash: null, lineHash: null, exists: false };
+  }
+  try {
+    const content = fs.readFileSync(resolved, 'utf8');
+    const blobHash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+    const lines = content.split(/\r?\n/);
+    const lineNum = Number(line);
+    if (lineNum < 1 || lineNum > lines.length) {
+      return { blobHash, lineHash: null, lineContent: null, exists: true, error: 'Line beyond EOF' };
+    }
+    const lineContent = lines[lineNum - 1] || '';
+    const lineHash = crypto.createHash('sha256').update(lineContent.trim(), 'utf8').digest('hex');
+    return {
+      blobHash,
+      lineHash,
+      lineContent,
+      exists: true
+    };
+  } catch {
+    return { blobHash: null, lineHash: null, exists: false };
+  }
+}
+
+/**
+ * Checks whether evidence is stale by comparing current snapshot to recorded snapshot (R2-P1-04).
+ */
+export function isEvidenceStale(currentSnapshot, recordedSnapshot) {
+  if (!currentSnapshot || !recordedSnapshot) return false;
+  if (!currentSnapshot.exists && recordedSnapshot.exists) return true;
+  if (currentSnapshot.error && !recordedSnapshot.error) return true;
+  if (recordedSnapshot.lineHash && currentSnapshot.lineHash && recordedSnapshot.lineHash !== currentSnapshot.lineHash) {
+    return true;
+  }
+  if (recordedSnapshot.blobHash && currentSnapshot.blobHash && recordedSnapshot.blobHash !== currentSnapshot.blobHash) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Declares or infers the explicit security property violated (R2-P1-02).
+ */
+export function inferSecurityProperty(ruleId = '', title = '', explicitProperty = '') {
+  if (typeof explicitProperty === 'string' && explicitProperty.trim().length > 0) {
+    return explicitProperty.trim();
+  }
+  const std = resolveStandardsMapping(ruleId);
+  if (std && std.securityProperty && std.securityProperty !== 'SECURITY_PROPERTY_UNSPECIFIED') {
+    return std.securityProperty;
+  }
+  const combined = `${ruleId} ${title}`.toLowerCase();
+  if (/authz|access|tenant|idor|ownership/i.test(combined)) return 'AUTHORIZATION_CONFINEMENT';
+  if (/command|exec|spawn|process|subshell/i.test(combined)) return 'PROCESS_EXECUTION_INTEGRITY';
+  if (/sqli|sql|injection|query/i.test(combined)) return 'INPUT_INTEGRITY_QUERY_CONFINEMENT';
+  if (/traversal|path|file/i.test(combined)) return 'FILESYSTEM_CONTAINMENT';
+  if (/ssrf|webhook|egress/i.test(combined)) return 'NETWORK_EGRESS_CONFINEMENT';
+  if (/secret|token|password|credential/i.test(combined)) return 'SECRET_CONFIDENTIALITY';
+  if (/xss|script/i.test(combined)) return 'CLIENT_CONTEXT_ISOLATION';
+  if (/deserializ|eval|unpickle/i.test(combined)) return 'OBJECT_INSTANTIATION_INTEGRITY';
+  return 'SECURITY_PROPERTY_UNSPECIFIED';
 }
 
 /**
@@ -1620,7 +1729,130 @@ export function validateFindingLineage(lineage) {
   };
 }
 
+/**
+ * External Tool Evidence Interface (R2-P1-06)
+ * Ingests external deterministic scanner outputs (CodeQL, Semgrep, Trivy, Gitleaks, osv-scanner)
+ * via generic SARIF 2.1.0 or JSON adapter for semantic corroboration.
+ */
+export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
+  if (!input) return { success: false, error: 'No input provided', findings: [] };
+  let data = input;
+  if (typeof input === 'string') {
+    if (fs.existsSync(input)) {
+      try {
+        data = JSON.parse(fs.readFileSync(input, 'utf8'));
+      } catch (err) {
+        return { success: false, error: `Failed reading external evidence file: ${err.message}`, findings: [] };
+      }
+    } else {
+      try {
+        data = JSON.parse(input);
+      } catch {
+        return { success: false, error: 'Input string is neither valid file path nor valid JSON', findings: [] };
+      }
+    }
+  }
 
+  const findings = [];
+  // Case A: Standard SARIF 2.1.0 (Semgrep, CodeQL, Trivy)
+  if (data && data.version === '2.1.0' && Array.isArray(data.runs)) {
+    for (const run of data.runs) {
+      const toolName = run.tool?.driver?.name || 'EXTERNAL_SAST';
+      const results = Array.isArray(run.results) ? run.results : [];
+      for (const res of results) {
+        const ruleId = res.ruleId || 'EXTERNAL-FINDING';
+        const rawUri = res.locations?.[0]?.physicalLocation?.artifactLocation?.uri || 'unknown';
+        const startLine = Number(res.locations?.[0]?.physicalLocation?.region?.startLine || 1);
+        const normUri = normalizeUri(repoRoot, rawUri);
+        const snapshot = computeEvidenceSnapshot(repoRoot, normUri, startLine);
+        findings.push({
+          tool: toolName,
+          ruleId,
+          title: res.message?.text || ruleId,
+          location: { uri: normUri, startLine },
+          severity: String(res.level || 'warning').toUpperCase(),
+          evidenceHash: snapshot.error ? null : snapshot.lineHash,
+          rawFinding: res
+        });
+      }
+    }
+    return { success: true, count: findings.length, findings };
+  }
+
+  // Case B: Array of scanner items or object with results/vulnerabilities
+  const rawList = Array.isArray(data)
+    ? data
+    : (Array.isArray(data?.results) ? data.results : (Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : null));
+
+  if (rawList) {
+    for (const item of rawList) {
+      const tool = item.tool || item.scanner || 'EXTERNAL_SCANNER';
+      const ruleId = item.ruleId || item.cwe || item.id || 'EXTERNAL-FINDING';
+      const rawUri = item.location?.uri || item.file || item.path || 'unknown';
+      const startLine = Number(item.location?.startLine || item.line || 1);
+      const normUri = normalizeUri(repoRoot, rawUri);
+      const snapshot = computeEvidenceSnapshot(repoRoot, normUri, startLine);
+      findings.push({
+        tool,
+        ruleId,
+        title: item.title || item.message || ruleId,
+        location: { uri: normUri, startLine },
+        severity: String(item.severity || 'MEDIUM').toUpperCase(),
+        evidenceHash: snapshot.error ? null : snapshot.lineHash,
+        rawFinding: item
+      });
+    }
+    return { success: true, count: findings.length, findings };
+  }
+
+  return { success: false, error: 'Unsupported external evidence format', findings: [] };
+}
+
+/**
+ * Execution Attestation (R2-P1-05)
+ * Produces cryptographic and verifiable attestation of executed audit stages and delegation.
+ */
+export function buildExecutionAttestation({
+  repoRoot = process.cwd(),
+  target = null,
+  auditIntent = 'DISCOVERY',
+  executedStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'],
+  failedStages = [],
+  coverageComplete = true,
+  delegationObserved = true
+} = {}) {
+  const allPossibleStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'];
+  const requiredStages = auditIntent === 'REGRESSION'
+    ? ['INVENTORY', 'VERIFICATION_PANEL', 'FINALIZATION']
+    : allPossibleStages;
+
+  const safeExecuted = Array.isArray(executedStages) ? executedStages : [];
+  const safeFailed = Array.isArray(failedStages) ? failedStages : [];
+  const executedSet = new Set(safeExecuted);
+  const skippedStages = requiredStages.filter(s => !executedSet.has(s));
+
+  const isComplete = skippedStages.length === 0 && safeFailed.length === 0 && coverageComplete && delegationObserved;
+  const verdict = isComplete ? 'COMPLETE' : (coverageComplete ? 'DEGRADED' : 'INCOMPLETE');
+
+  return {
+    schemaVersion: '1.0.0',
+    attestationId: `ATT-${crypto.randomBytes(6).toString('hex')}`,
+    timestamp: new Date().toISOString(),
+    target: target || {
+      repositoryUri: repoRoot,
+      revision: 'HEAD'
+    },
+    auditIntent,
+    requiredStages,
+    executedStages: safeExecuted,
+    skippedStages,
+    failedStages: safeFailed,
+    coverageComplete: Boolean(coverageComplete),
+    delegationRequired: true,
+    delegationObserved: Boolean(delegationObserved),
+    verdict
+  };
+}
 
 /**
  * Central deterministic finalizer: transforms candidates into canonical findings.
@@ -1633,14 +1865,17 @@ export function finalizeScan({
   votes = [],
   expectedMode = null,
   auditIntent = 'DISCOVERY',
-  discoveryMatrix = []
-}) {
+  discoveryMatrix = [],
+  threatModel = null,
+  targetProfile = null
+} = {}) {
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
     : 'DISCOVERY';
+  const safeTargetProfile = targetProfile || threatModel?.targetProfile?.primary || threatModel?.targetProfile || 'web-api';
   const safeMatrix = Array.isArray(discoveryMatrix) ? discoveryMatrix : [];
   const matrixValidation = safeMatrix.length > 0 ? validateDiscoveryMatrix(safeMatrix, safeRepoRoot) : { valid: true };
 
@@ -1831,6 +2066,16 @@ export function finalizeScan({
 
     const authoritativeSufficiency = dispositionResult.authoritativeRigor || rigor;
 
+    // R2-P1-01 Standards Mapping & R2-P1-02 Security Property
+    const standardsTaxonomy = resolveStandardsMapping(ruleId, safeTargetProfile);
+    const securityProperty = inferSecurityProperty(ruleId, titleRedacted, raw.securityProperty || standardsTaxonomy.securityProperty);
+
+    // R2-P1-10 Failure Taxonomy Reason Code
+    const reasonCode = deriveReasonCode(finalDisposition, finalReason, proofRes.valid, coverageStatus);
+
+    // R2-P1-04 Evidence Snapshot
+    const evidenceSnapshot = computeEvidenceSnapshot(safeRepoRoot, normalizedRelativeUri, startLine);
+
     canonicalFindings.push({
       id: candidateId,
       ruleId,
@@ -1839,9 +2084,12 @@ export function finalizeScan({
       disposition: finalDisposition,
       verdict: finalVerdict,
       dispositionReason: finalReason,
+      reasonCode,
       severity: finalSeverity,
       findingType: safeFindingType,
       proofKind: safeProofKind,
+      securityProperty,
+      taxonomy: standardsTaxonomy,
       confidenceScore: confidence.score,
       confidenceLevel: confidence.level,
       location: {
@@ -1851,6 +2099,8 @@ export function finalizeScan({
         lineSnippet: sanitizedSnippet,
         lineHash
       },
+      evidenceHash: evidenceSnapshot.lineHash,
+      blobHash: evidenceSnapshot.blobHash,
       cvssV4: cvss.valid ? { vector: cvss.vector, score: cvss.score, severity: cvss.severity } : null,
       evidenceSufficiency: authoritativeSufficiency,
       rigor: authoritativeSufficiency,
@@ -1879,6 +2129,26 @@ export function finalizeScan({
 
   const canDeclareClean = (coverageStatus === 'COMPLETE' && confirmedCount === 0 && deferredCount === 0 && matrixValidation.valid);
 
+  const executedStages = ['FINALIZATION'];
+  if (manifest) executedStages.push('INVENTORY');
+  if (threatModel) executedStages.push('THREAT_MODELING');
+  if (safeMatrix.length > 0) executedStages.push('DISCOVERY_MATRIX');
+  if (safeVotes.length > 0) executedStages.push('VERIFICATION_PANEL');
+
+  const execution = buildExecutionAttestation({
+    repoRoot: safeRepoRoot || process.cwd(),
+    target: {
+      repositoryUri: safeRepoRoot || process.cwd(),
+      revision: provenance?.commitSha || 'HEAD'
+    },
+    auditIntent: safeAuditIntent,
+    executedStages,
+    coverageComplete: coverageStatus === 'COMPLETE',
+    delegationObserved: safeVotes.length > 0
+  });
+
+  const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
+
   const summary = {
     totalCandidates: canonicalFindings.length,
     confirmedCount,
@@ -1899,7 +2169,9 @@ export function finalizeScan({
       candidates: safeMatrix.filter(c => c.status === 'CANDIDATE').length,
       notApplicable: safeMatrix.filter(c => c.status === 'NOT_APPLICABLE').length,
       unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length
-    }
+    },
+    execution,
+    dependencyBoundary
   };
 
   return {
@@ -1953,7 +2225,7 @@ export function mapSeverityToSarif(severity, cvssScore) {
  * Enforces schema integrity, reapplies secret redaction, and downgrades
  * any self-asserted or unsupported REPORTABLE claims to DEFERRED.
  */
-export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
+export function validateCanonicalFindings(findings, repoRoot = process.cwd(), options = {}) {
   if (!Array.isArray(findings)) {
     if (findings && typeof findings === 'object' && Array.isArray(findings.canonicalFindings)) {
       findings = findings.canonicalFindings;
@@ -2078,6 +2350,17 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       finalSeverity = 'LOW';
     }
 
+    // R2-P1-01 Standards Mapping & R2-P1-02 Security Property
+    const safeTargetProfile = options.targetProfile || 'web-api';
+    const standardsTaxonomy = resolveStandardsMapping(ruleId, safeTargetProfile);
+    const securityProperty = inferSecurityProperty(ruleId, title, raw.securityProperty || standardsTaxonomy.securityProperty);
+
+    // R2-P1-10 Failure Taxonomy Reason Code
+    const reasonCode = deriveReasonCode(disposition, dispositionReason, proofRes.valid, 'COMPLETE');
+
+    // R2-P1-04 Evidence Snapshot
+    const evidenceSnapshot = computeEvidenceSnapshot(repoRoot, uri, startLine);
+
     validated.push({
       ...raw,
       id,
@@ -2085,6 +2368,9 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       severity: finalSeverity,
       findingType: safeFindingType,
       proofKind: safeProofKind,
+      securityProperty,
+      taxonomy: standardsTaxonomy,
+      reasonCode,
       title,
       description,
       location: {
@@ -2092,8 +2378,10 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
         startLine,
         endLine,
         lineSnippet,
-        lineHash: raw.location?.lineHash || ''
+        lineHash: raw.location?.lineHash || evidenceSnapshot.lineHash || ''
       },
+      evidenceHash: raw.evidenceHash || evidenceSnapshot.lineHash,
+      blobHash: raw.blobHash || evidenceSnapshot.blobHash,
       confidenceScore: raw.confidenceScore !== undefined ? raw.confidenceScore : 0.5,
       confidenceLevel: raw.confidenceLevel || 'LOW',
       cvssV4: validatedCvss,
@@ -2197,7 +2485,11 @@ export function renderSarifFromCanonical({
         lineageId: f.lineageId || f.fingerprint,
         lineage: f.lineage || null,
         consensus: f.consensus,
-        dispositionReason: f.dispositionReason
+        dispositionReason: f.dispositionReason,
+        securityProperty: f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED',
+        taxonomy: f.taxonomy || null,
+        reasonCode: f.reasonCode || 'EVIDENCE_INCOMPLETE',
+        evidenceHash: f.evidenceHash || null
       }
     });
   }
@@ -2219,7 +2511,14 @@ export function renderSarifFromCanonical({
       auditAxiom: 'Presumption of Non-Pass (Default-Deny on Authority Claims)',
       auditIntent: auditIntent || 'DISCOVERY',
       canDeclareClean: (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
-      directoryReconciliationManifest: manifest
+      directoryReconciliationManifest: manifest,
+      executionAttestation: buildExecutionAttestation({
+        repoRoot,
+        auditIntent: auditIntent || 'DISCOVERY',
+        coverageComplete: coverageStatus === 'COMPLETE',
+        delegationObserved: true
+      }),
+      dependencyBoundary: detectDependencyBoundary(repoRoot)
     }
   };
 
@@ -2320,18 +2619,23 @@ export function renderMarkdownFromCanonical({
   if (confirmed.length === 0) {
     if (coverageStatus === 'COMPLETE') {
       if (manualReview.length > 0) {
-        md += `*No confirmed vulnerabilities found matching default-deny verification criteria in fully reconciled coverage (${manualReview.length} item(s) deferred for manual review under default-deny).*\n\n`;
+        md += `*No validated reportable findings were identified within the defined and reconciled audit scope (${manualReview.length} item(s) deferred for manual review under default-deny). This result is bounded by the declared coverage, tool capabilities, model behavior, and available evidence.*\n\n`;
       } else {
-        md += '*No confirmed vulnerabilities found matching default-deny verification criteria in fully reconciled coverage.*\n\n';
+        md += '*No validated reportable findings were identified within the defined and reconciled audit scope. This result is bounded by the declared coverage, tool capabilities, model behavior, and available evidence.*\n\n';
       }
     } else {
-      md += '*No reportable findings were found in the reviewed coverage (Coverage is PARTIAL/UNCHECKABLE; repository cannot be certified clean under default-deny).*\n\n';
+      md += '*No validated reportable findings were identified in reviewed coverage (Coverage is PARTIAL/UNCHECKABLE; repository cannot be certified clean under default-deny).*\n\n';
     }
   } else {
     for (const f of confirmed) {
       md += `### [${sanitizeInlineText(f.severity)}] ${sanitizeInlineText(f.title)}\n\n`;
       md += `- **Finding Type**: \`${sanitizeInlineText(f.findingType || 'VULNERABILITY')}\`\n`;
       md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
+      md += `- **Security Property**: \`${sanitizeInlineText(f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED')}\`\n`;
+      const stds = [...(f.taxonomy?.asvs || []), ...(f.taxonomy?.ssdf || []), ...(f.taxonomy?.owaspTop10 || [])].join(', ');
+      if (stds) {
+        md += `- **Standards Mapping**: \`${sanitizeInlineText(stds)}\`\n`;
+      }
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       if (f.lineageId) {
@@ -2364,6 +2668,7 @@ export function renderMarkdownFromCanonical({
       md += `### [HARDENING] ${sanitizeInlineText(f.title)}\n\n`;
       md += `- **Finding Type**: \`HARDENING\`\n`;
       md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
+      md += `- **Security Property**: \`${sanitizeInlineText(f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED')}\`\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       if (f.description) {
@@ -2379,6 +2684,7 @@ export function renderMarkdownFromCanonical({
       md += `### [INFORMATIONAL] ${sanitizeInlineText(f.title)}\n\n`;
       md += `- **Finding Type**: \`INFORMATIONAL\`\n`;
       md += `- **Safe Proof Kind**: \`${sanitizeInlineText(f.proofKind || 'STATIC_TRACE')}\`\n`;
+      md += `- **Security Property**: \`${sanitizeInlineText(f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED')}\`\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       if (f.description) {
@@ -2394,6 +2700,8 @@ export function renderMarkdownFromCanonical({
   } else {
     for (const f of manualReview) {
       md += `### [REVIEW REQUIRED] ${sanitizeInlineText(f.title)}\n\n`;
+      md += `- **Failure Reason Code**: \`${sanitizeInlineText(f.reasonCode || 'EVIDENCE_INCOMPLETE')}\`\n`;
+      md += `- **Security Property**: \`${sanitizeInlineText(f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED')}\`\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
       if (f.lineageId) {

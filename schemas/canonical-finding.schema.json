@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/canonical-finding.schema.json",
+  "title": "Canonical Finding Schema",
+  "type": "object",
+  "required": [
+    "id", "ruleId", "title", "disposition", "verdict", "severity",
+    "findingType", "proofKind", "securityProperty", "location", "consensus",
+    "locationFingerprint", "lineageId"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+    "id": { "type": "string" },
+    "ruleId": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "disposition": { "type": "string", "enum": ["REPORTABLE", "DEFERRED", "SUPPRESSED"] },
+    "verdict": { "type": "string", "enum": ["CONFIRMED", "NEEDS_MANUAL_REVIEW", "FALSE_POSITIVE"] },
+    "dispositionReason": { "type": "string" },
+    "reasonCode": {
+      "type": "string",
+      "enum": [
+        "EVIDENCE_INCOMPLETE",
+        "COVERAGE_PARTIAL",
+        "VERIFIER_TIMEOUT",
+        "ORCHESTRATION_INCOMPLETE",
+        "STALE_EVIDENCE",
+        "SEVERITY_UNRATED",
+        "MODEL_DISAGREEMENT",
+        "PROHIBITED_PROOF",
+        "UNVERIFIED_CLAIM",
+        "AFFIRMATIVELY_VERIFIED",
+        "AFFIRMATIVELY_REFUTED"
+      ]
+    },
+    "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNRATED"] },
+    "findingType": { "type": "string", "enum": ["VULNERABILITY", "HARDENING", "INFORMATIONAL"] },
+    "proofKind": {
+      "type": "string",
+      "enum": [
+        "STATIC_TRACE",
+        "UNIT_TEST",
+        "BENIGN_REPRODUCTION",
+        "CONFIG_EVIDENCE",
+        "DEPENDENCY_EVIDENCE",
+        "EXTERNAL_SCANNER_EVIDENCE",
+        "MANUAL_ATTESTATION"
+      ]
+    },
+    "securityProperty": { "type": "string", "minLength": 1 },
+    "taxonomy": {
+      "type": "object",
+      "properties": {
+        "cwe": { "type": "array", "items": { "type": "string" } },
+        "asvs": { "type": "array", "items": { "type": "string" } },
+        "owaspTop10": { "type": "array", "items": { "type": "string" } },
+        "ssdf": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "location": {
+      "type": "object",
+      "required": ["uri", "startLine"],
+      "properties": {
+        "uri": { "type": "string" },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "lineSnippet": { "type": ["string", "null"] },
+        "lineHash": { "type": "string" }
+      }
+    },
+    "evidenceHash": { "type": ["string", "null"] },
+    "blobHash": { "type": ["string", "null"] },
+    "locationFingerprint": { "type": "string" },
+    "lineageId": { "type": "string" },
+    "consensus": { "type": "object" },
+    "evidenceSufficiency": { "type": "object" },
+    "cvssV4": { "type": ["object", "null"] }
+  }
+}

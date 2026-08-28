@@ -55,7 +55,16 @@ import {
   VALID_FINDING_TYPES,
   validateFindingType,
   VALID_PROOF_KINDS,
-  validateSafeProof
+  validateSafeProof,
+  FAILURE_REASON_CODES,
+  deriveReasonCode,
+  computeEvidenceSnapshot,
+  isEvidenceStale,
+  inferSecurityProperty,
+  ingestExternalEvidence,
+  buildExecutionAttestation,
+  resolveStandardsMapping,
+  detectDependencyBoundary
 } from './finalize-scan.mjs';
 
 
@@ -1494,7 +1503,7 @@ export function runTests() {
     const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
     try {
       // Copy project files (excluding .git) to simulate freshly extracted zip archive
-      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills', 'evals'];
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills', 'evals', 'schemas'];
       for (const item of copyItems) {
         const srcPath = path.resolve(process.cwd(), item);
         if (fs.existsSync(srcPath)) {
@@ -3078,7 +3087,128 @@ export function runTests() {
 
   console.log('✔ 72. R2-P0-11 / 12 Invariant: Finding Type & Safe Defensive Proof Policy.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (72/72).');
+  // 73. R2-P1 Standards Mapping, Security Property, Attack Path 2.0, Evidence Hash, Attestation, Schemas, & Failure Taxonomy
+  // 73.1 R2-P1-01 Standards Mapping Layer & Profile Filtering
+  const stdMapWeb = resolveStandardsMapping('CWE-89', 'web-api');
+  const stdMapCli = resolveStandardsMapping('CWE-89', 'cli');
+  if (!stdMapWeb.cwe.includes('CWE-89') || !stdMapWeb.asvs.some(a => a.includes('5.3.4')) || !stdMapWeb.ssdf.some(s => s.startsWith('PW.7'))) {
+    throw new Error('R2-P1-01 VIOLATION: Web API standards mapping failed to resolve CWE, ASVS, or SSDF');
+  }
+  if (stdMapCli.asvs.length > 0) {
+    throw new Error('R2-P1-01 VIOLATION: CLI profile improperly included ASVS web controls');
+  }
+
+  // 73.2 R2-P1-02 Security Property First
+  const secPropInferred = inferSecurityProperty('CWE-89', 'SQL Injection in Query');
+  const secPropExplicit = inferSecurityProperty('CWE-89', 'SQL Injection', 'CUSTOM_BOUNDARY_INTEGRITY');
+  if (secPropInferred !== 'INPUT_INTEGRITY_QUERY_CONFINEMENT') {
+    throw new Error(`R2-P1-02 VIOLATION: Inferred security property incorrect: got ${secPropInferred}`);
+  }
+  if (secPropExplicit !== 'CUSTOM_BOUNDARY_INTEGRITY') {
+    throw new Error(`R2-P1-02 VIOLATION: Explicit security property was not preserved: got ${secPropExplicit}`);
+  }
+
+  // 73.3 R2-P1-03 Attack Path Schema 2.0
+  const validAp2Payload = {
+    attackPathId: 'AP-TEST-2.0',
+    attackerCapability: 'NETWORK_UNAUTHENTICATED',
+    entrypoint: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, symbol: 'main' },
+    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
+    transformations: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 5, description: 'Pass through helper' }],
+    authorizationBoundary: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Missing check' },
+    defenseChecks: [],
+    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Command execution sink' },
+    impactBoundary: { target: 'host_os', blastRadius: 'remote_code_execution' },
+    preconditions: ['Network connectivity available'],
+    postconditions: ['Arbitrary command executed']
+  };
+  const validatedAp2 = validateAttackPath(validAp2Payload, process.cwd());
+  if (!validatedAp2.valid || validatedAp2.schemaVersion !== '2.0' || !validatedAp2.source.evidenceHash || !validatedAp2.entrypoint) {
+    throw new Error(`R2-P1-03 VIOLATION: Attack path 2.0 validation failed: ${validatedAp2.error}`);
+  }
+
+  // 73.4 R2-P1-04 Evidence Snapshot & Stale Evidence Detection
+  const snap1 = computeEvidenceSnapshot(process.cwd(), 'skills/security-audit/scripts/safe-git.mjs', 1);
+  if (!snap1.exists || !snap1.blobHash || !snap1.lineHash) {
+    throw new Error('R2-P1-04 VIOLATION: computeEvidenceSnapshot failed to generate blobHash and lineHash');
+  }
+  const isStale = isEvidenceStale(snap1, { exists: true, lineHash: 'stale_hash_mismatch' });
+  if (!isStale) {
+    throw new Error('R2-P1-04 VIOLATION: isEvidenceStale failed to detect modified evidence lineHash');
+  }
+  const traversalSnap = computeEvidenceSnapshot(process.cwd(), '../../Windows/win.ini', 1);
+  if (!traversalSnap.error || traversalSnap.exists) {
+    throw new Error('R2-P1-04 VIOLATION: computeEvidenceSnapshot did not reject path traversal');
+  }
+
+  // 73.5 R2-P1-05 Execution Attestation
+  const fullAttestation = buildExecutionAttestation({
+    repoRoot: process.cwd(),
+    executedStages: ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'],
+    coverageComplete: true,
+    delegationObserved: true
+  });
+  const degradedAttestation = buildExecutionAttestation({
+    repoRoot: process.cwd(),
+    executedStages: ['INVENTORY', 'FINALIZATION'],
+    coverageComplete: true,
+    delegationObserved: true
+  });
+  if (fullAttestation.verdict !== 'COMPLETE' || fullAttestation.skippedStages.length !== 0) {
+    throw new Error('R2-P1-05 VIOLATION: Complete attestation did not receive COMPLETE verdict');
+  }
+  if (degradedAttestation.verdict !== 'DEGRADED' || degradedAttestation.skippedStages.length === 0) {
+    throw new Error('R2-P1-05 VIOLATION: Incomplete stage execution was not flagged fail-closed');
+  }
+
+  // 73.6 R2-P1-06 External Tool Evidence Ingestion & R2-P1-07 Dependency Boundary
+  const mockExternalSarif = {
+    version: '2.1.0',
+    runs: [{
+      tool: { driver: { name: 'Semgrep' } },
+      results: [{
+        ruleId: 'semgrep-sqli',
+        message: { text: 'SQL Injection detected' },
+        level: 'error',
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+      }]
+    }]
+  };
+  const ingested = ingestExternalEvidence(mockExternalSarif, process.cwd());
+  if (!ingested.success || ingested.count !== 1 || ingested.findings[0].tool !== 'Semgrep' || !ingested.findings[0].evidenceHash) {
+    throw new Error('R2-P1-06 VIOLATION: ingestExternalEvidence failed to ingest external SARIF evidence');
+  }
+  const depBoundary = detectDependencyBoundary(process.cwd());
+  if (!depBoundary.hasDependencyEvidence || depBoundary.count === 0) {
+    throw new Error('R2-P1-07 VIOLATION: detectDependencyBoundary failed to detect package manifest or lockfile');
+  }
+
+  // 73.7 R2-P1-10 Failure Taxonomy Reason Codes & Profile Filtering Integration
+  const rCode1 = deriveReasonCode('REPORTABLE');
+  const rCode2 = deriveReasonCode('SUPPRESSED');
+  const rCode3 = deriveReasonCode('DEFERRED', 'PROHIBITED_PROOF_VIOLATION detected');
+  const rCode4 = deriveReasonCode('DEFERRED', 'Coverage is partial');
+  const rCode5 = deriveReasonCode('DEFERRED', 'Unproven candidate flow');
+  const rCode6 = deriveReasonCode('DEFERRED', 'orchestration incomplete / skipped stage');
+  const rCode7 = deriveReasonCode('DEFERRED', 'missing severity / unrated vector');
+  if (rCode1 !== 'AFFIRMATIVELY_VERIFIED' || rCode2 !== 'AFFIRMATIVELY_REFUTED' ||
+      rCode3 !== 'PROHIBITED_PROOF' || rCode4 !== 'COVERAGE_PARTIAL' || rCode5 !== 'EVIDENCE_INCOMPLETE' ||
+      rCode6 !== 'ORCHESTRATION_INCOMPLETE' || rCode7 !== 'SEVERITY_UNRATED') {
+    throw new Error('R2-P1-10 VIOLATION: deriveReasonCode produced incorrect reason codes');
+  }
+
+  const cliScan = finalizeScan({
+    candidates: [{ id: 'C1', ruleId: 'CWE-89', title: 'SQLi', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 } }],
+    targetProfile: 'cli',
+    repoRoot: process.cwd()
+  });
+  if (cliScan.canonicalFindings[0].taxonomy.asvs.length !== 0) {
+    throw new Error('R2-P1-01 VIOLATION: finalizeScan leaked web ASVS controls into CLI target profile');
+  }
+
+  console.log('✔ 73. R2-P1 Invariant: Standards Mapping, Security Property, Attack Path 2.0, Evidence Hash, Attestation, Schemas, & Failure Taxonomy.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (73/73).');
 
   } finally {
     gitFixture.cleanup();

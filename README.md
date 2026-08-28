@@ -54,11 +54,21 @@ security-audit/
 │   ├── git-config/                       # 5 大惡意 Git 配置隔離測試
 │   ├── patch-regression/                 # 5 大惡意補丁與陳舊基準測試
 │   └── semantic-benchmark/               # L1.5 配置地面真值基準 (12 決策不變量對照組)
+├── schemas/                              # R2-P1-08 版本化 JSON 綱要 (Draft-07)
+│   ├── scan-manifest.schema.json         # 目錄會計清單綱要
+│   ├── threat-model.schema.json          # 威脅模型綱要
+│   ├── candidate.schema.json             # 候選弱點綱要 (Security Property & Lineage)
+│   ├── verifier-ballot.schema.json       # 檢驗選票綱要 (3-Lens 證據綁定)
+│   ├── canonical-finding.schema.json     # 權威標準發現綱要 (Taxonomy & Reason Code)
+│   └── execution-attestation.schema.json # 執行證明綱要 (階段覆蓋完整性)
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
 └── skills/
     └── security-audit/
         ├── SKILL.md                      # 主技能入口與工作流調度
+        ├── standards/                    # R2-P1-01 標準映射層
+        │   ├── standards-map.json        # CWE -> ASVS 5.0 / SSDF / OWASP 映射
+        │   └── applicability-profiles.json # 專案類型適用性設定檔
         ├── jobs/                         # 6 大標準工作合約規格
         │   ├── scan.md                   # 全庫會計審查合約
         │   ├── review.md                 # 差異與 pre-image 審查合約
@@ -68,19 +78,20 @@ security-audit/
         │   └── verify-fix.md             # 補丁驗證與防禦不變量確認合約
         ├── references/
         │   ├── discovery.md              # 9 大元件 × 10 大弱點家族矩陣
-        │   ├── threat-modeling.md        # 目錄會計核算制度與 CVSS v4.0 Base Metric Vector (11 維)
-        │   ├── swarm-consensus.md        # 彈性子代理滑動池、4 大角色雙盲投票
-        │   ├── verifier-protocol.md      # 證據完備性啟發式指標 (Evidence Sufficiency)、機密脫敏與防投毒 Nonce
-        │   ├── finding-lineage.md        # 雙指紋架構 (Fingerprint v2)、Lineage ID 與 Novelty 狀態機
-        │   ├── safe-proof-policy.md      # 弱點分類 (VULNERABILITY/HARDENING/INFORMATIONAL) 與安全防禦證明政策 (proofKind)
-        │   └── patching-jail.md          # 補丁拘束器與雙軌交付
+        │   ├── patching-jail.md          # 補丁監獄邊界規格
+        │   ├── swarm-consensus.md        # 3-Lens 連取共識規範
+        │   ├── threat-modeling.md        # 威脅建模與 11 維向量基準
+        │   ├── verifier-protocol.md      # 檢驗協議與證據綁定不變量
+        │   ├── finding-lineage.md        # 弱點血統追蹤與指紋架構
+        │   └── safe-proof-policy.md      # 安全防禦證明政策與禁止指令
         └── scripts/
-            ├── safe-git.mjs              # 防禦型 Git Provenance 與 Pre-image 提取
-            ├── finalize-scan.mjs         # 確定性 Security Authority 與 Canonical Finalizer
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 72 項不變量測試
+            ├── safe-git.mjs              # 強化安全 Git 執行隔離器
+            ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
+            ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 73 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
-            ├── validate-attack-path.mjs  # 攻擊路徑 Schema 校驗與證明缺口 (Proof Gap) 偵測
+            ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
             ├── validate-patch.mjs        # 補丁語法、Patch Jail、過期檢測與修復驗證
             ├── run-evals.mjs             # 50 題確定性安全不變量與對抗迴歸套件
             ├── run-semantic-eval.mjs     # L1.5 決策地面真值基準測試 (Disposition Ground-Truth)
@@ -94,7 +105,7 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 72 項全域安全不變量自動化測試：
+# 執行 73 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
@@ -109,7 +120,6 @@ npm run test:discovery
 # 執行多輪隨機發現穩定度基準測試：
 npm run test:stability
 
-# 執行 Section 24 發行閘門檢驗 (檢查 36 項規格、21 項安全不變量與零外部依賴)：
+# 執行 Section 24 發行閘門檢驗 (檢查 45 項規格、23 項安全不變量與零外部依賴)：
 npm run check:release
 ```
-

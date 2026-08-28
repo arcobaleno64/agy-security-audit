@@ -6,6 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 /**
  * Validates a single location node (source, sink, step).
@@ -43,6 +44,7 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
 
   // R1-P1-01: Physical verification against disk and line count bounds
   const locationType = node.locationType || 'current-tree';
+  let evidenceHash = null;
 
   if (locationType === 'current-tree' || locationType === 'generated-validation-artifact') {
     if (!fs.existsSync(resolved)) {
@@ -74,10 +76,13 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
     // Verify line <= actual file line count (empty file has lineCount 0)
     try {
       const content = fs.readFileSync(resolved, 'utf8');
-      const lineCount = content.length === 0 ? 0 : content.split('\n').length;
+      const lines = content.split('\n');
+      const lineCount = content.length === 0 ? 0 : lines.length;
       if (line > lineCount) {
         return { valid: false, error: `${label} line ${line} exceeds file line count (${lineCount}) in '${uri}'` };
       }
+      const lineContent = lines[Math.max(0, Math.min(lines.length - 1, line - 1))] || '';
+      evidenceHash = crypto.createHash('sha256').update(lineContent.trim(), 'utf8').digest('hex');
     } catch (err) {
       return { valid: false, error: `${label} cannot read file content: '${uri}' (${err.message})` };
     }
@@ -86,15 +91,33 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
     if (typeof node.preimageContent !== 'string' || node.preimageContent.length === 0) {
       return { valid: false, error: `${label} baseline-preimage requires non-empty 'preimageContent' for '${uri}'` };
     }
-    const lineCount = node.preimageContent.split('\n').length;
+    const lines = node.preimageContent.split('\n');
+    const lineCount = lines.length;
     if (line > lineCount) {
       return { valid: false, error: `${label} line ${line} exceeds baseline preimage line count (${lineCount}) in '${uri}'` };
     }
+    const lineContent = lines[Math.max(0, Math.min(lines.length - 1, line - 1))] || '';
+    evidenceHash = crypto.createHash('sha256').update(lineContent.trim(), 'utf8').digest('hex');
   } else {
     return { valid: false, error: `${label} unknown locationType '${locationType}'` };
   }
 
-  return { valid: true, uri: uri.trim(), line, description: node.description || '', locationType };
+  if (node.evidenceHash && evidenceHash && node.evidenceHash !== evidenceHash) {
+    return {
+      valid: false,
+      error: `${label} evidenceHash mismatch: evidence may be stale or tampered (expected ${evidenceHash}, got ${node.evidenceHash})`
+    };
+  }
+
+  return {
+    valid: true,
+    uri: uri.trim(),
+    line,
+    description: node.description || '',
+    locationType,
+    symbol: node.symbol || null,
+    evidenceHash
+  };
 }
 
 /**
@@ -145,13 +168,94 @@ export function validateAttackPath(attackPath, repoRoot = process.cwd()) {
     ? attackPath.unmitigatedInvariant.trim()
     : null;
 
+  // 6. Schema 2.0: Attacker Capability, Entrypoint, Authorization Boundary, Defense Checks, Impact Boundary, Postconditions
+  const validCapabilities = new Set([
+    'NETWORK_UNAUTHENTICATED',
+    'ADJACENT_NETWORK',
+    'LOCAL_UNPRIVILEGED',
+    'AUTHENTICATED_USER',
+    'COMPROMISED_DEPENDENCY'
+  ]);
+  let attackerCapability = 'NETWORK_UNAUTHENTICATED';
+  if (attackPath.attackerCapability !== undefined) {
+    if (typeof attackPath.attackerCapability !== 'string' || !validCapabilities.has(attackPath.attackerCapability.toUpperCase().trim())) {
+      return { valid: false, error: `Invalid attackerCapability: '${attackPath.attackerCapability}'` };
+    }
+    attackerCapability = attackPath.attackerCapability.toUpperCase().trim();
+  }
+
+  let entrypoint = null;
+  if (attackPath.entrypoint) {
+    const entryValidation = validatePathLocation(attackPath.entrypoint, repoRoot, 'Entrypoint');
+    if (!entryValidation.valid) {
+      return { valid: false, error: entryValidation.error };
+    }
+    entrypoint = entryValidation;
+  }
+
+  let authorizationBoundary = null;
+  if (attackPath.authorizationBoundary) {
+    const authzValidation = validatePathLocation(attackPath.authorizationBoundary, repoRoot, 'AuthorizationBoundary');
+    if (!authzValidation.valid) {
+      return { valid: false, error: authzValidation.error };
+    }
+    authorizationBoundary = authzValidation;
+  }
+
+  const defenseChecks = [];
+  if (attackPath.defenseChecks !== undefined) {
+    if (!Array.isArray(attackPath.defenseChecks)) {
+      return { valid: false, error: "'defenseChecks' must be an array" };
+    }
+    for (let i = 0; i < attackPath.defenseChecks.length; i++) {
+      const defVal = validatePathLocation(attackPath.defenseChecks[i], repoRoot, `DefenseCheck[${i}]`);
+      if (!defVal.valid) {
+        return { valid: false, error: defVal.error };
+      }
+      defenseChecks.push(defVal);
+    }
+  }
+
+  const transformations = [];
+  if (attackPath.transformations !== undefined) {
+    if (!Array.isArray(attackPath.transformations)) {
+      return { valid: false, error: "'transformations' must be an array" };
+    }
+    for (let i = 0; i < attackPath.transformations.length; i++) {
+      const transVal = validatePathLocation(attackPath.transformations[i], repoRoot, `Transformation[${i}]`);
+      if (!transVal.valid) {
+        return { valid: false, error: transVal.error };
+      }
+      transformations.push(transVal);
+    }
+  }
+
+  const impactBoundary = (attackPath.impactBoundary && typeof attackPath.impactBoundary === 'object')
+    ? {
+        target: attackPath.impactBoundary.target || 'target_system',
+        blastRadius: attackPath.impactBoundary.blastRadius || 'component_local'
+      }
+    : null;
+
+  const postconditions = Array.isArray(attackPath.postconditions)
+    ? attackPath.postconditions.map(String)
+    : [];
+
   return {
     valid: true,
+    schemaVersion: '2.0',
     attackPathId: attackPath.attackPathId || attackPath.id || 'AP-UNKNOWN',
+    attackerCapability,
+    entrypoint,
     source: sourceValidation,
+    transformations,
+    authorizationBoundary,
+    defenseChecks,
     sink: sinkValidation,
+    impactBoundary,
     steps,
     preconditions,
+    postconditions,
     exploitabilityPrerequisites,
     unmitigatedInvariant,
     error: null
