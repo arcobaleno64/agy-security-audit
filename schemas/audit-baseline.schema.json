@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/audit-baseline.schema.json",
+  "title": "Audit Baseline Schema",
+  "type": "object",
+  "required": [
+    "schemaVersion", "toolVersion", "targetRevision", "scopeFingerprint",
+    "surfaceFingerprint", "threatModelFingerprint", "coverageFingerprint",
+    "findingLineageIds", "completedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+    "toolVersion": { "type": "string" },
+    "targetRevision": { "type": "string" },
+    "scopeFingerprint": { "type": "string" },
+    "surfaceFingerprint": { "type": "string" },
+    "threatModelFingerprint": { "type": "string" },
+    "coverageFingerprint": { "type": "string" },
+    "findingLineageIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "canonicalFindingsSummary": {
+      "type": "object"
+    },
+    "completedAt": { "type": "string" }
+  }
+}

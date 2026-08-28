@@ -74,6 +74,26 @@
     "lineageId": { "type": "string" },
     "consensus": { "type": "object" },
     "evidenceSufficiency": { "type": "object" },
-    "cvssV4": { "type": ["object", "null"] }
+    "cvssV4": { "type": ["object", "null"] },
+    "defectManagement": {
+      "type": "object",
+      "properties": {
+        "rootCause": { "type": "string" },
+        "missingControl": { "type": "string" },
+        "affectedPattern": { "type": "string" },
+        "preventiveAction": { "type": "string" }
+      }
+    },
+    "modelProvenance": {
+      "type": "object",
+      "properties": {
+        "modelProvider": { "type": "string" },
+        "modelIdentifier": { "type": "string" },
+        "executionDate": { "type": "string" },
+        "toolVersion": { "type": "string" },
+        "promptContractVersion": { "type": "string" },
+        "systemPromptIntegrity": { "type": "string", "enum": ["VERIFIED", "UNKNOWN"] }
+      }
+    }
   }
 }

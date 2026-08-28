@@ -40,7 +40,9 @@ import {
   ingestExternalEvidence,
   buildExecutionAttestation,
   resolveStandardsMapping,
-  detectDependencyBoundary
+  detectDependencyBoundary,
+  inferDefectManagement,
+  buildAuditBaseline
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
@@ -48,7 +50,7 @@ import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './bui
 import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
-import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns } from './run-stability-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability } from './run-stability-eval.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -85,12 +87,14 @@ const REQUIRED_FILES = [
   'skills/security-audit/references/verifier-protocol.md',
   'skills/security-audit/references/finding-lineage.md',
   'skills/security-audit/references/safe-proof-policy.md',
+  'skills/security-audit/references/model-independence.md',
   'schemas/scan-manifest.schema.json',
   'schemas/threat-model.schema.json',
   'schemas/candidate.schema.json',
   'schemas/verifier-ballot.schema.json',
   'schemas/canonical-finding.schema.json',
   'schemas/execution-attestation.schema.json',
+  'schemas/audit-baseline.schema.json',
   'agents/threat-modeler.md',
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',
@@ -963,14 +967,15 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           throw new Error('deriveReasonCode produced non-standard reason codes');
         }
 
-        // 4. Validate all 6 schemas in schemas/ are valid JSON and define schemaVersion
+        // 4. Validate all 7 schemas in schemas/ are valid JSON and define schemaVersion
         const schemaFiles = [
           'scan-manifest.schema.json',
           'threat-model.schema.json',
           'candidate.schema.json',
           'verifier-ballot.schema.json',
           'canonical-finding.schema.json',
-          'execution-attestation.schema.json'
+          'execution-attestation.schema.json',
+          'audit-baseline.schema.json'
         ];
         for (const file of schemaFiles) {
           const fullPath = path.resolve(repoRoot, 'schemas', file);
@@ -1059,6 +1064,56 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         if (finalizedNoVotes.summary.execution.verdict === 'COMPLETE' ||
             !finalizedNoVotes.summary.execution.skippedStages.includes('VERIFICATION_PANEL')) {
           throw new Error('finalizeScan failed to reflect skipped verification stage in execution attestation');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-24',
+      name: 'Audit Baseline, Defect Management, Model Provenance, & Stability Benchmarks Invariant',
+      check: () => {
+        // 1. buildAuditBaseline generates deterministic fingerprints
+        const testCand = {
+          id: 'INV-24-CAND',
+          lineageId: 'LIN-INV-24',
+          ruleId: 'CWE-89',
+          title: 'SQL Injection',
+          disposition: 'REPORTABLE',
+          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+        };
+        const baseline = buildAuditBaseline({
+          repoRoot,
+          targetRevision: 'HEAD',
+          canonicalFindings: [testCand],
+          manifest: { files: [{ path: 'skills/security-audit/scripts/safe-git.mjs', isScanned: true }] },
+          threatModel: { components: [{ name: 'Git' }], trustBoundaries: [] }
+        });
+        if (!baseline.scopeFingerprint || !baseline.threatModelFingerprint || !baseline.findingLineageIds.includes('LIN-INV-24')) {
+          throw new Error('buildAuditBaseline failed to generate valid baseline fingerprints');
+        }
+
+        // 2. inferDefectManagement generates structured rootCause and preventiveAction
+        const dmSql = inferDefectManagement('CWE-89', 'SQL Injection in Query');
+        const dmExec = inferDefectManagement('CWE-78', 'Command Injection via spawn');
+        if (dmSql.rootCause !== 'UNCONFINED_DYNAMIC_QUERY_CONSTRUCTION' || dmExec.rootCause !== 'UNSAFE_PROCESS_EXECUTION') {
+          throw new Error(`inferDefectManagement returned unexpected root causes: ${dmSql.rootCause}, ${dmExec.rootCause}`);
+        }
+
+        // 3. finalizeScan integration: attaches defectManagement, modelProvenance, and baseline
+        const finalized = finalizeScan({
+          candidates: [testCand],
+          repoRoot
+        });
+        if (!finalized.baseline || !finalized.modelProvenance || finalized.modelProvenance.systemPromptIntegrity !== 'UNKNOWN') {
+          throw new Error('finalizeScan failed to attach baseline and model provenance');
+        }
+        if (finalized.canonicalFindings[0].defectManagement.rootCause !== 'UNCONFINED_DYNAMIC_QUERY_CONSTRUCTION') {
+          throw new Error('finalizeScan failed to attach defectManagement to canonical finding');
+        }
+
+        // 4. evaluateCorpusStability evaluates safe corpus, vuln corpus, and remediated pairs
+        const corpus = evaluateCorpusStability(repoRoot);
+        if (corpus.corpusA.validatedVulnerabilities !== 0 || corpus.metrics.postFixRediscoveryRate !== 0.0) {
+          throw new Error('evaluateCorpusStability detected false positives or regression in safe/remediated corpora');
         }
       }
     }

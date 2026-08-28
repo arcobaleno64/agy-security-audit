@@ -276,7 +276,7 @@ export function inferSecurityProperty(ruleId = '', title = '', explicitProperty 
     return std.securityProperty;
   }
   const combined = `${ruleId} ${title}`.toLowerCase();
-  if (/authz|access|tenant|idor|ownership/i.test(combined)) return 'AUTHORIZATION_CONFINEMENT';
+  if (/auth|access|tenant|idor|ownership/i.test(combined)) return 'AUTHORIZATION_CONFINEMENT';
   if (/command|exec|spawn|process|subshell/i.test(combined)) return 'PROCESS_EXECUTION_INTEGRITY';
   if (/sqli|sql|injection|query/i.test(combined)) return 'INPUT_INTEGRITY_QUERY_CONFINEMENT';
   if (/traversal|path|file/i.test(combined)) return 'FILESYSTEM_CONTAINMENT';
@@ -285,6 +285,137 @@ export function inferSecurityProperty(ruleId = '', title = '', explicitProperty 
   if (/xss|script/i.test(combined)) return 'CLIENT_CONTEXT_ISOLATION';
   if (/deserializ|eval|unpickle/i.test(combined)) return 'OBJECT_INSTANTIATION_INTEGRITY';
   return 'SECURITY_PROPERTY_UNSPECIFIED';
+}
+
+/**
+ * Infers root cause and preventive action for verified findings (NIST SSDF RV.3 / SAMM Defect Management) (R2-P2-06).
+ */
+export function inferDefectManagement(ruleId = '', title = '', securityProperty = '', taxonomy = {}) {
+  const combined = `${ruleId} ${title} ${securityProperty}`.toLowerCase();
+
+  let rootCause = 'INSUFFICIENT_CONTROL_DEFENSE';
+  let preventiveAction = 'Establish automated architectural validation and defensive assertions.';
+
+  if (/auth|access|tenant|idor|ownership/i.test(combined)) {
+    rootCause = 'BROKEN_AUTHORIZATION_BARRIER';
+    preventiveAction = 'Enforce affirmative, policy-based authorization barriers at every service and handler boundary.';
+  } else if (/command|exec|spawn|process|subshell/i.test(combined)) {
+    rootCause = 'UNSAFE_PROCESS_EXECUTION';
+    preventiveAction = 'Eliminate shell interpolation; invoke process execution APIs using strict argument vectors.';
+  } else if (/sqli|sql|injection|query/i.test(combined)) {
+    rootCause = 'UNCONFINED_DYNAMIC_QUERY_CONSTRUCTION';
+    preventiveAction = 'Mandate parameterized queries or prepared statements; ban dynamic string concatenation in query builders.';
+  } else if (/traversal|path|file/i.test(combined)) {
+    rootCause = 'UNCONFINED_PATH_RESOLUTION';
+    preventiveAction = 'Canonicalize target file paths using realpath and assert containment within authorized root boundary.';
+  } else if (/ssrf|webhook|egress/i.test(combined)) {
+    rootCause = 'UNRESTRICTED_NETWORK_EGRESS';
+    preventiveAction = 'Restrict outbound HTTP/network requests via strict URL whitelisting and private IP range filtering.';
+  } else if (/secret|token|password|credential/i.test(combined)) {
+    rootCause = 'HARDCODED_AUTHENTICATION_CREDENTIAL';
+    preventiveAction = 'Extract credentials into a cryptographically secured secrets manager and introduce pre-commit scanning.';
+  } else if (/xss|script/i.test(combined)) {
+    rootCause = 'UNSANITIZED_CLIENT_OUTPUT';
+    preventiveAction = 'Apply context-aware output encoding or template engines with automatic HTML escaping enabled.';
+  } else if (/deserializ|eval|unpickle/i.test(combined)) {
+    rootCause = 'UNTRUSTED_OBJECT_INSTANTIATION';
+    preventiveAction = 'Replace dynamic serialization mechanisms with schema-validated, type-safe data formats.';
+  }
+
+  const missingControl = (taxonomy && Array.isArray(taxonomy.ssdf) && taxonomy.ssdf.length > 0)
+    ? `NIST-SSDF-${taxonomy.ssdf[0]}`
+    : ((taxonomy && Array.isArray(taxonomy.asvs) && taxonomy.asvs.length > 0) ? `OWASP-ASVS-${taxonomy.asvs[0]}` : 'NIST-SSDF-PW.7.1');
+
+  return {
+    rootCause,
+    missingControl,
+    affectedPattern: title || ruleId,
+    preventiveAction
+  };
+}
+
+/**
+ * Builds an audit baseline artifact for tracking finding lineage and regression convergence (R2-P2-05).
+ */
+export function buildAuditBaseline({
+  repoRoot = process.cwd(),
+  targetRevision = 'HEAD',
+  canonicalFindings = [],
+  threatModel = null,
+  manifest = null,
+  provenance = null
+} = {}) {
+  const safeRepoRoot = path.resolve(repoRoot);
+  const rev = targetRevision || provenance?.commitSha || 'HEAD';
+
+  // 1. Scope fingerprint: deterministic hash of all scanned relative paths
+  let scannedFiles = [];
+  if (manifest) {
+    if (Array.isArray(manifest.entries)) {
+      scannedFiles = manifest.entries
+        .filter(e => !e.status || e.status.startsWith('SCANNED') || e.isScanned !== false)
+        .map(e => e.path || e.uri)
+        .filter(Boolean);
+    } else if (Array.isArray(manifest.files)) {
+      scannedFiles = manifest.files
+        .filter(f => f.isScanned !== false)
+        .map(f => f.path || f.uri)
+        .filter(Boolean);
+    } else if (Array.isArray(manifest.changedFiles)) {
+      scannedFiles = manifest.changedFiles
+        .map(f => f.path || f.uri)
+        .filter(Boolean);
+    }
+  }
+  scannedFiles.sort();
+  const scopeHash = crypto.createHash('sha256').update(scannedFiles.join('\n'), 'utf8').digest('hex');
+
+  // 2. Surface fingerprint: entrypoints, frameworks, and manifests
+  const frameworks = (threatModel && Array.isArray(threatModel.frameworks)) ? threatModel.frameworks.slice().sort() : [];
+  const entrypoints = (threatModel && Array.isArray(threatModel.entrypoints)) ? threatModel.entrypoints.map(e => e.path || e).sort() : [];
+  const surfaceHash = crypto.createHash('sha256').update([...frameworks, ...entrypoints].join('\n'), 'utf8').digest('hex');
+
+  // 3. Threat model fingerprint: components & boundaries
+  const components = (threatModel && Array.isArray(threatModel.components)) ? threatModel.components.map(c => c.name || c).sort() : [];
+  const boundaries = (threatModel && Array.isArray(threatModel.trustBoundaries)) ? threatModel.trustBoundaries.map(b => b.boundary || b.name || b).filter(Boolean).sort() : [];
+  const tmHash = crypto.createHash('sha256').update([...components, ...boundaries].join('\n'), 'utf8').digest('hex');
+
+  // 4. Coverage fingerprint: directories & exclusion reasons
+  let dirs = [];
+  if (manifest) {
+    if (Array.isArray(manifest.entries)) {
+      dirs = manifest.entries.map(e => `${e.path}:${e.status}`).filter(Boolean);
+    } else if (Array.isArray(manifest.directories)) {
+      dirs = manifest.directories.map(d => `${d.path}:${d.status}`).filter(Boolean);
+    }
+  }
+  dirs.sort();
+  const covHash = crypto.createHash('sha256').update(dirs.join('\n'), 'utf8').digest('hex');
+
+  // 5. Finding lineage IDs
+  const safeFindings = Array.isArray(canonicalFindings) ? canonicalFindings : [];
+  const findingLineageIds = safeFindings
+    .map(f => f.lineageId || f.id)
+    .filter(Boolean)
+    .sort();
+
+  return {
+    schemaVersion: '1.0.0',
+    toolVersion: '1.0.0',
+    targetRevision: rev,
+    scopeFingerprint: scopeHash,
+    surfaceFingerprint: surfaceHash,
+    threatModelFingerprint: tmHash,
+    coverageFingerprint: covHash,
+    findingLineageIds,
+    canonicalFindingsSummary: {
+      total: safeFindings.length,
+      reportable: safeFindings.filter(f => f.disposition === 'REPORTABLE').length,
+      deferred: safeFindings.filter(f => f.disposition === 'DEFERRED').length,
+      suppressed: safeFindings.filter(f => f.disposition === 'SUPPRESSED').length
+    },
+    completedAt: new Date().toISOString()
+  };
 }
 
 /**
@@ -1867,7 +1998,8 @@ export function finalizeScan({
   auditIntent = 'DISCOVERY',
   discoveryMatrix = [],
   threatModel = null,
-  targetProfile = null
+  targetProfile = null,
+  modelProvenance = null
 } = {}) {
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
@@ -1876,6 +2008,14 @@ export function finalizeScan({
     ? String(auditIntent).toUpperCase()
     : 'DISCOVERY';
   const safeTargetProfile = targetProfile || threatModel?.targetProfile?.primary || threatModel?.targetProfile || 'web-api';
+  const safeModelProvenance = {
+    modelProvider: modelProvenance?.modelProvider || 'antigravity-orchestrator',
+    modelIdentifier: modelProvenance?.modelIdentifier || 'unknown',
+    executionDate: new Date().toISOString(),
+    toolVersion: '1.0.0',
+    promptContractVersion: '1.0.0',
+    systemPromptIntegrity: modelProvenance?.systemPromptIntegrity || 'UNKNOWN'
+  };
   const safeMatrix = Array.isArray(discoveryMatrix) ? discoveryMatrix : [];
   const matrixValidation = safeMatrix.length > 0 ? validateDiscoveryMatrix(safeMatrix, safeRepoRoot) : { valid: true };
 
@@ -2076,6 +2216,9 @@ export function finalizeScan({
     // R2-P1-04 Evidence Snapshot
     const evidenceSnapshot = computeEvidenceSnapshot(safeRepoRoot, normalizedRelativeUri, startLine);
 
+    // R2-P2-06 Defect Management (NIST SSDF RV.3 / SAMM)
+    const defectManagement = inferDefectManagement(ruleId, titleRedacted, securityProperty, standardsTaxonomy);
+
     canonicalFindings.push({
       id: candidateId,
       ruleId,
@@ -2090,6 +2233,8 @@ export function finalizeScan({
       proofKind: safeProofKind,
       securityProperty,
       taxonomy: standardsTaxonomy,
+      defectManagement,
+      modelProvenance: safeModelProvenance,
       confidenceScore: confidence.score,
       confidenceLevel: confidence.level,
       location: {
@@ -2149,6 +2294,15 @@ export function finalizeScan({
 
   const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
 
+  const baseline = buildAuditBaseline({
+    repoRoot: safeRepoRoot || process.cwd(),
+    targetRevision: provenance?.commitSha || 'HEAD',
+    canonicalFindings,
+    threatModel,
+    manifest,
+    provenance
+  });
+
   const summary = {
     totalCandidates: canonicalFindings.length,
     confirmedCount,
@@ -2171,7 +2325,9 @@ export function finalizeScan({
       unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length
     },
     execution,
-    dependencyBoundary
+    dependencyBoundary,
+    baseline,
+    modelProvenance: safeModelProvenance
   };
 
   return {
@@ -2183,7 +2339,9 @@ export function finalizeScan({
     provenance: provenance || getHardenedGitProvenance(repoRoot),
     canonicalFindings,
     auditIntent: safeAuditIntent,
-    discoveryMatrix: safeMatrix
+    discoveryMatrix: safeMatrix,
+    baseline,
+    modelProvenance: safeModelProvenance
   };
 
 }
@@ -2361,6 +2519,17 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd(), op
     // R2-P1-04 Evidence Snapshot
     const evidenceSnapshot = computeEvidenceSnapshot(repoRoot, uri, startLine);
 
+    // R2-P2-06 Defect Management & R2-P2-04 Model Provenance
+    const defectManagement = raw.defectManagement || inferDefectManagement(ruleId, title, securityProperty, standardsTaxonomy);
+    const modelProvenance = raw.modelProvenance || {
+      modelProvider: options.modelProvider || 'antigravity-orchestrator',
+      modelIdentifier: options.modelIdentifier || 'unknown',
+      executionDate: new Date().toISOString(),
+      toolVersion: '1.0.0',
+      promptContractVersion: '1.0.0',
+      systemPromptIntegrity: 'UNKNOWN'
+    };
+
     validated.push({
       ...raw,
       id,
@@ -2370,6 +2539,8 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd(), op
       proofKind: safeProofKind,
       securityProperty,
       taxonomy: standardsTaxonomy,
+      defectManagement,
+      modelProvenance,
       reasonCode,
       title,
       description,
@@ -2488,6 +2659,8 @@ export function renderSarifFromCanonical({
         dispositionReason: f.dispositionReason,
         securityProperty: f.securityProperty || 'SECURITY_PROPERTY_UNSPECIFIED',
         taxonomy: f.taxonomy || null,
+        defectManagement: f.defectManagement || null,
+        modelProvenance: f.modelProvenance || null,
         reasonCode: f.reasonCode || 'EVIDENCE_INCOMPLETE',
         evidenceHash: f.evidenceHash || null
       }
@@ -2538,7 +2711,8 @@ export function renderMarkdownFromCanonical({
   coverageStatus = 'COMPLETE',
   provenance = null,
   repoRoot = process.cwd(),
-  auditIntent = 'DISCOVERY'
+  auditIntent = 'DISCOVERY',
+  modelProvenance = null
 }) {
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
@@ -2610,7 +2784,12 @@ export function renderMarkdownFromCanonical({
   md += `- **Advisory Hardening Opportunities**: ${hardening.length}\n`;
   md += `- **Informational Security Notes**: ${informational.length}\n`;
   md += `- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: ${manualReview.length}\n`;
-  md += `- **Affirmatively Refuted (Suppressed)**: ${falsePositives.length}\n\n`;
+  md += `- **Affirmatively Refuted (Suppressed)**: ${falsePositives.length}\n`;
+  const prov = modelProvenance || safeFindings.find(f => f.modelProvenance)?.modelProvenance;
+  if (prov) {
+    md += `- **Model Behavior Provenance**: Provider: \`${sanitizeInlineText(prov.modelProvider || 'antigravity-orchestrator')}\` | Model: \`${sanitizeInlineText(prov.modelIdentifier || 'unknown')}\` | Prompt Integrity: \`${sanitizeInlineText(prov.systemPromptIntegrity || 'UNKNOWN')}\`\n`;
+  }
+  md += '\n';
 
   let sectionNum = 3;
 
@@ -2654,6 +2833,12 @@ export function renderMarkdownFromCanonical({
       const suffScore3 = suff3?.score !== undefined ? suff3.score : 'N/A';
       md += `- **Evidence Sufficiency**: \`${suffScore3}\` (${suffLevel3}) [Internal Heuristic]\n`;
       md += `- **Verifier Consensus**: ${f.consensus.supports}/${f.consensus.totalVotes} votes support (unanimous=${f.consensus.unanimous})\n`;
+      if (f.defectManagement) {
+        md += `- **Defect Management**: Root Cause: \`${sanitizeInlineText(f.defectManagement.rootCause || 'INSUFFICIENT_CONTROL')}\` | Control: \`${sanitizeInlineText(f.defectManagement.missingControl || 'NIST-SSDF-PW.7.1')}\` | Preventive Action: ${sanitizeInlineText(f.defectManagement.preventiveAction || 'None')}\n`;
+      }
+      if (f.modelProvenance) {
+        md += `- **Model Provenance**: \`${sanitizeInlineText(f.modelProvenance.modelProvider || 'antigravity')}/${sanitizeInlineText(f.modelProvenance.modelIdentifier || 'unknown')}\` (Prompt Integrity: \`${sanitizeInlineText(f.modelProvenance.systemPromptIntegrity || 'UNKNOWN')}\`)\n`;
+      }
       md += `\n**Description**:\n${sanitizeBlockText(f.description)}\n\n`;
       if (f.location.lineSnippet) {
         md += `**Code Reference**:\n\`\`\`\n${f.location.lineSnippet}\n\`\`\`\n\n`;

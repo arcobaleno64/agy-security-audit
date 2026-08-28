@@ -88,7 +88,7 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 73 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 74 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
@@ -96,8 +96,8 @@ security-audit/
             ├── run-evals.mjs             # 50 題確定性安全不變量與對抗迴歸套件
             ├── run-semantic-eval.mjs     # L1.5 決策地面真值基準測試 (Disposition Ground-Truth)
             ├── run-discovery-eval.mjs    # 真實代理發現評測套件 (Candidate TP/FP/FN/Recall/Precision)
-            ├── run-stability-eval.mjs    # 多輪隨機發現穩定度基準 (Jaccard 相似度與再現率統計)
-            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (100% 規格無殘留驗證)
+            ├── run-stability-eval.mjs    # 多輪隨機發現穩定度基準 (3 語料庫 Jaccard 相似度與再現率統計)
+            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (47 規格 24 不變量驗證)
 ```
 
 ---
@@ -105,7 +105,7 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 73 項全域安全不變量自動化測試：
+# 執行 74 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
@@ -117,9 +117,28 @@ npm run test:semantic
 # 執行真實代理發現評測基準測試：
 npm run test:discovery
 
-# 執行多輪隨機發現穩定度基準測試：
+# 執行多輪隨機發現穩定度基準測試 (3 種標準語料庫)：
 npm run test:stability
 
-# 執行 Section 24 發行閘門檢驗 (檢查 45 項規格、23 項安全不變量與零外部依賴)：
+# 執行 Section 24 發行閘門檢驗 (檢查 47 項規格、24 項安全不變量與零外部依賴)：
 npm run check:release
 ```
+
+---
+
+## 公開基準宣稱政策 (Public Benchmark Claims Policy - R2-P2-02)
+
+本工具嚴格遵循誠實揭露原則，不進行誇大或誤導性宣稱：
+- **不宣稱「100% 準確率」或「絕對無漏洞」**：Clean 審查結果僅代表在**宣告範圍內完成定義覆蓋**、未發現具備驗證證據之可報告問題，並非全域安全證明。
+- **測試集透明度揭露**：
+  - **確定性安全不變量與對抗迴歸套件**：50 案例（覆蓋 8 種邊界威脅），驗證確定性規則與防禦邊界（Invariant Rate: 100%）。
+  - **L1.5 處置決策地面真值基準**：12 案例（8 漏洞，4 安全防護），評測 Finalizer 決策邏輯，不代表真實 LLM 隨機發現率。
+  - **真實代理發現評測**：8 案例，評測發現候選之 TP/FP/FN、精確率與召回率。
+  - **隨機發現穩定度基準**：跨三種標準語料庫（Corpus A 安全集、Corpus B 漏洞集、Corpus C 修復對）執行多輪評測，計算 Finding-Set Jaccard 相似度與再現率。
+- **模型無關架構**：所有代理契約均採用資料架構與 JSON Schema 進行嚴格規格化，協調器與裁決核心不依賴任何特定 LLM 之專有隱藏行為。
+
+---
+
+## 授權與治理規範 (Governance & Defensive Use - R2-P2-07)
+- 本專案採用 **MIT 授權條款**。
+- **防禦性安全用途限定**：僅可用於經合法授權審查之代碼庫、本地 Fixture 或安全研發環境。禁止用於非授權滲透、破壞性指令執行、憑證重用或外部威脅探測。

@@ -64,18 +64,15 @@ import {
   ingestExternalEvidence,
   buildExecutionAttestation,
   resolveStandardsMapping,
-  detectDependencyBoundary
+  detectDependencyBoundary,
+  inferDefectManagement,
+  buildAuditBaseline
 } from './finalize-scan.mjs';
-
-
-
-
-
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
-import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns } from './run-stability-eval.mjs';
+import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability } from './run-stability-eval.mjs';
 import { runSemanticEval } from './run-semantic-eval.mjs';
 
 
@@ -3208,7 +3205,62 @@ export function runTests() {
 
   console.log('✔ 73. R2-P1 Invariant: Standards Mapping, Security Property, Attack Path 2.0, Evidence Hash, Attestation, Schemas, & Failure Taxonomy.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (73/73).');
+  // =========================================================================
+  // 74. R2-P2 Invariants: Audit Baseline, Defect Management, Model Provenance, & Corpus Stability
+  // =========================================================================
+  // 74.1 R2-P2-05 Audit Baseline
+  const testFinding74 = {
+    id: 'SEC-TEST-74',
+    lineageId: 'LIN-SEC-74',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Repository',
+    disposition: 'REPORTABLE',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+  };
+  const baseline74 = buildAuditBaseline({
+    repoRoot: process.cwd(),
+    targetRevision: 'HEAD',
+    canonicalFindings: [testFinding74],
+    manifest: { files: [{ path: 'skills/security-audit/scripts/safe-git.mjs', isScanned: true }] },
+    threatModel: { components: [{ name: 'Core' }], frameworks: ['Node.js'], entrypoints: ['bin/agy'] }
+  });
+  if (!baseline74.scopeFingerprint || !baseline74.surfaceFingerprint || !baseline74.findingLineageIds.includes('LIN-SEC-74')) {
+    throw new Error('R2-P2-05 VIOLATION: buildAuditBaseline failed to generate valid baseline fingerprints');
+  }
+
+  // 74.2 R2-P2-06 Defect Management
+  const dmSql74 = inferDefectManagement('CWE-89', 'SQL Injection in Query');
+  const dmExec74 = inferDefectManagement('CWE-78', 'Command Injection via spawn');
+  const dmAuth74 = inferDefectManagement('CWE-862', 'Missing Authorization on Admin Action');
+  if (dmSql74.rootCause !== 'UNCONFINED_DYNAMIC_QUERY_CONSTRUCTION' ||
+      dmExec74.rootCause !== 'UNSAFE_PROCESS_EXECUTION' ||
+      dmAuth74.rootCause !== 'BROKEN_AUTHORIZATION_BARRIER') {
+    throw new Error('R2-P2-06 VIOLATION: inferDefectManagement failed to categorize defect root causes');
+  }
+
+  // 74.3 R2-P2-04 Model Provenance & FinalizeScan Integration
+  const finalScan74 = finalizeScan({
+    candidates: [testFinding74],
+    repoRoot: process.cwd()
+  });
+  if (!finalScan74.baseline || !finalScan74.modelProvenance || finalScan74.modelProvenance.systemPromptIntegrity !== 'UNKNOWN') {
+    throw new Error('R2-P2-04 VIOLATION: finalizeScan failed to attach baseline and modelProvenance');
+  }
+  if (!finalScan74.canonicalFindings[0].defectManagement || finalScan74.canonicalFindings[0].defectManagement.rootCause !== 'UNCONFINED_DYNAMIC_QUERY_CONSTRUCTION') {
+    throw new Error('R2-P2-06 VIOLATION: finalizeScan failed to attach defectManagement to canonical finding');
+  }
+
+  // 74.4 R2-P2-01 Corpus Stability (Corpus A, B, C)
+  const corpusRes74 = evaluateCorpusStability(process.cwd());
+  if (corpusRes74.corpusA.validatedVulnerabilities !== 0 ||
+      corpusRes74.corpusB.detectionRecall < 1.0 ||
+      corpusRes74.metrics.postFixRediscoveryRate !== 0.0) {
+    throw new Error('R2-P2-01 VIOLATION: evaluateCorpusStability failed stability metrics across standard corpora');
+  }
+
+  console.log('✔ 74. R2-P2 Invariant: Audit Baseline, Defect Management, Model Provenance, & Corpus Stability.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (74/74).');
 
   } finally {
     gitFixture.cleanup();
