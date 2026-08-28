@@ -65,12 +65,15 @@ import {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint,
   initProjectContext,
+  loadBaselineContext,
+  persistBaselineContext,
+  evaluateSecondOpinion,
   validateThreatModel
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest, classifyFile, categorizeDirectory, buildScanManifest } from './build-inventory.mjs';
-import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
+import { buildThreatModel, detectRepositoryInventory, generateDiscoveryMatrix } from './build-threat-model.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
@@ -1607,6 +1610,114 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const driftPriv = detectContextDrift({ project: { entrypoints: ['a.js'], privilegedOperations: ['op1', 'op2'] } }, base);
         if (!driftPriv.hasDrift || driftPriv.status !== 'THREAT_MODEL_REVIEW_REQUIRED') {
           throw new Error('detectContextDrift failed to detect new privileged operation as THREAT_MODEL_REVIEW_REQUIRED');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-36',
+      name: 'Sparse Component x Applicable Family Matrix Invariant (R10-P1-01)',
+      check: () => {
+        const testComp = [
+          {
+            id: 'CompA',
+            applicableFamilies: ['filesystem/path/archive'],
+            notApplicable: { 'network/SSRF': 'Local only' }
+          }
+        ];
+        const testFam = ['filesystem/path/archive', 'network/SSRF', 'auth/authz/tenancy'];
+        const matrix = generateDiscoveryMatrix(testComp, testFam);
+        const cellApp = matrix.find(c => c.family === 'filesystem/path/archive');
+        const cellExplicit = matrix.find(c => c.family === 'network/SSRF');
+        const cellImplicit = matrix.find(c => c.family === 'auth/authz/tenancy');
+
+        if (!cellApp || cellApp.status !== 'PENDING') {
+          throw new Error('generateDiscoveryMatrix failed to yield PENDING for applicable family');
+        }
+        if (!cellExplicit || cellExplicit.status !== 'NOT_APPLICABLE' || !cellExplicit.reason.includes('Local only')) {
+          throw new Error('generateDiscoveryMatrix failed to yield NOT_APPLICABLE with explicit reason');
+        }
+        if (!cellImplicit || cellImplicit.status !== 'NOT_APPLICABLE' || !cellImplicit.reason.includes('outside defined architectural scope')) {
+          throw new Error('generateDiscoveryMatrix failed to yield NOT_APPLICABLE for unlisted family');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-37',
+      name: 'Confirmed Context Precedence, Quarantine, & Baseline Persistence Invariant (R10-P1-02 & R10-P1-03)',
+      check: () => {
+        // 1. Confirmed context threat model structure
+        const tm = buildThreatModel(repoRoot);
+        if (tm.contextStatus === 'CONFIRMED') {
+          if (!tm.suggestedExtensions || !Array.isArray(tm.suggestedExtensions.components)) {
+            throw new Error('buildThreatModel missing suggestedExtensions for confirmed context');
+          }
+          for (const s of tm.suggestedExtensions.components) {
+            if (s.status !== 'AUTO_DISCOVERED_UNCONFIRMED') {
+              throw new Error('Quarantined component lacks AUTO_DISCOVERED_UNCONFIRMED status');
+            }
+          }
+        }
+
+        // 2. Baseline persistence & loading
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-inv-37-base-'));
+        try {
+          const testBase = { projectId: 'inv-37', entrypoints: ['bin/cli.mjs'] };
+          const pRes = persistBaselineContext(tmpDir, testBase);
+          if (!pRes.success || !fs.existsSync(pRes.path)) {
+            throw new Error('persistBaselineContext failed to persist baseline');
+          }
+          const lRes = loadBaselineContext(tmpDir);
+          if (!lRes.exists || lRes.baseline?.projectId !== 'inv-37') {
+            throw new Error('loadBaselineContext failed to retrieve persisted baseline');
+          }
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-38',
+      name: 'Inventory Intake, Identity Precedence, & Second Opinion Invariant (R10-P1-04, R10-P1-05, R10-P1-06)',
+      check: () => {
+        // 1. evaluateSecondOpinion fail-closed on critical zero-candidate cell
+        const critCell = { id: 'cell-crit', criticality: 'critical' };
+        const nonCritCell = { id: 'cell-noncrit', criticality: 'low' };
+        const zeroReview1 = { status: 'REVIEWED_NO_CANDIDATE', candidates: [], reviewedEvidence: [{ path: 'f.js', line: 1 }] };
+        const zeroReview2 = { status: 'REVIEWED_NO_CANDIDATE', candidates: [], reviewedEvidence: [{ path: 'f.js', line: 2 }] };
+        const candReview = { status: 'CANDIDATE', candidates: [{ id: 'C1', ruleId: 'CWE-89' }] };
+
+        const evalNonCrit = evaluateSecondOpinion({ cell: nonCritCell, firstReview: zeroReview1 });
+        if (evalNonCrit.required !== false || evalNonCrit.status !== 'NOT_REQUIRED') {
+          throw new Error('evaluateSecondOpinion improperly required second opinion for non-critical cell');
+        }
+
+        const evalPending = evaluateSecondOpinion({ cell: critCell, firstReview: zeroReview1 });
+        if (evalPending.required !== true || evalPending.status !== 'PENDING_SECOND_OPINION') {
+          throw new Error('evaluateSecondOpinion failed to mandate second opinion for critical zero cell');
+        }
+
+        const evalAgreed = evaluateSecondOpinion({ cell: critCell, firstReview: zeroReview1, secondReview: zeroReview2 });
+        if (evalAgreed.status !== 'CONFIRMED_ZERO_CANDIDATE' || evalAgreed.agreement !== true) {
+          throw new Error('evaluateSecondOpinion failed to confirm unanimous zero-candidate outcome');
+        }
+
+        const evalEsc = evaluateSecondOpinion({ cell: critCell, firstReview: zeroReview1, secondReview: candReview });
+        if (evalEsc.status !== 'ESCALATED_TO_CANDIDATE' || evalEsc.escalation !== true) {
+          throw new Error('evaluateSecondOpinion failed to escalate dissenting candidate review');
+        }
+
+        // 2. Identity precedence: confirmed context > package.json > basename
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-inv-38-id-'));
+        try {
+          fs.mkdirSync(path.join(tmpDir, '.security-audit'), { recursive: true });
+          fs.writeFileSync(path.join(tmpDir, '.security-audit', 'project.json'), JSON.stringify({ projectId: 'confirmed-proj-id', source: 'USER_CONFIRMED' }), 'utf8');
+          fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'pkg-name-id' }), 'utf8');
+          const m = buildScanManifest({ repoRoot: tmpDir });
+          if (m.projectId !== 'confirmed-proj-id') {
+            throw new Error(`buildScanManifest failed identity precedence: expected 'confirmed-proj-id', got '${m.projectId}'`);
+          }
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
         }
       }
     }

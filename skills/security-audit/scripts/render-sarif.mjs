@@ -89,6 +89,9 @@ import {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint,
   initProjectContext,
+  loadBaselineContext,
+  persistBaselineContext,
+  evaluateSecondOpinion,
   validateThreatModel
 } from './finalize-scan.mjs';
 
@@ -4017,7 +4020,244 @@ export default appName;`;
   }
   console.log('✔ 95. R9-T15 Invariant: Distinct projectIds produce non-colliding artifact identities.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (95/95).');
+  // ---------------------------------------------------------------------------
+  // 96. R10-P0-01: Execution stages accounting verifies physical artifacts (no stage spoofing)
+  // ---------------------------------------------------------------------------
+  const spoofedFinalization = finalizeScan({
+    candidates: [],
+    manifest: null,
+    threatModel: null,
+    discoveryMatrix: [],
+    votes: [],
+    executedStages: ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'],
+    repoRoot: process.cwd()
+  });
+  if (spoofedFinalization.summary.execution.stagesComplete === true ||
+      spoofedFinalization.summary.execution.verdict !== 'DEGRADED') {
+    throw new Error('R10-P0-01 VIOLATION: finalizeScan allowed spoofed stages without physical artifacts!');
+  }
+  console.log('✔ 96. R10-P0-01 Invariant: Execution attestation verifies physical artifacts and rejects spoofed stages under Default-Deny.');
+
+  // ---------------------------------------------------------------------------
+  // 97. R10-P0-02: validateCrossFormatParity enforces consistency across objects and file paths
+  // ---------------------------------------------------------------------------
+  const tmpDir97 = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-r10-parity-'));
+  try {
+    const sarifPath97 = path.join(tmpDir97, 'report.sarif');
+    const mdPath97 = path.join(tmpDir97, 'report.md');
+    const manifestPath97 = path.join(tmpDir97, 'manifest.json');
+    const covPath97 = path.join(tmpDir97, 'coverage.json');
+
+    fs.writeFileSync(sarifPath97, JSON.stringify({ runs: [{ properties: { canDeclareClean: true, coverageStatus: 'COMPLETE' } }] }), 'utf8');
+    fs.writeFileSync(mdPath97, '# Security Audit Report\n- **Can Declare Clean**: **true**\n- **Confirmed Vulnerabilities (Reportable)**: 0\n', 'utf8');
+    fs.writeFileSync(manifestPath97, JSON.stringify({ canDeclareClean: true, coverageStatus: 'COMPLETE' }), 'utf8');
+    fs.writeFileSync(covPath97, JSON.stringify({ coverageStatus: 'COMPLETE' }), 'utf8');
+
+    const parityOk = validateCrossFormatParity({
+      sarifPath: sarifPath97,
+      markdownPath: mdPath97,
+      manifestPath: manifestPath97,
+      coveragePath: covPath97
+    });
+    if (!parityOk.valid) {
+      throw new Error(`R10-P0-02 VIOLATION: validateCrossFormatParity failed on valid matching file paths: ${parityOk.errors.join(', ')}`);
+    }
+
+    fs.writeFileSync(mdPath97, '# Security Audit Report\n- **Can Declare Clean**: **false**\n- **Confirmed Vulnerabilities (Reportable)**: 0\n', 'utf8');
+    const parityFail = validateCrossFormatParity({
+      sarifPath: sarifPath97,
+      markdownPath: mdPath97,
+      manifestPath: manifestPath97
+    });
+    if (parityFail.valid) {
+      throw new Error('R10-P0-02 VIOLATION: validateCrossFormatParity accepted contradictory verdicts on disk!');
+    }
+  } finally {
+    fs.rmSync(tmpDir97, { recursive: true, force: true });
+  }
+  console.log('✔ 97. R10-P0-02 Invariant: Cross-format parity validation enforces consistency across objects and file paths fail-closed.');
+
+  // ---------------------------------------------------------------------------
+  // 98. R10-P0-02: computeCanonicalArtifactHashes computes SHA-256 hashes across objects and file paths
+  // ---------------------------------------------------------------------------
+  const tmpDir98 = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-r10-hashes-'));
+  try {
+    const filePath98 = path.join(tmpDir98, 'canonical.json');
+    const testContent = [{ id: 'TEST-HASH', ruleId: 'CWE-89' }];
+    fs.writeFileSync(filePath98, JSON.stringify(testContent), 'utf8');
+
+    const hashesFromPath = computeCanonicalArtifactHashes({ canonicalPath: filePath98 });
+    const hashesFromData = computeCanonicalArtifactHashes({ canonicalResult: JSON.stringify(testContent) });
+
+    if (!hashesFromPath.canonicalResultHash || hashesFromPath.canonicalResultHash !== hashesFromData.canonicalResultHash) {
+      throw new Error(`R10-P0-02 VIOLATION: computeCanonicalArtifactHashes did not produce matching hash: path=${hashesFromPath.canonicalResultHash}, data=${hashesFromData.canonicalResultHash}`);
+    }
+  } finally {
+    fs.rmSync(tmpDir98, { recursive: true, force: true });
+  }
+  console.log('✔ 98. R10-P0-02 Invariant: computeCanonicalArtifactHashes computes deterministic SHA-256 hashes across objects and file paths.');
+
+  // ---------------------------------------------------------------------------
+  // 99. R10-P1-01: Sparse Component x Applicable Family Matrix filtering
+  // ---------------------------------------------------------------------------
+  const comp99 = [
+    {
+      id: 'Inventory',
+      name: 'Inventory',
+      applicableFamilies: ['filesystem/path/archive', 'state/business-logic'],
+      notApplicable: {
+        'auth/authz/tenancy': 'Local filesystem only; tenancy not applicable'
+      }
+    }
+  ];
+  const families99 = ['filesystem/path/archive', 'auth/authz/tenancy', 'network/SSRF'];
+  const matrix99 = generateDiscoveryMatrix(comp99, families99);
+  const cellApp = matrix99.find(c => c.family === 'filesystem/path/archive');
+  const cellNotAppExplicit = matrix99.find(c => c.family === 'auth/authz/tenancy');
+  const cellNotAppImplicit = matrix99.find(c => c.family === 'network/SSRF');
+
+  if (!cellApp || cellApp.status !== 'PENDING') {
+    throw new Error(`R10-P1-01 VIOLATION: Applicable cell was not PENDING: ${cellApp?.status}`);
+  }
+  if (!cellNotAppExplicit || cellNotAppExplicit.status !== 'NOT_APPLICABLE' || !cellNotAppExplicit.reason.includes('Local filesystem only')) {
+    throw new Error(`R10-P1-01 VIOLATION: notApplicable cell failed with status=${cellNotAppExplicit?.status}, reason=${cellNotAppExplicit?.reason}`);
+  }
+  if (!cellNotAppImplicit || cellNotAppImplicit.status !== 'NOT_APPLICABLE' || !cellNotAppImplicit.reason.includes('outside defined architectural scope')) {
+    throw new Error(`R10-P1-01 VIOLATION: Implicitly excluded family was not marked NOT_APPLICABLE: ${cellNotAppImplicit?.status}`);
+  }
+  console.log('✔ 99. R10-P1-01 Invariant: Sparse matrix filters non-applicable families with explicit architectural rationale.');
+
+  // ---------------------------------------------------------------------------
+  // 100. R10-P1-02: Confirmed Project Context is authoritative and quarantines unconfirmed items
+  // ---------------------------------------------------------------------------
+  const tm100 = buildThreatModel(process.cwd());
+  if (tm100.contextStatus !== 'CONFIRMED') {
+    throw new Error(`R10-P1-02 VIOLATION: Expected CONFIRMED contextStatus, got ${tm100.contextStatus}`);
+  }
+  if (!tm100.suggestedExtensions || !Array.isArray(tm100.suggestedExtensions.components)) {
+    throw new Error('R10-P1-02 VIOLATION: suggestedExtensions missing or not structured in confirmed threat model');
+  }
+  for (const comp of tm100.suggestedExtensions.components) {
+    if (comp.status !== 'AUTO_DISCOVERED_UNCONFIRMED') {
+      throw new Error(`R10-P1-02 VIOLATION: Quarantined component lacks AUTO_DISCOVERED_UNCONFIRMED status: ${JSON.stringify(comp)}`);
+    }
+  }
+  console.log('✔ 100. R10-P1-02 Invariant: Confirmed Project Context is authoritative; auto-discovered items are quarantined in suggestedExtensions.');
+
+  // ---------------------------------------------------------------------------
+  // 101. R10-P1-03: Baseline context persistence and drift enforcement
+  // ---------------------------------------------------------------------------
+  const tmpDir101 = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-r10-baseline-'));
+  try {
+    const baseObj101 = { projectId: 'test-p101', entrypoints: ['index.js'] };
+    const persistRes = persistBaselineContext(tmpDir101, baseObj101);
+    if (!persistRes.success || !fs.existsSync(persistRes.path)) {
+      throw new Error(`R10-P1-03 VIOLATION: persistBaselineContext failed: ${JSON.stringify(persistRes)}`);
+    }
+    const loadRes = loadBaselineContext(tmpDir101);
+    if (!loadRes.exists || loadRes.baseline?.projectId !== 'test-p101') {
+      throw new Error(`R10-P1-03 VIOLATION: loadBaselineContext returned invalid baseline: ${JSON.stringify(loadRes)}`);
+    }
+  } finally {
+    fs.rmSync(tmpDir101, { recursive: true, force: true });
+  }
+  console.log('✔ 101. R10-P1-03 Invariant: Baseline context persistence and retrieval operate cleanly.');
+
+  // ---------------------------------------------------------------------------
+  // 102. R10-P1-04: Inventory-driven initProjectContext discovers deterministic facts
+  // ---------------------------------------------------------------------------
+  const tmpDir102 = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-r10-init-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir102, 'web.config'), '<configuration></configuration>', 'utf8');
+    fs.writeFileSync(path.join(tmpDir102, 'Default.aspx'), '<%@ Page %>', 'utf8');
+    fs.writeFileSync(path.join(tmpDir102, 'Default.aspx.cs'), 'public partial class _Default {}', 'utf8');
+
+    const initRes = initProjectContext(tmpDir102);
+    if (!initRes.success) {
+      throw new Error(`R10-P1-04 VIOLATION: initProjectContext failed: ${JSON.stringify(initRes)}`);
+    }
+    const proj102 = JSON.parse(fs.readFileSync(path.join(tmpDir102, '.security-audit', 'project.json'), 'utf8'));
+    if (!proj102.languages.includes('C#') || !proj102.runtime.includes('.NET Framework / IIS')) {
+      throw new Error(`R10-P1-04 VIOLATION: initProjectContext failed to detect ASP.NET WebForms: ${JSON.stringify(proj102)}`);
+    }
+  } finally {
+    fs.rmSync(tmpDir102, { recursive: true, force: true });
+  }
+  console.log('✔ 102. R10-P1-04 Invariant: Inventory-driven initProjectContext accurately detects language, framework, and entrypoints.');
+
+  // ---------------------------------------------------------------------------
+  // 103. R10-P1-05: projectId identity precedence (USER_CONFIRMED context > manifest > package.json > basename)
+  // ---------------------------------------------------------------------------
+  const tmpDir103 = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-r10-projid-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir103, '.security-audit'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir103, '.security-audit', 'project.json'), JSON.stringify({ projectId: 'confirmed-id', source: 'REPOSITORY_EVIDENCE' }), 'utf8');
+    fs.writeFileSync(path.join(tmpDir103, 'package.json'), JSON.stringify({ name: 'package-json-id' }), 'utf8');
+
+    const m103 = buildScanManifest({ repoRoot: tmpDir103 });
+    if (m103.projectId !== 'confirmed-id') {
+      throw new Error(`R10-P1-05 VIOLATION: projectId precedence failed: expected 'confirmed-id', got '${m103.projectId}'`);
+    }
+  } finally {
+    fs.rmSync(tmpDir103, { recursive: true, force: true });
+  }
+  console.log('✔ 103. R10-P1-05 Invariant: Project identity precedence strictly favors confirmed context over package.json and basename.');
+
+  // ---------------------------------------------------------------------------
+  // 104. R10-P1-06: evaluateSecondOpinion evaluates critical zero-candidate cells
+  // ---------------------------------------------------------------------------
+  const nonCritCell = { id: 'c1', criticality: 'medium', status: 'PENDING' };
+  const critCell = { id: 'c2', criticality: 'critical', status: 'PENDING' };
+  const firstZero = { status: 'REVIEWED_NO_CANDIDATE', candidates: [], reviewedEvidence: [{ path: 'f.js', line: 1 }] };
+  const secondZero = { status: 'REVIEWED_NO_CANDIDATE', candidates: [], reviewedEvidence: [{ path: 'f.js', line: 2 }] };
+  const secondVuln = { status: 'CANDIDATE', candidates: [{ id: 'CAND-1', ruleId: 'CWE-89' }] };
+
+  const evalNonCrit = evaluateSecondOpinion({ cell: nonCritCell, firstReview: firstZero });
+  if (evalNonCrit.required !== false || evalNonCrit.status !== 'NOT_REQUIRED') {
+    throw new Error(`R10-P1-06 VIOLATION: Non-critical cell improperly required second opinion: ${JSON.stringify(evalNonCrit)}`);
+  }
+
+  const evalPending = evaluateSecondOpinion({ cell: critCell, firstReview: firstZero });
+  if (evalPending.required !== true || evalPending.status !== 'PENDING_SECOND_OPINION') {
+    throw new Error(`R10-P1-06 VIOLATION: Critical zero cell did not yield PENDING_SECOND_OPINION: ${JSON.stringify(evalPending)}`);
+  }
+
+  const evalAgreed = evaluateSecondOpinion({ cell: critCell, firstReview: firstZero, secondReview: secondZero });
+  if (evalAgreed.status !== 'CONFIRMED_ZERO_CANDIDATE' || evalAgreed.evidence.length !== 2) {
+    throw new Error(`R10-P1-06 VIOLATION: Agreed zero reviews failed to confirm: ${JSON.stringify(evalAgreed)}`);
+  }
+
+  const evalEscalated = evaluateSecondOpinion({ cell: critCell, firstReview: firstZero, secondReview: secondVuln });
+  if (evalEscalated.status !== 'ESCALATED_TO_CANDIDATE' || evalEscalated.escalation !== true || evalEscalated.candidates.length !== 1) {
+    throw new Error(`R10-P1-06 VIOLATION: Dissenting candidate review failed to escalate: ${JSON.stringify(evalEscalated)}`);
+  }
+  console.log('✔ 104. R10-P1-06 Invariant: Selective second opinion evaluates critical zero-candidate discovery cells fail-closed.');
+
+  // ---------------------------------------------------------------------------
+  // 105. R10-P0-01: CLI threat model validation fails closed on invalid threat model
+  // ---------------------------------------------------------------------------
+  const badTm105 = {
+    components: [{ id: 'CompWithoutEvidence', criticality: 'high' }],
+    actors: []
+  };
+  const valBadTm105 = validateThreatModel(badTm105, process.cwd());
+  if (valBadTm105.valid) {
+    throw new Error('R10-P0-01 VIOLATION: validateThreatModel allowed component without evidence!');
+  }
+  const finalizedBadTm = finalizeScan({
+    candidates: [],
+    manifest: buildScanManifest({ repoRoot: process.cwd(), directoryManifest: buildDirectoryManifest(process.cwd()) }),
+    repoRoot: process.cwd(),
+    threatModel: badTm105,
+    auditIntent: 'DISCOVERY',
+    executedStages: ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION']
+  });
+  if (finalizedBadTm.summary.canDeclareClean === true || finalizedBadTm.summary.execution.verdict === 'COMPLETE_VERIFIED') {
+    throw new Error('R10-P0-01 VIOLATION: finalizeScan declared clean despite invalid threat model!');
+  }
+  console.log('✔ 105. R10-P0-01 Invariant: CLI threat model validation fails closed under Default-Deny on unevidenced threat model.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (105/105).');
 
   } finally {
     gitFixture.cleanup();

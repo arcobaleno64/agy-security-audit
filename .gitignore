@@ -2,6 +2,11 @@ node_modules/
 scratch/
 reports/
 codeql-db/
+.semgrep/
+coverage/
+.nyc_output/
+.sonar/
+.scannerwork/
 *.log
 .DS_Store
 Thumbs.db

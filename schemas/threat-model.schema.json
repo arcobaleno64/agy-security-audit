@@ -49,7 +49,9 @@
           "name": { "type": "string" },
           "criticality": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
           "description": { "type": "string" },
-          "evidence": { "type": ["object", "array", "null"] }
+          "evidence": { "type": ["object", "array", "null"] },
+          "applicableFamilies": { "type": "array", "items": { "type": "string" } },
+          "notApplicable": { "type": "object", "additionalProperties": { "type": "string" } }
         }
       }
     },
@@ -64,6 +66,14 @@
           "status": { "type": "string", "enum": ["FACT", "ASSUMPTION"] },
           "evidence": { "type": ["object", "array", "null"] }
         }
+      }
+    },
+    "suggestedExtensions": {
+      "type": "object",
+      "properties": {
+        "components": { "type": "array" },
+        "actors": { "type": "array" },
+        "boundaries": { "type": "array" }
       }
     },
     "contextStatus": { "type": "string", "enum": ["CONFIRMED", "GENERIC_SECURITY_REVIEW", "SUGGESTED", "ABSENT"] },

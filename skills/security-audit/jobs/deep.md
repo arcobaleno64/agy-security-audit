@@ -10,12 +10,14 @@ The `deep` job executes multi-pass stochastic exploration across the **Component
 - Each run independently dispatches discovery subagents (`agents/discovery-agent.md`) across the Component × Family matrix.
 - Each run produces a candidate set: $C_1, C_2, \dots, C_N$.
 
-### 2. Candidate Union & Fingerprint Deduplication
-- Compute stable SHA-256 fingerprint for each candidate:
-  $$\text{Fingerprint} = \text{SHA256}(\text{ruleId} \mathbin{\Vert} \text{uri} \mathbin{\Vert} \text{startLine})$$
+### 2. Candidate Union & Semantic Lineage Deduplication
+- Compute dual-fingerprint architecture for each candidate:
+  - **Location Fingerprint**: Binds physical source/sink evidence (`SHA256(ruleId || uri || startLine || lineHash)`).
+  - **Semantic Lineage Fingerprint v2**: Invariant under code refactors and line shifts:
+    $$\text{lineageId} = \text{SHA256}(\text{ruleId} \mathbin{\Vert} \text{uri} \mathbin{\Vert} \text{component} \mathbin{\Vert} \text{family} \mathbin{\Vert} \text{sinkKind} \mathbin{\Vert} \text{symbol})$$
 - Form the unified candidate set:
   $$C_{\text{union}} = \bigcup_{k=1}^N C_k$$
-- Merge hypotheses, preserving all candidate dataflow steps, sources, and sinks.
+- Merge hypotheses by `lineageId`, preserving all candidate dataflow steps, sources, and sinks while tracking discovery recurrence and novelty state transitions (`NEW_SURFACE`, `REFINEMENT`, `DUPLICATE`).
 - Calculate candidate discovery recurrence frequency across runs.
 
 ### 3. Proof-Gap Tracking

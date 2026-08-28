@@ -7,7 +7,16 @@
       "evidence": [
         "skills/security-audit/scripts/build-inventory.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "filesystem/path/archive",
+        "state/business-logic",
+        "dangerous-defaults/config"
+      ],
+      "notApplicable": {
+        "auth/authz/tenancy": "Inventory extraction operates on local filesystem; multi-tenant authz not applicable.",
+        "network/SSRF": "Inventory reads local file tree; network SSRF not applicable."
+      }
     },
     {
       "id": "ContextPreparation",
@@ -16,7 +25,16 @@
       "evidence": [
         "skills/security-audit/scripts/prepare-review-context.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "filesystem/path/archive",
+        "secrets/crypto",
+        "ai/agent-trust-boundaries"
+      ],
+      "notApplicable": {
+        "auth/authz/tenancy": "Context preparation is local filesystem sandbox; multi-tenant authz is not applicable.",
+        "network/SSRF": "Context preparation writes to local scratch directory without outbound network."
+      }
     },
     {
       "id": "ThreatModeling",
@@ -25,7 +43,15 @@
       "evidence": [
         "skills/security-audit/scripts/build-threat-model.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "ai/agent-trust-boundaries",
+        "state/business-logic",
+        "dangerous-defaults/config"
+      ],
+      "notApplicable": {
+        "native-memory-safety": "Threat modeling runs on managed V8 runtime; native memory safety not applicable."
+      }
     },
     {
       "id": "AttackPathValidation",
@@ -34,7 +60,15 @@
       "evidence": [
         "skills/security-audit/scripts/validate-attack-path.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "filesystem/path/archive",
+        "state/business-logic",
+        "ai/agent-trust-boundaries"
+      ],
+      "notApplicable": {
+        "network/SSRF": "Attack path validator inspects local path tokens only."
+      }
     },
     {
       "id": "PatchValidation",
@@ -43,7 +77,15 @@
       "evidence": [
         "skills/security-audit/scripts/validate-patch.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "filesystem/path/archive",
+        "injection/query/template/eval",
+        "state/business-logic"
+      ],
+      "notApplicable": {
+        "auth/authz/tenancy": "Patch validation strictly operates in isolated scratch directory."
+      }
     },
     {
       "id": "ExternalEvidence",
@@ -52,7 +94,15 @@
       "evidence": [
         "skills/security-audit/scripts/finalize-scan.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "parser/deserialization",
+        "filesystem/path/archive",
+        "secrets/crypto"
+      ],
+      "notApplicable": {
+        "network/SSRF": "External evidence parser reads local SARIF files without network fetching."
+      }
     },
     {
       "id": "FinalizerAuthority",
@@ -61,7 +111,15 @@
       "evidence": [
         "skills/security-audit/scripts/finalize-scan.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "state/business-logic",
+        "ai/agent-trust-boundaries",
+        "secrets/crypto"
+      ],
+      "notApplicable": {
+        "native-memory-safety": "Finalizer executes in pure JavaScript without native bindings."
+      }
     },
     {
       "id": "TCBIntegrity",
@@ -71,7 +129,15 @@
         "skills/security-audit/tool-integrity-manifest.json",
         "skills/security-audit/scripts/finalize-scan.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "state/business-logic",
+        "filesystem/path/archive",
+        "secrets/crypto"
+      ],
+      "notApplicable": {
+        "network/SSRF": "TCB integrity verification performs local SHA-256 digests only."
+      }
     },
     {
       "id": "Reporting",
@@ -80,7 +146,16 @@
       "evidence": [
         "skills/security-audit/scripts/render-sarif.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "injection/query/template/eval",
+        "secrets/crypto",
+        "ai/agent-trust-boundaries"
+      ],
+      "notApplicable": {
+        "auth/authz/tenancy": "Reporting formats canonical findings into static Markdown/SARIF.",
+        "native-memory-safety": "Static string formatting does not use native memory allocations."
+      }
     },
     {
       "id": "GitBoundary",
@@ -89,7 +164,33 @@
       "evidence": [
         "skills/security-audit/scripts/safe-git.mjs"
       ],
-      "source": "REPOSITORY_EVIDENCE"
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "filesystem/path/archive",
+        "injection/query/template/eval",
+        "dangerous-defaults/config"
+      ],
+      "notApplicable": {
+        "network/SSRF": "Git boundary isolates local git process invocations; remote SSRF is not applicable."
+      }
+    },
+    {
+      "id": "PluginSystem",
+      "name": "PluginSystem",
+      "criticality": "critical",
+      "evidence": [
+        "plugin.json"
+      ],
+      "source": "REPOSITORY_EVIDENCE",
+      "applicableFamilies": [
+        "dangerous-defaults/config",
+        "ai/agent-trust-boundaries",
+        "injection/query/template/eval"
+      ],
+      "notApplicable": {
+        "native-memory-safety": "Plugin metadata uses JSON format without native memory allocations.",
+        "network/SSRF": "Plugin manifests do not make outbound network requests."
+      }
     }
   ],
   "trustBoundaries": [

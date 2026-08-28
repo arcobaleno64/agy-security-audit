@@ -355,14 +355,31 @@ export function buildScanManifest({
   const timestamp = new Date().toISOString();
   const scanId = `${mode.toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
   const scanRunId = `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  let projectId = path.basename(path.resolve(repoRoot));
+  let projectId = null;
+  // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > package.json > directory basename
   try {
-    const pkgPath = path.join(path.resolve(repoRoot), 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (p.name) projectId = p.name;
+    const projPath = path.join(path.resolve(repoRoot), '.security-audit', 'project.json');
+    if (fs.existsSync(projPath)) {
+      const proj = JSON.parse(fs.readFileSync(projPath, 'utf8'));
+      if (proj.projectId && proj.source !== 'SUGGESTED') {
+        projectId = proj.projectId;
+      }
     }
   } catch {}
+
+  if (!projectId) {
+    try {
+      const pkgPath = path.join(path.resolve(repoRoot), 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (p.name) projectId = p.name;
+      }
+    } catch {}
+  }
+
+  if (!projectId) {
+    projectId = path.basename(path.resolve(repoRoot));
+  }
 
   const manifest = {
     schemaVersion: '1',

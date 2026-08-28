@@ -95,9 +95,13 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
   // 6. .NET / C#
   try {
     const rootFiles = fs.readdirSync(rootResolved);
-    if (rootFiles.some(f => f.endsWith('.csproj') || f.endsWith('.sln') || f.endsWith('.fsproj'))) {
+    if (rootFiles.some(f => f.endsWith('.csproj') || f.endsWith('.sln') || f.endsWith('.fsproj') || f.endsWith('.cs') || f.endsWith('.aspx') || f.toLowerCase() === 'web.config')) {
       detectedLanguages.add('C#');
-      detectedManifests.push({ path: rootFiles.find(f => f.endsWith('.csproj') || f.endsWith('.sln')), type: 'dotnet' });
+      detectedProfiles.add('web-app');
+      const manifestFile = rootFiles.find(f => f.endsWith('.csproj') || f.endsWith('.sln') || f.toLowerCase() === 'web.config');
+      if (manifestFile) detectedManifests.push({ path: manifestFile, type: 'dotnet' });
+      const aspxFile = rootFiles.find(f => f.endsWith('.aspx'));
+      if (aspxFile) entrypoints.push({ path: aspxFile, type: 'webforms_page', evidence: { manifestOrigin: 'webforms', confidence: 'high' } });
     }
   } catch {}
 
@@ -422,20 +426,27 @@ export function generateDiscoveryMatrix(components = [], inScopeFamilies = [], a
   const matrix = [];
   for (const comp of components) {
     const compName = comp.name || comp.id;
-    for (const fam of inScopeFamilies) {
-      const isExplicitNotApplicable = applicabilityMap[compName] && applicabilityMap[compName][fam] === false;
-      const explicitReason = (applicabilityMap[compName] && applicabilityMap[compName][`${fam}:reason`]) || null;
+    const applicableSet = Array.isArray(comp.applicableFamilies) ? new Set(comp.applicableFamilies) : null;
+    const notApplicableMap = (comp.notApplicable && typeof comp.notApplicable === 'object') ? comp.notApplicable : {};
 
-      let status = 'PENDING';
+    for (const fam of inScopeFamilies) {
+      let isNotApplicable = false;
       let reason = null;
-      if (isExplicitNotApplicable) {
-        status = 'NOT_APPLICABLE';
-        reason = explicitReason || `Family '${fam}' is not applicable to component '${compName}' per architecture scope.`;
+
+      if (notApplicableMap[fam]) {
+        isNotApplicable = true;
+        reason = notApplicableMap[fam];
+      } else if (applicableSet && !applicableSet.has(fam)) {
+        isNotApplicable = true;
+        reason = `Family '${fam}' is outside defined architectural scope for '${compName}'.`;
+      } else if (applicabilityMap[compName] && applicabilityMap[compName][fam] === false) {
+        isNotApplicable = true;
+        reason = (applicabilityMap[compName] && applicabilityMap[compName][`${fam}:reason`]) || `Family '${fam}' is marked not applicable for '${compName}'.`;
       } else if (compName === 'ContextPreparation' && fam === 'auth/authz/tenancy') {
-        status = 'NOT_APPLICABLE';
+        isNotApplicable = true;
         reason = 'Context preparation is local filesystem sandbox; multi-tenant authz is not applicable.';
       } else if (compName === 'GitBoundary' && fam === 'network/SSRF') {
-        status = 'NOT_APPLICABLE';
+        isNotApplicable = true;
         reason = 'Git boundary isolates local git process invocations; remote SSRF is not applicable.';
       }
 
@@ -443,7 +454,7 @@ export function generateDiscoveryMatrix(components = [], inScopeFamilies = [], a
         component: compName,
         family: fam,
         criticality: comp.criticality || 'medium',
-        status,
+        status: isNotApplicable ? 'NOT_APPLICABLE' : 'PENDING',
         ...(reason ? { reason } : {})
       });
     }
@@ -612,11 +623,16 @@ export function buildThreatModel(repoRoot = process.cwd()) {
     }
   ];
 
+  const suggestedExtensions = {
+    components: [],
+    actors: [],
+    boundaries: []
+  };
+
   if (hasConfirmedContext) {
     const ctx = projectContextRes.context;
     const ctxComps = (ctx.trustModel?.components || []).map(c => {
       const name = c.name || c.id;
-      const disc = discovered.find(d => d.name === name || d.id === name);
       let evidence = c.evidence;
       if (Array.isArray(evidence) && evidence.length > 0 && typeof evidence[0] === 'string') {
         evidence = { path: evidence[0], manifestOrigin: 'project-context', confidence: 'high' };
@@ -624,16 +640,24 @@ export function buildThreatModel(repoRoot = process.cwd()) {
       return {
         name,
         id: c.id || name,
-        description: c.description || disc?.description || `Evidenced component ${name}`,
-        criticality: c.criticality || disc?.criticality || 'medium',
-        evidence: evidence || disc?.evidence,
+        description: c.description || `Evidenced component ${name}`,
+        criticality: c.criticality || 'medium',
+        evidence,
         source: c.source || 'REPOSITORY_EVIDENCE',
-        isAuthoritative: c.isAuthoritative !== false
+        isAuthoritative: c.isAuthoritative !== false,
+        applicableFamilies: c.applicableFamilies || null,
+        notApplicable: c.notApplicable || null
       };
     });
+
+    // R10-P1-02: Quarantine auto-discovered components not explicitly confirmed in project context
     for (const d of discovered) {
       if (!ctxComps.some(c => c.name === d.name || c.id === d.id)) {
-        ctxComps.push({ ...d, isAuthoritative: true });
+        suggestedExtensions.components.push({
+          ...d,
+          status: 'AUTO_DISCOVERED_UNCONFIRMED',
+          isAuthoritative: false
+        });
       }
     }
     components = ctxComps;
@@ -645,9 +669,15 @@ export function buildThreatModel(repoRoot = process.cwd()) {
       status: a.status || (a.source === 'REPOSITORY_EVIDENCE' ? 'FACT' : 'ASSUMPTION'),
       evidence: a.evidence || (a.source === 'REPOSITORY_EVIDENCE' ? { manifestOrigin: a.source, confidence: 'high' } : null)
     }));
+
+    // R10-P1-02: Quarantine default generic actors not explicitly confirmed in project context
     for (const da of defaultActors) {
       if (!ctxActors.some(a => a.id === da.id)) {
-        ctxActors.push(da);
+        suggestedExtensions.actors.push({
+          ...da,
+          status: 'AUTO_DISCOVERED_UNCONFIRMED',
+          isAuthoritative: false
+        });
       }
     }
     actors = ctxActors;
@@ -658,9 +688,15 @@ export function buildThreatModel(repoRoot = process.cwd()) {
       status: b.status || 'FACT',
       evidence: b.evidence || null
     }));
+
+    // R10-P1-02: Quarantine default generic boundaries not explicitly confirmed in project context
     for (const db of defaultBoundaries) {
       if (!ctxBoundaries.some(b => b.boundary === db.boundary)) {
-        ctxBoundaries.push(db);
+        suggestedExtensions.boundaries.push({
+          ...db,
+          status: 'AUTO_DISCOVERED_UNCONFIRMED',
+          isAuthoritative: false
+        });
       }
     }
     trustBoundaries = ctxBoundaries;
@@ -709,6 +745,7 @@ export function buildThreatModel(repoRoot = process.cwd()) {
     components,
     entrypoints: inventory.entrypoints,
     trustBoundaries,
+    suggestedExtensions,
     securityProperties,
     inScopeFamilies,
     discoveryMatrix,

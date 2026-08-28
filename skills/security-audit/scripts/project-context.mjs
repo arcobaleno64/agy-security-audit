@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { isPathContained } from './prepare-review-context.mjs';
+import { detectRepositoryInventory } from './build-threat-model.mjs';
 
 /**
  * Computes deterministic SHA-256 fingerprint for project context.
@@ -236,7 +237,7 @@ export function detectContextDrift(currentContext, baselineContext) {
 }
 
 /**
- * Generates initial Project Security Context templates (R9-P1-03 Intake contract).
+ * Generates initial Project Security Context templates (R9-P1-03 Intake contract, R10-P1-04 Inventory-driven).
  */
 export function initProjectContext(repoRoot = process.cwd(), options = {}) {
   const resolvedRoot = path.resolve(repoRoot);
@@ -245,15 +246,68 @@ export function initProjectContext(repoRoot = process.cwd(), options = {}) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
+  let inventory = { languages: [], profiles: [], entrypoints: [] };
+  try {
+    inventory = detectRepositoryInventory(resolvedRoot);
+  } catch {}
+
   const projectName = options.projectId || path.basename(resolvedRoot);
   const createdFiles = [];
 
+  let detectedLanguages = options.languages;
+  if (!detectedLanguages || detectedLanguages.length === 0) {
+    detectedLanguages = (inventory.languages && inventory.languages.length > 0)
+      ? inventory.languages
+      : ['UNKNOWN'];
+  }
+
+  let detectedRuntime = options.runtime;
+  if (!detectedRuntime || detectedRuntime.length === 0) {
+    detectedRuntime = [];
+    try {
+      const topFiles = fs.readdirSync(resolvedRoot);
+      if (topFiles.includes('package.json')) detectedRuntime.push('Node.js');
+      if (topFiles.includes('requirements.txt') || topFiles.includes('pyproject.toml')) detectedRuntime.push('Python');
+      if (topFiles.includes('go.mod')) detectedRuntime.push('Go');
+      if (topFiles.includes('pom.xml') || topFiles.includes('build.gradle')) detectedRuntime.push('JVM');
+      if (topFiles.some(f => f.endsWith('.sln') || f.endsWith('.csproj') || f.endsWith('.vbproj') || f.endsWith('.aspx') || f.toLowerCase() === 'web.config')) {
+        detectedRuntime.push('.NET Framework / IIS');
+      }
+    } catch {}
+    if (detectedRuntime.length === 0) detectedRuntime.push('UNKNOWN');
+  }
+
+  let detectedFramework = options.framework;
+  if (!detectedFramework) {
+    try {
+      const topFiles = fs.readdirSync(resolvedRoot);
+      if (topFiles.some(f => f.endsWith('.aspx') || f.endsWith('.asax'))) {
+        detectedFramework = 'ASP.NET WebForms';
+      } else if (inventory.profiles?.includes('agent-plugin')) {
+        detectedFramework = 'Antigravity Plugin';
+      } else if (inventory.profiles?.includes('web-api') || inventory.profiles?.includes('web-app')) {
+        detectedFramework = 'Web Application';
+      } else if (inventory.profiles?.includes('cli')) {
+        detectedFramework = 'Command-Line Interface';
+      } else {
+        detectedFramework = 'UNKNOWN';
+      }
+    } catch {
+      detectedFramework = 'UNKNOWN';
+    }
+  }
+
+  const detectedEntrypoints = (options.entrypoints && options.entrypoints.length > 0)
+    ? options.entrypoints
+    : (inventory.entrypoints?.map(e => e.path) || []);
+
   const projectJson = {
     projectId: projectName,
-    projectType: options.projectType || 'generic-library',
-    languages: options.languages || ['JavaScript'],
-    runtime: options.runtime || ['Node.js'],
-    entrypoints: options.entrypoints || [],
+    projectType: options.projectType || inventory.primaryProfile || 'generic-library',
+    framework: detectedFramework,
+    languages: detectedLanguages,
+    runtime: detectedRuntime,
+    entrypoints: detectedEntrypoints,
     dataStores: options.dataStores || [],
     externalServices: options.externalServices || [],
     source: 'SUGGESTED'
@@ -303,4 +357,33 @@ export function initProjectContext(repoRoot = process.cwd(), options = {}) {
     status: 'SUGGESTED',
     createdFiles
   };
+}
+
+/**
+ * Loads persisted baseline context from .security-audit/baseline.json if present (R10-P1-03).
+ */
+export function loadBaselineContext(repoRoot = process.cwd()) {
+  const baselinePath = path.join(path.resolve(repoRoot), '.security-audit', 'baseline.json');
+  if (fs.existsSync(baselinePath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+      return { exists: true, path: baselinePath, baseline: data };
+    } catch (err) {
+      return { exists: true, path: baselinePath, baseline: null, error: err.message };
+    }
+  }
+  return { exists: false, path: baselinePath, baseline: null };
+}
+
+/**
+ * Persists current verified context as baseline to .security-audit/baseline.json (R10-P1-03).
+ */
+export function persistBaselineContext(repoRoot = process.cwd(), baselineData = {}) {
+  const targetDir = path.join(path.resolve(repoRoot), '.security-audit');
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+  const baselinePath = path.join(targetDir, 'baseline.json');
+  fs.writeFileSync(baselinePath, JSON.stringify(baselineData, null, 2) + '\n', 'utf8');
+  return { success: true, path: baselinePath };
 }

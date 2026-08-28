@@ -23,7 +23,9 @@ import {
   detectContextDrift,
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint,
-  initProjectContext
+  initProjectContext,
+  loadBaselineContext,
+  persistBaselineContext
 } from './project-context.mjs';
 import { validateThreatModel } from './build-threat-model.mjs';
 export {
@@ -32,6 +34,8 @@ export {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint,
   initProjectContext,
+  loadBaselineContext,
+  persistBaselineContext,
   validateThreatModel
 };
 
@@ -1016,13 +1020,22 @@ export function validateDiscoveryCell(cell, repoRoot = null) {
   if (!cell.family || typeof cell.family !== 'string' || cell.family.trim().length === 0) {
     return { valid: false, error: 'Discovery cell requires a non-empty string vulnerability family' };
   }
-  const validStatuses = ['PENDING', 'PENDING_DISCOVERY', 'REVIEWED_NO_CANDIDATE', 'CANDIDATE', 'NOT_APPLICABLE', 'UNRESOLVED'];
+  const validStatuses = [
+    'PENDING',
+    'PENDING_DISCOVERY',
+    'REVIEWED_NO_CANDIDATE',
+    'CONFIRMED_ZERO_CANDIDATE',
+    'PENDING_SECOND_OPINION',
+    'CANDIDATE',
+    'NOT_APPLICABLE',
+    'UNRESOLVED'
+  ];
   if (!validStatuses.includes(cell.status)) {
     return { valid: false, error: `Invalid cell status '${cell.status}'; must be one of: ${validStatuses.join(', ')}` };
   }
-  if (cell.status === 'REVIEWED_NO_CANDIDATE') {
+  if (cell.status === 'REVIEWED_NO_CANDIDATE' || cell.status === 'CONFIRMED_ZERO_CANDIDATE') {
     if (!Array.isArray(cell.reviewedEvidence) || cell.reviewedEvidence.length === 0) {
-      return { valid: false, error: 'REVIEWED_NO_CANDIDATE requires non-empty reviewedEvidence array proving inspection' };
+      return { valid: false, error: `${cell.status} requires non-empty reviewedEvidence array proving inspection` };
     }
     for (const ev of cell.reviewedEvidence) {
       if (!ev || typeof ev.path !== 'string' || ev.path.trim().length === 0) {
@@ -2743,12 +2756,22 @@ export function finalizeScan({
   const suppressedCount = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED').length;
   const acceptedRiskCount = canonicalFindings.filter(f => f.disposition === 'ACCEPTED_RISK').length;
 
-  const safeExecutedStages = Array.isArray(executedStages) ? [...executedStages] : ['FINALIZATION'];
-  if (!Array.isArray(executedStages)) {
-    if (manifest) safeExecutedStages.push('INVENTORY');
-    if (threatModel) safeExecutedStages.push('THREAT_MODELING');
-    if (safeMatrix.length > 0) safeExecutedStages.push('DISCOVERY_MATRIX');
-    if (safeVotes.length > 0 || canonicalFindings.length === 0) safeExecutedStages.push('VERIFICATION_PANEL');
+  // R10-P0-01: Execution stages accounting under Default-Deny.
+  // Spoofed stages are strictly rejected: every claimed stage must be verified by physical artifacts.
+  const claimedStages = Array.isArray(executedStages) ? new Set(executedStages) : null;
+  const safeExecutedStages = ['FINALIZATION'];
+
+  if ((!claimedStages || claimedStages.has('INVENTORY')) && manifest) {
+    safeExecutedStages.push('INVENTORY');
+  }
+  if ((!claimedStages || claimedStages.has('THREAT_MODELING')) && threatModel && validateThreatModel(threatModel, safeRepoRoot || process.cwd()).valid) {
+    safeExecutedStages.push('THREAT_MODELING');
+  }
+  if ((!claimedStages || claimedStages.has('DISCOVERY_MATRIX')) && safeMatrix.length > 0) {
+    safeExecutedStages.push('DISCOVERY_MATRIX');
+  }
+  if ((!claimedStages || claimedStages.has('VERIFICATION_PANEL')) && (safeVotes.length > 0 || canonicalFindings.length === 0)) {
+    safeExecutedStages.push('VERIFICATION_PANEL');
   }
 
   // R5-P0-01: Context Preparation & Pre-Context Secret Protection Preflight
@@ -2792,7 +2815,8 @@ export function finalizeScan({
 
   // R6-P0-01: Six-Pillar Assurance Gates
   const coverageGate = (coverageStatus === 'COMPLETE');
-  const matrixGate = Boolean(matrixValidation.valid);
+  const hasPendingSecondOpinion = safeMatrix.some(c => c.status === 'PENDING_SECOND_OPINION');
+  const matrixGate = Boolean(matrixValidation.valid && !hasPendingSecondOpinion);
   const findingGate = (confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0);
   const contextGate = Boolean(
     contextPrep
@@ -2839,17 +2863,45 @@ export function finalizeScan({
     }
   }
 
+  // R10-P1-03: Context Drift baseline check and enforcement
+  let contextDrift = null;
+  const loadedBaseline = loadBaselineContext(safeRepoRoot || process.cwd());
+  if (loadedBaseline.exists && loadedBaseline.baseline && projectContextRes.context) {
+    try {
+      contextDrift = detectContextDrift(projectContextRes.context, loadedBaseline.baseline);
+      if (contextDrift.hasDrift && safeAuditIntent === 'REGRESSION') {
+        if (contextDrift.status === 'THREAT_MODEL_REVIEW_REQUIRED') {
+          canDeclareClean = false;
+          assuranceLabel = 'THREAT_MODEL_REVIEW_REQUIRED';
+        } else if (contextDrift.status === 'CONTEXT_DRIFT') {
+          canDeclareClean = false;
+          assuranceLabel = 'CONTEXT_DRIFT';
+        }
+      }
+    } catch {}
+  }
+
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = manifest;
   const scanRunId = manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  let projectId = manifest?.projectId || path.basename(path.resolve(safeRepoRoot || process.cwd()));
-  try {
-    const pkgPath = path.join(path.resolve(safeRepoRoot || process.cwd()), 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (p.name) projectId = p.name;
-    }
-  } catch {}
+  let projectId = null;
+  // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
+  if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
+    projectId = projectContextRes.context.project.projectId;
+  } else if (manifest?.projectId) {
+    projectId = manifest.projectId;
+  } else {
+    try {
+      const pkgPath = path.join(path.resolve(safeRepoRoot || process.cwd()), 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (p.name) projectId = p.name;
+      }
+    } catch {}
+  }
+  if (!projectId) {
+    projectId = path.basename(path.resolve(safeRepoRoot || process.cwd()));
+  }
 
   if (manifest && typeof manifest === 'object') {
     manifest.complete = true;
@@ -2893,6 +2945,14 @@ export function finalizeScan({
     deferredCount,
     suppressedCount,
     acceptedRiskCount,
+    findingCounts: {
+      reportable: confirmedCount,
+      hardening: hardeningCount,
+      informational: informationalCount,
+      deferred: deferredCount,
+      suppressed: suppressedCount,
+      acceptedRisk: acceptedRiskCount
+    },
     coverageStatus,
     manifestValid: coverageReconciliation.valid,
     coverageMode,
@@ -2916,6 +2976,7 @@ export function finalizeScan({
       notApplicable: safeMatrix.filter(c => c.status === 'NOT_APPLICABLE').length,
       unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length
     },
+    contextDrift,
     execution,
     dependencyBoundary,
     baseline,
@@ -2923,6 +2984,26 @@ export function finalizeScan({
     toolIntegrity,
     contextPreparation: contextPrep.manifest
   };
+
+  // R10-P1-03: Persist verified baseline to .security-audit/baseline.json upon clean DISCOVERY scan
+  if (canDeclareClean && safeAuditIntent === 'DISCOVERY' && fs.existsSync(path.join(safeRepoRoot || process.cwd(), '.security-audit'))) {
+    try {
+      const baselineData = {
+        project: projectContextRes.context?.project || {},
+        trustModel: projectContextRes.context?.trustModel || {},
+        actors: projectContextRes.context?.actors || [],
+        securityProperties: projectContextRes.context?.securityProperties || [],
+        projectContextFingerprint: projectContextRes.projectContextFingerprint,
+        securityPropertiesFingerprint: projectContextRes.securityPropertiesFingerprint,
+        surfaceFingerprint: baseline.surfaceFingerprint,
+        threatModelFingerprint: baseline.threatModelFingerprint,
+        targetRevision: baseline.targetRevision,
+        completedAt: new Date().toISOString(),
+        finalVerdict: assuranceLabel
+      };
+      persistBaselineContext(safeRepoRoot || process.cwd(), baselineData);
+    } catch {}
+  }
 
   return {
     summary,
@@ -2965,41 +3046,93 @@ export function computeCanonicalArtifactHashes({
   sarifJson = null,
   coverageJson = null,
   threatModelJson = null,
-  directoryManifestJson = null
+  directoryManifestJson = null,
+  canonicalPath = null,
+  markdownPath = null,
+  sarifPath = null,
+  coveragePath = null,
+  threatModelPath = null,
+  directoryManifestPath = null
 } = {}) {
+  const readOrData = (data, filePath) => {
+    if (data !== null && data !== undefined) return data;
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        return fs.readFileSync(filePath, 'utf8');
+      } catch {}
+    }
+    return null;
+  };
+
   const hash = (data) => {
     if (!data) return null;
     const str = typeof data === 'string' ? data : JSON.stringify(data);
     return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
   };
+
+  const cRes = readOrData(canonicalResult, canonicalPath);
+  const mdTxt = readOrData(markdownText, markdownPath);
+  const sarifObj = readOrData(sarifJson, sarifPath);
+  const covObj = readOrData(coverageJson, coveragePath);
+  const tmObj = readOrData(threatModelJson, threatModelPath);
+  const dmObj = readOrData(directoryManifestJson, directoryManifestPath);
+
   return {
-    canonicalResultHash: hash(canonicalResult),
-    markdownHash: hash(markdownText),
-    sarifHash: hash(sarifJson),
-    coverageHash: hash(coverageJson),
-    threatModelHash: hash(threatModelJson),
-    directoryManifestHash: hash(directoryManifestJson)
+    canonicalResultHash: hash(cRes),
+    markdownHash: hash(mdTxt),
+    sarifHash: hash(sarifObj),
+    coverageHash: hash(covObj),
+    threatModelHash: hash(tmObj),
+    directoryManifestHash: hash(dmObj)
   };
 }
 
 /**
  * Validates cross-format consistency across SARIF, Markdown, scan-manifest, and coverage (R9-P0-03, R9-T05, R9-T06, R9-T07).
  */
-export function validateCrossFormatParity({ sarif, markdown, scanManifest, coverage } = {}) {
+export function validateCrossFormatParity({
+  sarif,
+  markdown,
+  scanManifest,
+  coverage,
+  sarifPath,
+  markdownPath,
+  manifestPath,
+  coveragePath,
+  canonicalPath
+} = {}) {
+  let loadedSarif = sarif;
+  let loadedMarkdown = markdown;
+  let loadedManifest = scanManifest;
+  let loadedCoverage = coverage;
+
+  if (!loadedSarif && sarifPath && fs.existsSync(sarifPath)) {
+    try { loadedSarif = JSON.parse(fs.readFileSync(sarifPath, 'utf8')); } catch {}
+  }
+  if (!loadedMarkdown && markdownPath && fs.existsSync(markdownPath)) {
+    try { loadedMarkdown = fs.readFileSync(markdownPath, 'utf8'); } catch {}
+  }
+  if (!loadedManifest && manifestPath && fs.existsSync(manifestPath)) {
+    try { loadedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch {}
+  }
+  if (!loadedCoverage && coveragePath && fs.existsSync(coveragePath)) {
+    try { loadedCoverage = JSON.parse(fs.readFileSync(coveragePath, 'utf8')); } catch {}
+  }
+
   const errors = [];
   let sarifClean = null;
   let manifestClean = null;
   let mdClean = null;
 
-  if (sarif?.runs?.[0]?.properties?.canDeclareClean !== undefined) {
-    sarifClean = Boolean(sarif.runs[0].properties.canDeclareClean);
+  if (loadedSarif?.runs?.[0]?.properties?.canDeclareClean !== undefined) {
+    sarifClean = Boolean(loadedSarif.runs[0].properties.canDeclareClean);
   }
-  if (scanManifest?.canDeclareClean !== undefined) {
-    manifestClean = Boolean(scanManifest.canDeclareClean);
+  if (loadedManifest?.canDeclareClean !== undefined) {
+    manifestClean = Boolean(loadedManifest.canDeclareClean);
   }
-  if (typeof markdown === 'string') {
-    if (markdown.includes('- **Can Declare Clean**: **true**')) mdClean = true;
-    else if (markdown.includes('- **Can Declare Clean**: **false**')) mdClean = false;
+  if (typeof loadedMarkdown === 'string') {
+    if (loadedMarkdown.includes('- **Can Declare Clean**: **true**')) mdClean = true;
+    else if (loadedMarkdown.includes('- **Can Declare Clean**: **false**')) mdClean = false;
   }
 
   // R9-T05: SARIF / Markdown / Manifest verdict mismatch
@@ -3014,25 +3147,95 @@ export function validateCrossFormatParity({ sarif, markdown, scanManifest, cover
   }
 
   // R9-T06: Finding count mismatch
-  if (sarif?.runs?.[0]?.properties?.findingCounts && scanManifest?.findingCounts) {
-    const sfc = sarif.runs[0].properties.findingCounts;
-    const mfc = scanManifest.findingCounts;
+  if (loadedSarif?.runs?.[0]?.properties?.findingCounts && loadedManifest?.findingCounts) {
+    const sfc = loadedSarif.runs[0].properties.findingCounts;
+    const mfc = loadedManifest.findingCounts;
     if (sfc.reportable !== mfc.reportable || sfc.deferred !== mfc.deferred) {
       errors.push(`Finding count mismatch: SARIF (${JSON.stringify(sfc)}) !== Manifest (${JSON.stringify(mfc)})`);
     }
   }
 
-  // R9-T07: Coverage status mismatch
-  if (sarif?.runs?.[0]?.properties?.coverageStatus && coverage?.coverageStatus) {
-    if (sarif.runs[0].properties.coverageStatus !== coverage.coverageStatus) {
-      errors.push(`Coverage status mismatch: SARIF (${sarif.runs[0].properties.coverageStatus}) !== coverage.json (${coverage.coverageStatus})`);
+  if (loadedSarif?.runs?.[0]?.results && typeof loadedMarkdown === 'string') {
+    const sarifCount = loadedSarif.runs[0].results.length;
+    const match = loadedMarkdown.match(/- \*\*Confirmed Vulnerabilities \(Reportable\)\*\*:\s*(\d+)/);
+    if (match) {
+      const mdCount = parseInt(match[1], 10);
+      if (sarifCount !== mdCount) {
+        errors.push(`Finding count mismatch: SARIF results (${sarifCount}) !== Markdown confirmed (${mdCount})`);
+      }
     }
+  }
+
+  // R9-T07: Coverage status mismatch
+  let sarifCov = loadedSarif?.runs?.[0]?.properties?.coverageStatus;
+  let manifestCov = loadedManifest?.coverageStatus;
+  let covCov = loadedCoverage?.coverageStatus;
+  if (sarifCov && manifestCov && sarifCov !== manifestCov) {
+    errors.push(`Coverage mismatch: SARIF (${sarifCov}) !== Manifest (${manifestCov})`);
+  }
+  if (sarifCov && covCov && sarifCov !== covCov) {
+    errors.push(`Coverage mismatch: SARIF (${sarifCov}) !== Coverage JSON (${covCov})`);
   }
 
   return {
     valid: errors.length === 0,
     errors
   };
+}
+
+/**
+ * Evaluates selective second opinion for critical zero-candidate discovery cells (R10-P1-06).
+ */
+export function evaluateSecondOpinion({ cell, firstReview, secondReview }) {
+  if (!cell) {
+    return { valid: false, status: 'INVALID_CELL', error: 'Cell must be provided' };
+  }
+  const isCritical = cell.criticality === 'critical' || cell.isCritical === true;
+  const firstIsZero = firstReview && (firstReview.status === 'REVIEWED_NO_CANDIDATE' || (firstReview.candidates && firstReview.candidates.length === 0));
+
+  if (!isCritical || !firstIsZero) {
+    return {
+      status: 'NOT_REQUIRED',
+      required: false,
+      agreement: true,
+      escalation: false,
+      verdict: firstReview?.status || cell.status
+    };
+  }
+
+  if (!secondReview) {
+    return {
+      status: 'PENDING_SECOND_OPINION',
+      required: true,
+      agreement: false,
+      escalation: false,
+      verdict: 'PENDING_SECOND_OPINION'
+    };
+  }
+
+  const secondIsZero = secondReview.status === 'REVIEWED_NO_CANDIDATE' || (secondReview.candidates && secondReview.candidates.length === 0);
+  if (secondIsZero) {
+    return {
+      status: 'CONFIRMED_ZERO_CANDIDATE',
+      required: true,
+      agreement: true,
+      escalation: false,
+      verdict: 'CONFIRMED_ZERO_CANDIDATE',
+      evidence: [
+        ...(Array.isArray(firstReview.reviewedEvidence) ? firstReview.reviewedEvidence : []),
+        ...(Array.isArray(secondReview.reviewedEvidence) ? secondReview.reviewedEvidence : [])
+      ]
+    };
+  } else {
+    return {
+      status: 'ESCALATED_TO_CANDIDATE',
+      required: true,
+      agreement: false,
+      escalation: true,
+      verdict: 'CANDIDATE',
+      candidates: secondReview.candidates || []
+    };
+  }
 }
 
 /**
@@ -3434,7 +3637,8 @@ export function renderMarkdownFromCanonical({
   canDeclareClean = null,
   assuranceLevel = null,
   scanRunId = null,
-  projectId = null
+  projectId = null,
+  findingCounts = null
 }) {
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
@@ -3456,8 +3660,9 @@ export function renderMarkdownFromCanonical({
   if (assuranceLevel) {
     md += `- **Assurance Level**: **${sanitizeInlineText(assuranceLevel)}**\n`;
   }
-  if (scanRunId || manifest?.scanRunId) {
-    md += `- **Scan Run ID**: \`${sanitizeInlineText(scanRunId || manifest.scanRunId)}\`\n`;
+  const effectiveScanRunId = scanRunId || manifest?.scanRunId || null;
+  if (effectiveScanRunId) {
+    md += `- **Scan Run ID**: \`${sanitizeInlineText(effectiveScanRunId)}\`\n`;
   }
   if (projectId || manifest?.projectId) {
     md += `- **Project ID**: \`${sanitizeInlineText(projectId || manifest.projectId)}\`\n`;
@@ -3514,13 +3719,20 @@ export function renderMarkdownFromCanonical({
   const manualReview = safeFindings.filter(f => f.disposition === 'DEFERRED');
   const falsePositives = safeFindings.filter(f => f.disposition === 'SUPPRESSED');
 
+  const reportedConfirmedCount = (findingCounts && typeof findingCounts.reportable === 'number') ? findingCounts.reportable : confirmed.length;
+  const reportedHardeningCount = (findingCounts && typeof findingCounts.hardening === 'number') ? findingCounts.hardening : hardening.length;
+  const reportedInfoCount = (findingCounts && typeof findingCounts.informational === 'number') ? findingCounts.informational : informational.length;
+  const reportedAcceptedCount = (findingCounts && typeof findingCounts.acceptedRisk === 'number') ? findingCounts.acceptedRisk : acceptedRisks.length;
+  const reportedDeferredCount = (findingCounts && typeof findingCounts.deferred === 'number') ? findingCounts.deferred : manualReview.length;
+  const reportedSuppressedCount = (findingCounts && typeof findingCounts.suppressed === 'number') ? findingCounts.suppressed : falsePositives.length;
+
   md += '## 2. Findings Summary\n\n';
-  md += `- **Confirmed Vulnerabilities (Reportable)**: ${confirmed.length}\n`;
-  md += `- **Advisory Hardening Opportunities**: ${hardening.length}\n`;
-  md += `- **Informational Security Notes**: ${informational.length}\n`;
-  md += `- **Accepted Risks / Documented Waivers**: ${acceptedRisks.length}\n`;
-  md += `- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: ${manualReview.length}\n`;
-  md += `- **Affirmatively Refuted (Suppressed)**: ${falsePositives.length}\n`;
+  md += `- **Confirmed Vulnerabilities (Reportable)**: ${reportedConfirmedCount}\n`;
+  md += `- **Advisory Hardening Opportunities**: ${reportedHardeningCount}\n`;
+  md += `- **Informational Security Notes**: ${reportedInfoCount}\n`;
+  md += `- **Accepted Risks / Documented Waivers**: ${reportedAcceptedCount}\n`;
+  md += `- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: ${reportedDeferredCount}\n`;
+  md += `- **Affirmatively Refuted (Suppressed)**: ${reportedSuppressedCount}\n`;
   const prov = modelProvenance || safeFindings.find(f => f.modelProvenance)?.modelProvenance;
   if (prov) {
     md += `- **Model Behavior Provenance**: Provider: \`${sanitizeInlineText(prov.modelProvider || 'antigravity-orchestrator')}\` | Model: \`${sanitizeInlineText(prov.modelIdentifier || 'unknown')}\` | Prompt Integrity: \`${sanitizeInlineText(prov.systemPromptIntegrity || 'UNKNOWN')}\`\n`;
@@ -4093,6 +4305,9 @@ if (isDirectExecution) {
   const votesPath = getArg('--votes');
   const manifestPath = getArg('--manifest');
   const matrixPath = getArg('--matrix') || getArg('--discovery-matrix');
+  const threatModelPathArg = getArg('--threat-model');
+  const attestationPathArg = getArg('--execution-attestation');
+  const executedStagesArg = getArg('--executed-stages');
   const externalSarifPath = getArg('--external-sarif');
   const repoRootArg = getArg('--repo-root') || process.cwd();
   const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
@@ -4107,19 +4322,22 @@ if (isDirectExecution) {
     console.log('Usage: node skills/security-audit/scripts/finalize-scan.mjs [options]');
     console.log('');
     console.log('Options:');
-    console.log('  --candidates <path>       Candidate findings JSON file');
-    console.log('  --votes <path>            Directory or JSON file with verifier votes');
-    console.log('  --manifest <path>         Directory manifest JSON');
-    console.log('  --matrix <path>           Discovery matrix JSON');
-    console.log('  --repo-root <path>        Repository root path (default: current directory)');
-    console.log('  --intent <DISCOVERY|...>  Audit intent');
-    console.log('  --self-audit              Allow self-audit mode (TCB overlap permit)');
-    console.log('  --external-sarif <path>   Ingest and display external scanner SARIF report');
-    console.log('  --output <path>           Write canonical findings JSON');
-    console.log('  --output-sarif <path>     Write finalized SARIF report');
-    console.log('  --output-md <path>        Write finalized Markdown report');
-    console.log('  --output-coverage <path>  Write coverage accounting JSON');
-    console.log('  --help                    Show this help message');
+    console.log('  --candidates <path>           Candidate findings JSON file');
+    console.log('  --votes <path>                Directory or JSON file with verifier votes');
+    console.log('  --manifest <path>             Directory manifest JSON');
+    console.log('  --matrix <path>               Discovery matrix JSON');
+    console.log('  --threat-model <path>         Threat model JSON file (e.g. scratch/threat-model.json)');
+    console.log('  --execution-attestation <path> Execution attestation JSON file');
+    console.log('  --executed-stages <stages>    Comma-separated list of executed audit stages');
+    console.log('  --repo-root <path>            Repository root path (default: current directory)');
+    console.log('  --intent <DISCOVERY|...>      Audit intent');
+    console.log('  --self-audit                  Allow self-audit mode (TCB overlap permit)');
+    console.log('  --external-sarif <path>       Ingest and display external scanner SARIF report');
+    console.log('  --output <path>               Write canonical findings JSON');
+    console.log('  --output-sarif <path>         Write finalized SARIF report');
+    console.log('  --output-md <path>            Write finalized Markdown report');
+    console.log('  --output-coverage <path>      Write coverage accounting JSON');
+    console.log('  --help                        Show this help message');
     process.exit(0);
   }
 
@@ -4174,7 +4392,52 @@ if (isDirectExecution) {
       }
 
       const repoRoot = path.resolve(repoRootArg);
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg, discoveryMatrix, allowSelfAudit });
+
+      // R10-P0-01: Load and validate threat model from CLI arg or canonical scratch path
+      let threatModel = null;
+      if (threatModelPathArg && fs.existsSync(threatModelPathArg)) {
+        try {
+          const parsedTm = JSON.parse(fs.readFileSync(threatModelPathArg, 'utf8'));
+          const tmVal = validateThreatModel(parsedTm, repoRoot);
+          if (!tmVal.valid) {
+            console.error(`[THREAT-MODEL] Error: Threat model failed validation under Default-Deny: ${tmVal.errors.join(', ')}`);
+            threatModel = null;
+          } else {
+            threatModel = parsedTm;
+          }
+        } catch (err) {
+          console.error(`[THREAT-MODEL] Error: Could not parse threat model from ${threatModelPathArg}: ${err.message}`);
+          threatModel = null;
+        }
+      } else if (fs.existsSync(path.resolve(repoRoot, 'scratch/threat-model.json'))) {
+        try {
+          const autoPath = path.resolve(repoRoot, 'scratch/threat-model.json');
+          const parsedTm = JSON.parse(fs.readFileSync(autoPath, 'utf8'));
+          const tmVal = validateThreatModel(parsedTm, repoRoot);
+          if (tmVal.valid) {
+            threatModel = parsedTm;
+          } else {
+            console.warn(`[THREAT-MODEL] Warning: scratch/threat-model.json failed validation: ${tmVal.errors.join(', ')}`);
+          }
+        } catch {}
+      }
+
+      let executedStages = null;
+      if (executedStagesArg) {
+        executedStages = executedStagesArg.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      const finalization = finalizeScan({
+        candidates,
+        manifest,
+        repoRoot,
+        votes,
+        auditIntent: intentArg,
+        discoveryMatrix,
+        threatModel,
+        executedStages,
+        allowSelfAudit
+      });
 
       if (outputJsonPath) {
         fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
@@ -4182,8 +4445,9 @@ if (isDirectExecution) {
         console.log(`✔ Generated Canonical Findings JSON: ${outputJsonPath}`);
       }
 
+      let sarif = null;
       if (outputSarifPath) {
-        const sarif = renderSarifFromCanonical({
+        sarif = renderSarifFromCanonical({
           canonicalFindings: finalization.canonicalFindings,
           manifest: finalization.manifest,
           coverageStatus: finalization.coverageStatus,
@@ -4191,6 +4455,10 @@ if (isDirectExecution) {
           repoRoot,
           auditIntent: finalization.auditIntent,
           canDeclareClean: finalization.summary.canDeclareClean,
+          assuranceLevel: finalization.summary.assuranceLabel,
+          findingCounts: finalization.summary.findingCounts,
+          scanRunId: finalization.manifest?.scanRunId,
+          projectId: finalization.manifest?.projectId,
           executionAttestation: finalization.summary.execution
         });
         fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
@@ -4198,22 +4466,29 @@ if (isDirectExecution) {
         console.log(`✔ Generated SARIF report: ${outputSarifPath}`);
       }
 
+      let md = null;
       if (outputMdPath) {
-        const md = renderMarkdownFromCanonical({
+        md = renderMarkdownFromCanonical({
           canonicalFindings: finalization.canonicalFindings,
           manifest: finalization.manifest,
           coverageStatus: finalization.coverageStatus,
           provenance: finalization.provenance,
           repoRoot,
-          auditIntent: finalization.auditIntent
+          auditIntent: finalization.auditIntent,
+          canDeclareClean: finalization.summary.canDeclareClean,
+          assuranceLevel: finalization.summary.assuranceLabel,
+          scanRunId: finalization.manifest?.scanRunId,
+          projectId: finalization.manifest?.projectId,
+          findingCounts: finalization.summary.findingCounts
         });
         fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
         fs.writeFileSync(outputMdPath, md, 'utf8');
         console.log(`✔ Generated Markdown report: ${outputMdPath}`);
       }
 
+      let coveragePayload = null;
       if (outputCoveragePath) {
-        const coveragePayload = {
+        coveragePayload = {
           schemaVersion: '1',
           coverageStatus: finalization.coverageStatus,
           canDeclareClean: finalization.summary.canDeclareClean,
@@ -4225,6 +4500,42 @@ if (isDirectExecution) {
         fs.writeFileSync(outputCoveragePath, JSON.stringify(coveragePayload, null, 2), 'utf8');
         console.log(`✔ Generated Coverage JSON: ${outputCoveragePath}`);
       }
+
+      // R10-P0-02: Mandatory cross-format parity validation on production CLI path
+      if (outputSarifPath && outputMdPath) {
+        const parityResult = validateCrossFormatParity({
+          sarif,
+          markdown: md,
+          scanManifest: finalization.manifest,
+          coverage: coveragePayload,
+          sarifPath: outputSarifPath,
+          markdownPath: outputMdPath,
+          manifestPath,
+          canonicalPath: outputJsonPath
+        });
+        if (!parityResult.valid) {
+          console.error(`[CRITICAL] Mandatory cross-format parity validation failed:\n  - ${(parityResult.errors || []).join('\n  - ')}`);
+          process.exit(1);
+        }
+        console.log('✔ Cross-format parity validated successfully across SARIF, Markdown, and Manifest.');
+      }
+
+      // R10-P0-02: Compute canonical artifact hashes for release provenance
+      const artifactHashes = computeCanonicalArtifactHashes({
+        canonicalResult: finalization.canonicalFindings,
+        markdownText: md,
+        sarifJson: sarif,
+        coverageJson: coveragePayload,
+        threatModelJson: threatModel,
+        directoryManifestJson: finalization.manifest,
+        canonicalPath: outputJsonPath,
+        sarifPath: outputSarifPath,
+        markdownPath: outputMdPath,
+        coveragePath: outputCoveragePath,
+        threatModelPath: threatModelPathArg || (fs.existsSync(path.resolve(repoRoot, 'scratch/threat-model.json')) ? path.resolve(repoRoot, 'scratch/threat-model.json') : null),
+        directoryManifestPath: manifestPath
+      });
+      console.log(`✔ Canonical Artifact Authority Hash (SHA-256): ${artifactHashes.canonicalResultHash || 'N/A'}`);
     } catch (err) {
       console.error('Error in finalize-scan:', err.message);
       process.exit(1);

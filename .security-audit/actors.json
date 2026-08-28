@@ -19,5 +19,23 @@
     "trustLevel": "untrusted",
     "source": "REPOSITORY_EVIDENCE",
     "confidence": "HIGH"
+  },
+  {
+    "id": "authenticated-user",
+    "description": "Standard tenant user attempting horizontal or vertical privilege escalation",
+    "trustLevel": "semi-trusted",
+    "status": "ASSUMPTION"
+  },
+  {
+    "id": "external-attacker",
+    "description": "External actor interacting via network, public APIs, or CLI parameters",
+    "trustLevel": "untrusted",
+    "status": "ASSUMPTION"
+  },
+  {
+    "id": "system-operator",
+    "description": "Authorized administrator configuring environment and deployments",
+    "trustLevel": "privileged",
+    "status": "ASSUMPTION"
   }
 ]
