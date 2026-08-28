@@ -1,6 +1,7 @@
 node_modules/
 scratch/
 reports/
+codeql-db/
 *.log
 .DS_Store
 Thumbs.db
