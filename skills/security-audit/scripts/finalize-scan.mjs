@@ -12,7 +12,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getHardenedGitProvenance, runSafeGit } from './safe-git.mjs';
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
-import { buildDirectoryManifest, extractChangedFiles } from './build-inventory.mjs';
+import { buildDirectoryManifest, extractChangedFiles, categorizeDirectory, classifyFile } from './build-inventory.mjs';
+export { categorizeDirectory, classifyFile };
 
 
 
@@ -204,8 +205,15 @@ export function validateDirectoryManifest(manifest, repoRoot = null) {
 
   const validStatuses = new Set([
     'SCANNED',
+    'SCANNED_RUNTIME',
+    'SCANNED_BUILD',
+    'SCANNED_CI',
+    'SCANNED_AGENT_CONTEXT',
+    'SCANNED_TEST_EXECUTABLE',
     'EXCLUDED_VENDORED',
     'EXCLUDED_GENERATED',
+    'EXCLUDED_GENERATED_VERIFIED',
+    'EXCLUDED_STATIC_ASSET',
     'EXCLUDED_NON_CODE',
     'EXCLUDED_TEST'
   ]);
@@ -297,8 +305,10 @@ export function validateDirectoryManifest(manifest, repoRoot = null) {
   for (const [actualPath, actualEntry] of actualMap.entries()) {
     const claimedEntry = claimedMap.get(actualPath);
     if (claimedEntry) {
-      if (actualEntry.status === 'SCANNED') {
-        if (claimedEntry.status !== 'SCANNED') {
+      const actualIsScanned = typeof actualEntry.status === 'string' && actualEntry.status.startsWith('SCANNED');
+      const claimedIsScanned = typeof claimedEntry.status === 'string' && claimedEntry.status.startsWith('SCANNED');
+      if (actualIsScanned) {
+        if (!claimedIsScanned) {
           statusMismatches.push({ path: actualPath, expected: actualEntry.status, claimed: claimedEntry.status });
         } else {
           hasScannedCodeDirectory = true;

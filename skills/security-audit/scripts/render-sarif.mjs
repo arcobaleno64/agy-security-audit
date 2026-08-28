@@ -12,8 +12,8 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { getHardenedGitProvenance, readGitFileAtRevision, resolveGitCommitRef } from './safe-git.mjs';
-import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory } from './build-inventory.mjs';
-import { buildThreatModel, generateDiscoveryMatrix } from './build-threat-model.mjs';
+import { buildDirectoryManifest, extractChangedFiles, buildScanManifest, categorizeDirectory, classifyFile } from './build-inventory.mjs';
+import { buildThreatModel, generateDiscoveryMatrix, detectRepositoryInventory } from './build-threat-model.mjs';
 
 import {
   CVSS_V4_REGEX,
@@ -562,7 +562,7 @@ export function runTests() {
   if (!fsManifestValidation.valid) {
     throw new Error(`P1 VIOLATION: Filesystem directory manifest invalid: ${fsManifestValidation.error}`);
   }
-  if (!fsManifest.entries.some(e => e.path === 'skills/' && e.status === 'SCANNED')) {
+  if (!fsManifest.entries.some(e => e.path === 'skills/' && e.status.startsWith('SCANNED'))) {
     throw new Error('P1 VIOLATION: Expected skills/ folder not marked SCANNED in directory manifest');
   }
   console.log('✔ 18. P1 Invariant: Ground-truth directory manifest derived deterministically from filesystem.');
@@ -615,14 +615,14 @@ export function runTests() {
   console.log('✔ 21. P1 Invariant: Review mode coverage reconciliation achieves COMPLETE under Default-Deny.');
 
 
-  // 22. P1 (0.10.0): Categorization Accuracy for Monorepos & CLI
-  if (categorizeDirectory('.github').status !== 'SCANNED') {
+  // 22. P1 (0.10.0): Categorization Accuracy for Monorepos & CLI (R2-P0-10)
+  if (!categorizeDirectory('.github').status.startsWith('SCANNED')) {
     throw new Error('P1 VIOLATION: .github directory must be SCANNED for CI/CD attack surface');
   }
-  if (categorizeDirectory('packages').status !== 'SCANNED') {
+  if (!categorizeDirectory('packages').status.startsWith('SCANNED')) {
     throw new Error('P1 VIOLATION: packages directory must be SCANNED for monorepo first-party code');
   }
-  if (categorizeDirectory('bin').status !== 'SCANNED') {
+  if (!categorizeDirectory('bin').status.startsWith('SCANNED')) {
     throw new Error('P1 VIOLATION: bin directory must be SCANNED for CLI source scripts');
   }
   console.log('✔ 22. P1 Invariant: Critical entrypoints (.github, packages, bin) properly classified as SCANNED.');
@@ -1324,7 +1324,7 @@ export function runTests() {
       }
     }
   }
-  if (categorizeDirectory('agents').status !== 'SCANNED') {
+  if (!categorizeDirectory('agents').status.startsWith('SCANNED')) {
     throw new Error('P0-04 VIOLATION: agents/ directory must be categorized as SCANNED');
   }
   console.log('✔ 55. P0-04 Invariant: Custom agents located at plugin root with verified least-privilege capabilities.');
@@ -2882,7 +2882,93 @@ export function runTests() {
 
   console.log('✔ 70. R2-P0-08 Invariant: Benchmark Truthfulness, Real Discovery Evaluation, and Stochastic Stability.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (70/70).');
+  // 71. R2-P0-09 / R2-P0-10 Invariant: Multi-Profile Threat Model & Granular Coverage Classification.
+  // 71.1 detectRepositoryInventory detects multi-profile and multi-language facts
+  const repoInv = detectRepositoryInventory(process.cwd());
+  if (!repoInv.profiles.includes('agent-plugin') || !repoInv.languages.includes('JavaScript')) {
+    throw new Error(`R2-P0-09 VIOLATION: detectRepositoryInventory missed agent-plugin or JavaScript: ${JSON.stringify(repoInv)}`);
+  }
+  if (!repoInv.entrypoints.some(e => e.path === 'plugin.json')) {
+    throw new Error('R2-P0-09 VIOLATION: plugin.json entrypoint missing from inventory facts');
+  }
+
+  // 71.2 buildThreatModel produces evidence-bound components and grounds assumptions
+  const fullTm = buildThreatModel(process.cwd());
+  if (!fullTm.targetProfile || fullTm.targetProfile.primary !== 'agent-plugin') {
+    throw new Error(`R2-P0-09 VIOLATION: Threat model primary profile mismatch: got ${fullTm.targetProfile?.primary}`);
+  }
+  const pluginComp = fullTm.components.find(c => c.name === 'PluginSystem');
+  if (!pluginComp || !pluginComp.evidence || !pluginComp.evidence.path) {
+    throw new Error('R2-P0-09 VIOLATION: PluginSystem component lacks verified evidence pointer');
+  }
+  const authActor = fullTm.actors.find(a => a.id === 'authenticated-user');
+  if (!authActor || authActor.status !== 'ASSUMPTION') {
+    throw new Error('R2-P0-09 VIOLATION: Unevidenced actor was not classified as ASSUMPTION');
+  }
+
+  // 71.3 categorizeDirectory implements granular coverage classifications without blanket test exclusions (R2-P0-10)
+  const testCat = categorizeDirectory('test');
+  if (testCat.status !== 'SCANNED_TEST_EXECUTABLE') {
+    throw new Error(`R2-P0-10 VIOLATION: test directory blanket excluded: got ${testCat.status}`);
+  }
+  const githubCat = categorizeDirectory('.github');
+  if (githubCat.status !== 'SCANNED_CI') {
+    throw new Error(`R2-P0-10 VIOLATION: .github directory not classified as SCANNED_CI: got ${githubCat.status}`);
+  }
+  const agentCat = categorizeDirectory('agents');
+  if (agentCat.status !== 'SCANNED_AGENT_CONTEXT') {
+    throw new Error(`R2-P0-10 VIOLATION: agents directory not classified as SCANNED_AGENT_CONTEXT: got ${agentCat.status}`);
+  }
+  const cmakeCat = categorizeDirectory('cmake');
+  if (cmakeCat.status !== 'SCANNED_BUILD') {
+    throw new Error(`R2-P0-10 VIOLATION: cmake directory not classified as SCANNED_BUILD: got ${cmakeCat.status}`);
+  }
+
+  // 71.4 classifyFile classifies individual attack surfaces & prevents executable bypass in static/
+  const fileCi = classifyFile('.github/workflows/ci.yml');
+  const fileContext = classifyFile('rules/AGENTS.md');
+  const fileTest = classifyFile('test/scanner.test.js');
+  const fileBuild = classifyFile('package.json');
+  const fileStaticMedia = classifyFile('static/images/logo.png');
+  const fileStaticScript = classifyFile('static/scripts/exploit.js');
+  if (fileCi.classification !== 'SCANNED_CI' ||
+      fileContext.classification !== 'SCANNED_AGENT_CONTEXT' ||
+      fileTest.classification !== 'SCANNED_TEST_EXECUTABLE' ||
+      fileBuild.classification !== 'SCANNED_BUILD' ||
+      fileStaticMedia.classification !== 'EXCLUDED_STATIC_ASSET' ||
+      fileStaticMedia.isScanned !== false ||
+      fileStaticScript.classification !== 'SCANNED_RUNTIME' ||
+      fileStaticScript.isScanned !== true) {
+    throw new Error(`R2-P0-10 VIOLATION: classifyFile returned incorrect attack surface categories or allowed executable script bypass in static directory`);
+  }
+
+  // 71.5 Synthetic Non-Node Repository Threat Model Validation (No Dangling Pointers)
+  const syntheticTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-audit-'));
+  try {
+    fs.mkdirSync(path.join(syntheticTempDir, 'handlers'), { recursive: true });
+    fs.mkdirSync(path.join(syntheticTempDir, 'auth'), { recursive: true });
+    fs.writeFileSync(path.join(syntheticTempDir, 'main.go'), 'package main', 'utf8');
+
+    const synthTm = buildThreatModel(syntheticTempDir);
+    const synthApi = synthTm.components.find(c => c.name === 'API');
+    if (!synthApi || synthApi.evidence.path !== 'handlers/') {
+      throw new Error(`R2-P0-09 VIOLATION: API component in Go repo had dangling or incorrect evidence path: ${JSON.stringify(synthApi)}`);
+    }
+    const synthAuth = synthTm.components.find(c => c.name === 'Auth');
+    if (!synthAuth || synthAuth.evidence.path !== 'auth/' || synthAuth.evidence.manifestOrigin === 'package.json:dependencies') {
+      throw new Error(`R2-P0-09 VIOLATION: Auth component in Go repo fabricated package.json evidence: ${JSON.stringify(synthAuth)}`);
+    }
+    const synthOperator = synthTm.actors.find(a => a.id === 'system-operator');
+    if (!synthOperator || synthOperator.status !== 'ASSUMPTION' || synthOperator.evidence !== null) {
+      throw new Error(`R2-P0-09 VIOLATION: system-operator claimed FACT in repo without CI: ${JSON.stringify(synthOperator)}`);
+    }
+  } finally {
+    fs.rmSync(syntheticTempDir, { recursive: true, force: true });
+  }
+
+  console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model & Granular Coverage Classification.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (71/71).');
 
   } finally {
     gitFixture.cleanup();

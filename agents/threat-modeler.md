@@ -36,21 +36,50 @@ You must format your analysis strictly as JSON matching this schema:
 {
   "schemaVersion": "1",
   "threatModelId": "TM-example",
-  "target": { "repositoryUri": "...", "revision": "..." },
+  "target": { "repositoryUri": "...", "revision": "...", "branch": "...", "dirty": false },
+  "targetProfile": {
+    "primary": "web-api|web-app|cli|library|agent-plugin|infra|native|mixed",
+    "detectedProfiles": ["..."],
+    "detectedLanguages": ["..."],
+    "manifestsCount": 1
+  },
   "systemPurpose": "Brief description of application domain",
   "actors": [
-    { "id": "actor-id", "trustLevel": "untrusted|semi-trusted|privileged", "description": "..." }
+    {
+      "id": "actor-id",
+      "trustLevel": "untrusted|semi-trusted|privileged",
+      "description": "...",
+      "status": "FACT|ASSUMPTION",
+      "evidence": { "path": "...", "manifestOrigin": "...", "confidence": "high|moderate" }
+    }
   ],
   "components": [
-    { "name": "API|Auth|Persistence|FileHandling|Jobs|Admin|ImportExport|PluginSystem|FrontendBoundary", "description": "...", "criticality": "critical|high|medium|low", "indicators": [] }
+    {
+      "name": "API|Auth|Persistence|FileHandling|Jobs|Admin|ImportExport|PluginSystem|FrontendBoundary|CLI",
+      "description": "...",
+      "criticality": "critical|high|medium|low",
+      "indicators": [],
+      "evidence": { "path": "...", "manifestOrigin": "...", "confidence": "high|moderate" }
+    }
+  ],
+  "entrypoints": [
+    { "path": "...", "type": "...", "evidence": { "manifestOrigin": "...", "confidence": "high" } }
   ],
   "trustBoundaries": [
-    { "boundary": "boundary-name", "description": "..." }
+    {
+      "boundary": "boundary-name",
+      "description": "...",
+      "status": "FACT|ASSUMPTION",
+      "evidence": { "path": "...", "manifestOrigin": "...", "confidence": "high" }
+    }
   ],
   "inScopeFamilies": [
     "auth/authz/tenancy", "injection/query/template/eval", "network/SSRF", "filesystem/path/archive",
     "parser/deserialization", "secrets/crypto", "state/business-logic", "dangerous-defaults/config",
     "native-memory-safety", "ai/agent-trust-boundaries"
+  ],
+  "explicitAssumptions": [
+    "Unevidenced actors and trust boundaries are strictly scoped as ASSUMPTION."
   ]
 }
 ```

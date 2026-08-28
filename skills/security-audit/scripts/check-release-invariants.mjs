@@ -29,7 +29,8 @@ import {
   deriveAuthoritativeEvidenceSufficiency
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
-import { buildDirectoryManifest } from './build-inventory.mjs';
+import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './build-inventory.mjs';
+import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns } from './run-stability-eval.mjs';
@@ -768,6 +769,86 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const stabRes = evaluateStability(simRuns, repoRoot);
         if (stabRes.meanJaccardSimilarity !== 1.0 || stabRes.totalUniqueLineages !== 1) {
           throw new Error(`evaluateStability failed line-shift invariant: J=${stabRes.meanJaccardSimilarity}, unique=${stabRes.totalUniqueLineages}`);
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-20',
+      name: 'Multi-Profile Threat Modeling & Granular Coverage Classification Invariant',
+      check: () => {
+        // 1. detectRepositoryInventory extracts facts
+        const inv = detectRepositoryInventory(repoRoot);
+        if (!inv.profiles.includes('agent-plugin') || !inv.languages.includes('JavaScript')) {
+          throw new Error('detectRepositoryInventory failed to discover agent-plugin or JavaScript');
+        }
+
+        // 2. buildThreatModel produces evidence-bound components and grounds assumptions
+        const tm = buildThreatModel(repoRoot);
+        if (!tm.targetProfile || tm.targetProfile.primary !== 'agent-plugin') {
+          throw new Error(`buildThreatModel failed targetProfile validation: got ${tm.targetProfile?.primary}`);
+        }
+        const pluginComp = tm.components.find(c => c.name === 'PluginSystem');
+        if (!pluginComp || !pluginComp.evidence || !pluginComp.evidence.path) {
+          throw new Error('buildThreatModel component lacks verified evidence pointer');
+        }
+        const authActor = tm.actors.find(a => a.id === 'authenticated-user');
+        if (!authActor || authActor.status !== 'ASSUMPTION') {
+          throw new Error('buildThreatModel failed to classify unevidenced actor as ASSUMPTION');
+        }
+
+        // 3. categorizeDirectory never blanket excludes test surfaces & recognizes build directories (R2-P0-10)
+        const testDir = categorizeDirectory('test');
+        if (testDir.status !== 'SCANNED_TEST_EXECUTABLE') {
+          throw new Error(`categorizeDirectory blanket excluded test surface: got ${testDir.status}`);
+        }
+        const ciDir = categorizeDirectory('.github');
+        if (ciDir.status !== 'SCANNED_CI') {
+          throw new Error(`categorizeDirectory failed to classify .github as SCANNED_CI: got ${ciDir.status}`);
+        }
+        const cmakeDir = categorizeDirectory('cmake');
+        if (cmakeDir.status !== 'SCANNED_BUILD') {
+          throw new Error(`categorizeDirectory failed to classify cmake as SCANNED_BUILD: got ${cmakeDir.status}`);
+        }
+
+        // 4. classifyFile classifies individual files & prevents executable bypass in static/
+        const cCi = classifyFile('.github/workflows/ci.yml');
+        const cCtx = classifyFile('rules/AGENTS.md');
+        const cTest = classifyFile('test/scanner.test.js');
+        const cBuild = classifyFile('package.json');
+        const cStaticMedia = classifyFile('static/images/logo.png');
+        const cStaticScript = classifyFile('static/scripts/exploit.js');
+        if (cCi.classification !== 'SCANNED_CI' ||
+            cCtx.classification !== 'SCANNED_AGENT_CONTEXT' ||
+            cTest.classification !== 'SCANNED_TEST_EXECUTABLE' ||
+            cBuild.classification !== 'SCANNED_BUILD' ||
+            cStaticMedia.classification !== 'EXCLUDED_STATIC_ASSET' ||
+            cStaticScript.classification !== 'SCANNED_RUNTIME' ||
+            cStaticScript.isScanned !== true) {
+          throw new Error('classifyFile failed to accurately classify file attack surfaces or allowed executable bypass');
+        }
+
+        // 5. Synthetic Non-Node Repository Threat Model Validation
+        const synDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-inv-tm-'));
+        try {
+          fs.mkdirSync(path.join(synDir, 'handlers'), { recursive: true });
+          fs.mkdirSync(path.join(synDir, 'auth'), { recursive: true });
+          fs.writeFileSync(path.join(synDir, 'main.go'), 'package main', 'utf8');
+
+          const synTm = buildThreatModel(synDir);
+          const synApi = synTm.components.find(c => c.name === 'API');
+          if (!synApi || synApi.evidence.path !== 'handlers/') {
+            throw new Error('Synthetic Go repo API component had dangling or incorrect evidence path');
+          }
+          const synAuth = synTm.components.find(c => c.name === 'Auth');
+          if (!synAuth || synAuth.evidence.path !== 'auth/' || synAuth.evidence.manifestOrigin === 'package.json:dependencies') {
+            throw new Error('Synthetic Go repo Auth component fabricated package.json evidence');
+          }
+          const synOp = synTm.actors.find(a => a.id === 'system-operator');
+          if (!synOp || synOp.status !== 'ASSUMPTION' || synOp.evidence !== null) {
+            throw new Error('system-operator claimed FACT in repo without CI');
+          }
+        } finally {
+          fs.rmSync(synDir, { recursive: true, force: true });
         }
       }
     }

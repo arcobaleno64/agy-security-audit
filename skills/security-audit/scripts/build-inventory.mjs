@@ -12,41 +12,109 @@ import crypto from 'node:crypto';
 import { runSafeGit, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 
 /**
- * Categorizes a directory path based on standard conventions.
+ * Categorizes a directory path based on standard conventions (R2-P0-10).
+ * Implements granular classification:
+ * - SCANNED_RUNTIME, SCANNED_BUILD, SCANNED_CI, SCANNED_AGENT_CONTEXT, SCANNED_TEST_EXECUTABLE
+ * - EXCLUDED_VENDORED, EXCLUDED_GENERATED_VERIFIED, EXCLUDED_STATIC_ASSET
  */
 export function categorizeDirectory(dirName) {
   const raw = dirName.toLowerCase().replace(/[/\\]+$/, '');
   const trimmed = raw.replace(/^[./\\]+/, '');
 
   if (['node_modules', 'vendor', 'third_party', 'bower_components'].includes(trimmed)) {
-    return { status: 'EXCLUDED_VENDORED', reason: 'Third-party vendor dependencies' };
+    return { status: 'EXCLUDED_VENDORED', classification: 'EXCLUDED_VENDORED', kind: 'EXCLUDED', reason: 'Third-party vendor dependencies' };
   }
   if (['dist', 'build', 'out', 'target', '.next', '.nuxt', 'coverage', '.cache'].includes(raw) ||
       ['dist', 'build', 'out', 'target', 'coverage'].includes(trimmed)) {
-    return { status: 'EXCLUDED_GENERATED', reason: 'Compiler or build output artifacts' };
+    return { status: 'EXCLUDED_GENERATED_VERIFIED', classification: 'EXCLUDED_GENERATED_VERIFIED', kind: 'EXCLUDED', reason: 'Compiler or build output artifacts' };
   }
   if (['.git', '.vscode', '.idea', 'docs', 'assets', 'images', 'static', 'reports', 'scratch'].includes(raw) ||
       ['docs', 'assets', 'images', 'static', 'reports', 'scratch'].includes(trimmed)) {
-    return { status: 'EXCLUDED_NON_CODE', reason: 'Metadata, documentation, or non-code assets' };
+    return { status: 'EXCLUDED_STATIC_ASSET', classification: 'EXCLUDED_STATIC_ASSET', kind: 'EXCLUDED', reason: 'Metadata, documentation, or static non-code assets' };
   }
-  if (['test', 'tests', 'spec', 'specs', '__tests__', 'fixtures'].includes(trimmed)) {
-    return { status: 'EXCLUDED_TEST', reason: 'Test suites and test fixtures' };
+  // R2-P0-10: Test surfaces are NOT blanket excluded; classified as SCANNED_TEST_EXECUTABLE
+  if (['test', 'tests', 'spec', 'specs', '__tests__', 'fixtures', 'evals'].includes(trimmed)) {
+    return { status: 'SCANNED_TEST_EXECUTABLE', classification: 'SCANNED_TEST_EXECUTABLE', kind: 'SCANNED', reason: 'Executable test suites and test fixtures' };
+  }
+
+  if (['cmake', 'gradle', 'build-scripts', '.cargo'].includes(trimmed)) {
+    return { status: 'SCANNED_BUILD', classification: 'SCANNED_BUILD', kind: 'SCANNED', reason: 'Build orchestration and toolchain configuration' };
   }
 
   if (raw === '.github') {
-    return { status: 'SCANNED', reason: 'CI/CD workflow definitions and automation scripts' };
+    return { status: 'SCANNED_CI', classification: 'SCANNED_CI', kind: 'SCANNED', reason: 'CI/CD workflow definitions and automation scripts' };
   }
   if (trimmed === 'packages') {
-    return { status: 'SCANNED', reason: 'Monorepo workspace packages and first-party modules' };
+    return { status: 'SCANNED_RUNTIME', classification: 'SCANNED_RUNTIME', kind: 'SCANNED', reason: 'Monorepo workspace packages and first-party modules' };
   }
   if (trimmed === 'bin') {
-    return { status: 'SCANNED', reason: 'CLI entrypoint source scripts' };
+    return { status: 'SCANNED_RUNTIME', classification: 'SCANNED_RUNTIME', kind: 'SCANNED', reason: 'CLI entrypoint source scripts' };
   }
-  if (trimmed === 'agents') {
-    return { status: 'SCANNED', reason: 'Plugin custom subagents and security personas' };
+  if (trimmed === 'agents' || trimmed === 'skills' || trimmed === 'rules') {
+    return { status: 'SCANNED_AGENT_CONTEXT', classification: 'SCANNED_AGENT_CONTEXT', kind: 'SCANNED', reason: 'Plugin subagents, skills, rules, and prompt orchestration instructions' };
   }
 
-  return { status: 'SCANNED', reason: 'Core application source code' };
+  return { status: 'SCANNED_RUNTIME', classification: 'SCANNED_RUNTIME', kind: 'SCANNED', reason: 'Core application runtime source code' };
+}
+
+/**
+ * Classifies an individual file into granular attack surface categories (R2-P0-10).
+ */
+export function classifyFile(filePath, repoRoot = process.cwd()) {
+  const norm = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+  const lower = norm.toLowerCase();
+
+  // 1. Third-party vendored packages
+  if (/(?:^|\/)(?:node_modules|vendor|third_party)\//i.test(lower)) {
+    return { classification: 'EXCLUDED_VENDORED', isScanned: false, reason: 'Vendored third-party dependency' };
+  }
+
+  // 2. Verified compiler output artifacts
+  if (/(?:^|\/)(?:dist|build|out|target|coverage)\//i.test(lower)) {
+    return { classification: 'EXCLUDED_GENERATED_VERIFIED', isScanned: false, reason: 'Verified build output artifact' };
+  }
+
+  // 3. Security Check on static/assets: Do NOT exclude executable scripts or server templates!
+  const isExecutableExt = /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|php|sh|bash|ps1|bat|cmd|pl|cgi|go|rs|c|cpp|h|java|cs|html|htm|ejs|hbs|tmpl|vue|svelte)$/i.test(lower);
+  const isAssetFolder = /(?:^|\/)(?:assets|images|static)\//i.test(lower);
+  const isStaticBinaryExt = /\.(?:png|jpg|jpeg|gif|svg|ico|webp|avif|pdf|zip|tar|gz|bz2|7z|woff|woff2|ttf|eot|otf|mp3|mp4|webm|wav|ogg)$/i.test(lower);
+
+  if (isAssetFolder) {
+    if (isExecutableExt) {
+      // Script located inside static/assets directory must be audited for execution vulnerabilities!
+      return { classification: 'SCANNED_RUNTIME', isScanned: true, reason: 'Executable code or template located in asset directory' };
+    }
+    return { classification: 'EXCLUDED_STATIC_ASSET', isScanned: false, reason: 'Static media or non-executable asset in asset directory' };
+  }
+
+  if (isStaticBinaryExt) {
+    return { classification: 'EXCLUDED_STATIC_ASSET', isScanned: false, reason: 'Static media or binary asset' };
+  }
+
+  // 4. CI/CD automation & container definitions
+  if (/(?:^|\/)\.github\//i.test(lower) || /Dockerfile|docker-compose|\.gitlab-ci\.yml/i.test(lower)) {
+    return { classification: 'SCANNED_CI', isScanned: true, reason: 'CI/CD pipeline or container deployment specification' };
+  }
+
+  // 5. Agent instruction, skills, and prompt attack surface
+  if (/(?:^|\/)(?:agents|skills|rules)\/.*\.md$/i.test(lower) ||
+      /(?:^|\/)(?:AGENTS|CLAUDE|SKILL)\.md$/i.test(lower) ||
+      /\.prompt$/i.test(lower)) {
+    return { classification: 'SCANNED_AGENT_CONTEXT', isScanned: true, reason: 'Agent instruction and prompt orchestration attack surface' };
+  }
+
+  // 6. Test suites and executable fixtures (NOT blanket excluded)
+  if (/(?:^|\/)(?:test|tests|spec|specs|evals)\//i.test(lower) ||
+      /\.(?:test|spec)\.[a-z0-9]+$/i.test(lower)) {
+    return { classification: 'SCANNED_TEST_EXECUTABLE', isScanned: true, reason: 'Executable test suite or benchmark fixture' };
+  }
+
+  // 7. Project build manifests and toolchain configs
+  if (/(?:package\.json|tsconfig\.json|Cargo\.toml|go\.mod|pom\.xml|build\.gradle|build\.gradle\.kts|Makefile|CMakeLists\.txt|requirements\.txt|pyproject\.toml|Pipfile|setup\.py|\.csproj|\.sln)$/i.test(lower)) {
+    return { classification: 'SCANNED_BUILD', isScanned: true, reason: 'Project build manifest and dependency configuration' };
+  }
+
+  return { classification: 'SCANNED_RUNTIME', isScanned: true, reason: 'Application runtime source code' };
 }
 
 

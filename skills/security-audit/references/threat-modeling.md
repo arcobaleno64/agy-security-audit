@@ -5,18 +5,33 @@
 Under the **Presumption of Non-Pass (Default-Deny)** axiom, a codebase scan cannot be declared complete unless every single top-level and major sub-directory in the repository is explicitly accounted for in a **Directory Reconciliation Manifest** (`directory-manifest.json`).
 
 ### Mandatory Directory Categories
-Every directory discovered in the repository must be reconciled into exactly one of these five statuses:
+Every directory and file discovered in the repository must be reconciled into one of these authoritative coverage categories (R2-P0-10):
 
-| Status | Definition | Validation / Reconciliation Requirement |
+| Status / Classification | Attack Surface Scope | Validation / Reconciliation Requirement |
 | :--- | :--- | :--- |
-| `SCANNED` | Active application business logic, APIs, and components under security review. | Must be indexed and audited through the triage pipeline. |
-| `EXCLUDED_VENDORED` | Third-party dependencies and managed external packages. | Must match package manager declarations (e.g. `package-lock.json`, `pnpm-lock.yaml`, `go.sum`, `Cargo.lock`). |
-| `EXCLUDED_GENERATED` | Build artifacts, compiled binaries, minified bundles, or transpiled code. | Must be defined in build system configs (e.g. `tsconfig.json`, `vite.config.js`, `webpack.config.js`). |
-| `EXCLUDED_NON_CODE` | Static assets, documentation, design mockups, and localization markdown. | Must be verified to contain no executable scripts or server templates. |
-| `EXCLUDED_TEST` | Unit tests, mock suites, and fixtures. | Verified as test attack surface. Fixtures are scanned ONLY for committed credentials. |
+| `SCANNED_RUNTIME` | Active application business logic, APIs, and runtime components. | Must be indexed and audited through the 3-Lens verification pipeline. |
+| `SCANNED_BUILD` | Project build manifests, bundlers, compilers (`package.json`, `Cargo.toml`, etc.). | Scanned for dependency confusion, malicious lifecycle scripts, and pin tampering. |
+| `SCANNED_CI` | CI/CD workflows and deployment automation (`.github/`, Dockerfiles). | Scanned for pipeline poisoning, runner command injection, and secret exfiltration. |
+| `SCANNED_AGENT_CONTEXT` | Agent skills, rules, and prompt orchestration instructions (`AGENTS.md`, `SKILL.md`). | Scanned for prompt injection, jailbreaks, and tool-spoofing vectors. |
+| `SCANNED_TEST_EXECUTABLE` | Test suites, test runners, and test helpers. | **NOT blanket excluded**; scanned for unsafe process execution, injection, and secrets. |
+| `EXCLUDED_VENDORED` | Third-party dependencies (`node_modules/`, `vendor/`). | Must match package manager declarations (`package-lock.json`, `Cargo.lock`, etc.). |
+| `EXCLUDED_GENERATED_VERIFIED` | Build output artifacts confirmed as generated from source (`dist/`, `build/`). | Verified against compiler build output configuration. |
+| `EXCLUDED_STATIC_ASSET` | Static images, media, documentation markdown, or binary assets. | Verified to contain no executable scripts or server templates. |
 
 > [!CAUTION]
-> **UNACCOUNTED_DIRECTORY_ERROR**: If any directory exists in the tree that is not explicitly assigned to one of the above 5 categories with an auditable reason, the scan is blocked and marked unverified.
+> **UNACCOUNTED_DIRECTORY_ERROR**: If any directory or file exists in the tree that is not explicitly assigned to one of the above categories with an auditable reason, the scan fails closed to `PARTIAL` under Default-Deny.
+
+### 1.2 Multi-Profile & Multi-Language Threat Modeling Pipeline (R2-P0-09)
+To prevent framework bias, threat modeling executes in a strict 3-stage pipeline:
+1. **Stage A — Deterministic Inventory Facts**:
+   - Detects languages: JS/TS, Python, Go, Rust, Java, C#, C/C++, Terraform, etc.
+   - Detects entrypoints with verifiable file paths and lines.
+   - Classifies target profile: `web-api`, `web-app`, `cli`, `library`, `agent-plugin`, `infra`, `native`, `mixed`.
+2. **Stage B — Semantic Component Discovery**:
+   - Maps architectural components with verified file-level evidence: `{ path, manifestOrigin, confidence }`.
+3. **Stage C — Fact vs. Assumption Reconciliation**:
+   - Every actor, asset, entrypoint, and trust boundary must be grounded in physical code evidence (`status: 'FACT'`).
+   - Any claim lacking concrete evidence is strictly classified as `status: 'ASSUMPTION'`.
 
 ---
 

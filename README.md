@@ -76,7 +76,7 @@ security-audit/
         └── scripts/
             ├── safe-git.mjs              # 防禦型 Git Provenance 與 Pre-image 提取
             ├── finalize-scan.mjs         # 確定性 Security Authority 與 Canonical Finalizer
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 70 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 71 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 校驗與證明缺口 (Proof Gap) 偵測
@@ -93,7 +93,7 @@ security-audit/
 ## 測試與發行驗證
 在專案目錄內執行：
 ```bash
-# 執行 70 項全域安全不變量自動化測試：
+# 執行 71 項全域安全不變量自動化測試：
 npm test
 
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
@@ -108,7 +108,7 @@ npm run test:discovery
 # 執行多輪隨機發現穩定度基準測試：
 npm run test:stability
 
-# 執行 Section 24 發行閘門檢驗 (檢查 35 項規格、19 項安全不變量與零外部依賴)：
+# 執行 Section 24 發行閘門檢驗 (檢查 35 項規格、20 項安全不變量與零外部依賴)：
 npm run check:release
 ```
 
