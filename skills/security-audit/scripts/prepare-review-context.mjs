@@ -87,7 +87,8 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
   ];
 
   const excludedDirNames = new Set([
-    'node_modules', '.git', '.svn', '.hg', 'scratch', 'reports', 'dist', 'build', 'out'
+    'node_modules', '.git', '.svn', '.hg', 'scratch', 'reports', 'dist', 'build', 'out',
+    'codeql-db', '.semgrep', 'coverage', '.nyc_output', '.sonar', '.scannerwork'
   ]);
 
   const targetFiles = [];

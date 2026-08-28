@@ -1,0 +1,27 @@
+[
+  {
+    "id": "CTX-001",
+    "property": "Only sanitized shadow context may be supplied to reviewers.",
+    "component": "ContextPreparation"
+  },
+  {
+    "id": "AUTH-001",
+    "property": "Only canonical structured evidence may influence final authority.",
+    "component": "FinalizerAuthority"
+  },
+  {
+    "id": "TCB-001",
+    "property": "Invalid tool integrity prevents bounded-clean authority.",
+    "component": "TCBIntegrity"
+  },
+  {
+    "id": "EVID-001",
+    "property": "Unbound external SARIF records cannot become corroborating evidence.",
+    "component": "ExternalEvidence"
+  },
+  {
+    "id": "PATH-001",
+    "property": "Filesystem containment algebra prevents directory traversal and sibling confusion.",
+    "component": "ContextPreparation"
+  }
+]

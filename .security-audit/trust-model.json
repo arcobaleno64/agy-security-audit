@@ -1,0 +1,133 @@
+{
+  "components": [
+    {
+      "id": "Inventory",
+      "name": "Inventory",
+      "criticality": "high",
+      "evidence": [
+        "skills/security-audit/scripts/build-inventory.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "ContextPreparation",
+      "name": "ContextPreparation",
+      "criticality": "critical",
+      "evidence": [
+        "skills/security-audit/scripts/prepare-review-context.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "ThreatModeling",
+      "name": "ThreatModeling",
+      "criticality": "high",
+      "evidence": [
+        "skills/security-audit/scripts/build-threat-model.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "AttackPathValidation",
+      "name": "AttackPathValidation",
+      "criticality": "high",
+      "evidence": [
+        "skills/security-audit/scripts/validate-attack-path.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "PatchValidation",
+      "name": "PatchValidation",
+      "criticality": "high",
+      "evidence": [
+        "skills/security-audit/scripts/validate-patch.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "ExternalEvidence",
+      "name": "ExternalEvidence",
+      "criticality": "medium",
+      "evidence": [
+        "skills/security-audit/scripts/finalize-scan.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "FinalizerAuthority",
+      "name": "FinalizerAuthority",
+      "criticality": "critical",
+      "evidence": [
+        "skills/security-audit/scripts/finalize-scan.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "TCBIntegrity",
+      "name": "TCBIntegrity",
+      "criticality": "critical",
+      "evidence": [
+        "skills/security-audit/tool-integrity-manifest.json",
+        "skills/security-audit/scripts/finalize-scan.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "Reporting",
+      "name": "Reporting",
+      "criticality": "medium",
+      "evidence": [
+        "skills/security-audit/scripts/render-sarif.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    },
+    {
+      "id": "GitBoundary",
+      "name": "GitBoundary",
+      "criticality": "critical",
+      "evidence": [
+        "skills/security-audit/scripts/safe-git.mjs"
+      ],
+      "source": "REPOSITORY_EVIDENCE"
+    }
+  ],
+  "trustBoundaries": [
+    {
+      "boundary": "Pre-Context Shadow Boundary",
+      "from": "UNTRUSTED_REPOSITORY_INPUT",
+      "to": "ContextPreparation",
+      "status": "FACT",
+      "evidence": [
+        "skills/security-audit/scripts/prepare-review-context.mjs"
+      ]
+    },
+    {
+      "boundary": "Least-Privilege Subagent Boundary",
+      "from": "ContextPreparation",
+      "to": "SUBAGENT_REVIEWER",
+      "status": "FACT",
+      "evidence": [
+        "skills/security-audit/SKILL.md"
+      ]
+    },
+    {
+      "boundary": "Finalizer Authority Boundary",
+      "from": "SUBAGENT_REVIEWER",
+      "to": "FinalizerAuthority",
+      "status": "FACT",
+      "evidence": [
+        "skills/security-audit/scripts/finalize-scan.mjs"
+      ]
+    },
+    {
+      "boundary": "Git Command Boundary",
+      "from": "FinalizerAuthority",
+      "to": "GitBoundary",
+      "status": "FACT",
+      "evidence": [
+        "skills/security-audit/scripts/safe-git.mjs"
+      ]
+    }
+  ]
+}

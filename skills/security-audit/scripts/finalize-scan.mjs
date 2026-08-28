@@ -18,6 +18,22 @@ import { resolveStandardsMapping, detectDependencyBoundary } from './standards-m
 export { categorizeDirectory, classifyFile, resolveStandardsMapping, detectDependencyBoundary };
 import { prepareReviewContext, getPreparedContextFilePath, readPreparedFile } from './prepare-review-context.mjs';
 export { prepareReviewContext, getPreparedContextFilePath, readPreparedFile };
+import {
+  loadProjectSecurityContext,
+  detectContextDrift,
+  computeProjectContextFingerprint,
+  computeSecurityPropertiesFingerprint,
+  initProjectContext
+} from './project-context.mjs';
+import { validateThreatModel } from './build-threat-model.mjs';
+export {
+  loadProjectSecurityContext,
+  detectContextDrift,
+  computeProjectContextFingerprint,
+  computeSecurityPropertiesFingerprint,
+  initProjectContext,
+  validateThreatModel
+};
 
 
 
@@ -554,6 +570,20 @@ export function buildAuditBaseline({
   });
   const executionEquivalence = modelSnapshotImmutable ? 'FULL' : 'PARTIAL';
 
+  // R9-P1-04 & R9-P2-02: Project Context Fingerprints & Ignored Artifacts Tracking
+  const projectContextRes = loadProjectSecurityContext(repoRoot);
+  const projectContextFingerprint = projectContextRes?.projectContextFingerprint || null;
+  const securityPropertiesFingerprint = projectContextRes?.securityPropertiesFingerprint || null;
+
+  const ignoredCandidates = ['codeql-db', '.semgrep', 'reports', 'scratch', 'coverage', '.nyc_output'];
+  const ignoredArtifactsPresent = ignoredCandidates.filter(dir => fs.existsSync(path.resolve(repoRoot, dir)));
+
+  const provenanceTracking = {
+    trackedDirty: Boolean(provenance?.properties?.isDirty),
+    untrackedDirty: Boolean(provenance?.properties?.hasUntrackedChanges || false),
+    ignoredArtifactsPresent
+  };
+
   return {
     schemaVersion: '1.0.0',
     toolVersion: '1.0.0',
@@ -564,6 +594,9 @@ export function buildAuditBaseline({
     surfaceFingerprint: surfaceHash,
     threatModelFingerprint: tmHash,
     coverageFingerprint: covHash,
+    projectContextFingerprint,
+    securityPropertiesFingerprint,
+    provenanceTracking,
     executionEquivalenceKey,
     executionEquivalence,
     findingLineageIds,
@@ -688,7 +721,8 @@ export function validateDirectoryManifest(manifest, repoRoot = null, options = {
     'SCANNED_TEST_EXECUTABLE',
     'EXCLUDED_VENDORED',
     'EXCLUDED_GENERATED_VERIFIED',
-    'EXCLUDED_STATIC_ASSET'
+    'EXCLUDED_STATIC_ASSET',
+    'EXCLUDED_ANALYSIS_ARTIFACT'
   ]);
 
   const claimedMap = new Map();
@@ -2188,6 +2222,7 @@ export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
   let boundCount = 0;
   let unboundCount = 0;
   let duplicateGeneratedCount = 0;
+  let outsideScopeCount = 0;
   const seenSignatures = new Set();
 
   for (const item of rawItems) {
@@ -2226,6 +2261,7 @@ export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
       if (!isPathContained(resolvedRepoRoot, fullPath)) {
         evidenceBinding = 'OUTSIDE_SCOPE';
         unboundCount++;
+        outsideScopeCount++;
       } else {
         const snap = computeEvidenceSnapshot(resolvedRepoRoot, canonicalUri, item.startLine);
         if (snap.exists && !snap.error && snap.lineHash) {
@@ -2265,6 +2301,7 @@ export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
     boundCount,
     unboundCount,
     duplicateGeneratedCount,
+    outsideScopeCount,
     count: canonicalCount,
     findings
   };
@@ -2785,9 +2822,54 @@ export function finalizeScan({
     && toolIntegrityGate
   );
 
-  const assuranceLabel = canDeclareClean
-    ? (toolIntegrity.status === 'SELF_AUDIT_MODE' ? 'SELF_AUDIT_BOUNDED_CLEAN' : 'BOUNDED_CLEAN')
-    : 'NON_CLEAN';
+  // R9-P1-01 & R9-P1-02: Project Security Context Gate (R9-T10 & R9-T11)
+  const projectContextRes = loadProjectSecurityContext(safeRepoRoot || process.cwd());
+  const hasConfirmedProjectContext = (projectContextRes.status === 'CONFIRMED' && threatModel?.contextStatus !== 'GENERIC_SECURITY_REVIEW');
+
+  let assuranceLabel = 'NON_CLEAN';
+  if (canDeclareClean) {
+    if (toolIntegrity.status === 'SELF_AUDIT_MODE') {
+      assuranceLabel = 'SELF_AUDIT_BOUNDED_CLEAN';
+    } else if (!hasConfirmedProjectContext) {
+      // R9-T10: Project Security Context absent -> assurance CONTEXT_LIMITED
+      assuranceLabel = 'CONTEXT_LIMITED';
+    } else {
+      // R9-T11: confirmed Project Security Context -> eligible for BOUNDED_CLEAN
+      assuranceLabel = 'BOUNDED_CLEAN';
+    }
+  }
+
+  // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
+  let updatedManifest = manifest;
+  const scanRunId = manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
+  let projectId = manifest?.projectId || path.basename(path.resolve(safeRepoRoot || process.cwd()));
+  try {
+    const pkgPath = path.join(path.resolve(safeRepoRoot || process.cwd()), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (p.name) projectId = p.name;
+    }
+  } catch {}
+
+  if (manifest && typeof manifest === 'object') {
+    manifest.complete = true;
+    manifest.completedAt = new Date().toISOString();
+    manifest.finalVerdict = assuranceLabel;
+    manifest.canDeclareClean = canDeclareClean;
+    manifest.auditIntent = safeAuditIntent;
+    manifest.coverageStatus = coverageStatus;
+    manifest.scanRunId = scanRunId;
+    manifest.projectId = projectId;
+    manifest.findingCounts = {
+      reportable: confirmedCount,
+      deferred: deferredCount,
+      acceptedRisk: acceptedRiskCount,
+      hardening: hardeningCount,
+      informational: informationalCount,
+      suppressed: suppressedCount
+    };
+    updatedManifest = manifest;
+  }
 
   const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
 
@@ -2846,7 +2928,7 @@ export function finalizeScan({
     summary,
     coverageStatus,
     coverageMode,
-    manifest,
+    manifest: updatedManifest,
     manifestValidation: coverageReconciliation,
     provenance: provenance || getHardenedGitProvenance(repoRoot),
     canonicalFindings,
@@ -2858,6 +2940,99 @@ export function finalizeScan({
     contextPreparation: contextPrep.manifest
   };
 
+}
+
+/**
+ * Checks whether an audit run or manifest is authoritative clean (R9-P0-01, R9-T01, R9-T02).
+ * Fails closed if scanManifest.complete is false or completedAt is null.
+ */
+export function isAuthoritativeClean(scanResultOrManifest) {
+  if (!scanResultOrManifest) return false;
+  const manifest = scanResultOrManifest.manifest || scanResultOrManifest.summary?.scanManifest || scanResultOrManifest;
+  if (manifest && typeof manifest === 'object') {
+    if (manifest.complete === false) return false;
+    if (!manifest.completedAt) return false;
+  }
+  return Boolean(scanResultOrManifest.canDeclareClean !== undefined ? scanResultOrManifest.canDeclareClean : (scanResultOrManifest.summary ? scanResultOrManifest.summary.canDeclareClean : manifest?.canDeclareClean));
+}
+
+/**
+ * Computes deterministic hashes across all canonical artifacts (R9-P0-03).
+ */
+export function computeCanonicalArtifactHashes({
+  canonicalResult = null,
+  markdownText = null,
+  sarifJson = null,
+  coverageJson = null,
+  threatModelJson = null,
+  directoryManifestJson = null
+} = {}) {
+  const hash = (data) => {
+    if (!data) return null;
+    const str = typeof data === 'string' ? data : JSON.stringify(data);
+    return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
+  };
+  return {
+    canonicalResultHash: hash(canonicalResult),
+    markdownHash: hash(markdownText),
+    sarifHash: hash(sarifJson),
+    coverageHash: hash(coverageJson),
+    threatModelHash: hash(threatModelJson),
+    directoryManifestHash: hash(directoryManifestJson)
+  };
+}
+
+/**
+ * Validates cross-format consistency across SARIF, Markdown, scan-manifest, and coverage (R9-P0-03, R9-T05, R9-T06, R9-T07).
+ */
+export function validateCrossFormatParity({ sarif, markdown, scanManifest, coverage } = {}) {
+  const errors = [];
+  let sarifClean = null;
+  let manifestClean = null;
+  let mdClean = null;
+
+  if (sarif?.runs?.[0]?.properties?.canDeclareClean !== undefined) {
+    sarifClean = Boolean(sarif.runs[0].properties.canDeclareClean);
+  }
+  if (scanManifest?.canDeclareClean !== undefined) {
+    manifestClean = Boolean(scanManifest.canDeclareClean);
+  }
+  if (typeof markdown === 'string') {
+    if (markdown.includes('- **Can Declare Clean**: **true**')) mdClean = true;
+    else if (markdown.includes('- **Can Declare Clean**: **false**')) mdClean = false;
+  }
+
+  // R9-T05: SARIF / Markdown / Manifest verdict mismatch
+  if (sarifClean !== null && manifestClean !== null && sarifClean !== manifestClean) {
+    errors.push(`Verdict mismatch: SARIF.canDeclareClean (${sarifClean}) !== scanManifest.canDeclareClean (${manifestClean})`);
+  }
+  if (sarifClean !== null && mdClean !== null && sarifClean !== mdClean) {
+    errors.push(`Verdict mismatch: SARIF.canDeclareClean (${sarifClean}) !== Markdown.canDeclareClean (${mdClean})`);
+  }
+  if (manifestClean !== null && mdClean !== null && manifestClean !== mdClean) {
+    errors.push(`Verdict mismatch: scanManifest.canDeclareClean (${manifestClean}) !== Markdown.canDeclareClean (${mdClean})`);
+  }
+
+  // R9-T06: Finding count mismatch
+  if (sarif?.runs?.[0]?.properties?.findingCounts && scanManifest?.findingCounts) {
+    const sfc = sarif.runs[0].properties.findingCounts;
+    const mfc = scanManifest.findingCounts;
+    if (sfc.reportable !== mfc.reportable || sfc.deferred !== mfc.deferred) {
+      errors.push(`Finding count mismatch: SARIF (${JSON.stringify(sfc)}) !== Manifest (${JSON.stringify(mfc)})`);
+    }
+  }
+
+  // R9-T07: Coverage status mismatch
+  if (sarif?.runs?.[0]?.properties?.coverageStatus && coverage?.coverageStatus) {
+    if (sarif.runs[0].properties.coverageStatus !== coverage.coverageStatus) {
+      errors.push(`Coverage status mismatch: SARIF (${sarif.runs[0].properties.coverageStatus}) !== coverage.json (${coverage.coverageStatus})`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }
 
 /**
@@ -3102,7 +3277,11 @@ export function renderSarifFromCanonical({
   auditIntent = 'DISCOVERY',
   canDeclareClean = null,
   executionAttestation = null,
-  dependencyBoundary = null
+  dependencyBoundary = null,
+  assuranceLevel = null,
+  findingCounts = null,
+  scanRunId = null,
+  projectId = null
 } = {}) {
   const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
   const rulesMap = new Map();
@@ -3204,6 +3383,17 @@ export function renderSarifFromCanonical({
       canDeclareClean: (canDeclareClean !== null && canDeclareClean !== undefined)
         ? Boolean(canDeclareClean)
         : (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
+      assuranceLevel: assuranceLevel || (canDeclareClean ? 'BOUNDED_CLEAN' : 'NON_CLEAN'),
+      findingCounts: findingCounts || {
+        reportable: safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length,
+        deferred: safeFindings.filter(f => f.disposition === 'DEFERRED').length,
+        acceptedRisk: safeFindings.filter(f => f.disposition === 'ACCEPTED_RISK').length,
+        hardening: safeFindings.filter(f => f.findingType === 'HARDENING').length,
+        informational: safeFindings.filter(f => f.findingType === 'INFORMATIONAL').length,
+        suppressed: safeFindings.filter(f => f.disposition === 'SUPPRESSED').length
+      },
+      scanRunId: scanRunId || manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`,
+      projectId: projectId || manifest?.projectId || 'security-audit',
       directoryReconciliationManifest: manifest,
       executionAttestation: executionAttestation || buildExecutionAttestation({
         repoRoot,
@@ -3240,7 +3430,11 @@ export function renderMarkdownFromCanonical({
   provenance = null,
   repoRoot = process.cwd(),
   auditIntent = 'DISCOVERY',
-  modelProvenance = null
+  modelProvenance = null,
+  canDeclareClean = null,
+  assuranceLevel = null,
+  scanRunId = null,
+  projectId = null
 }) {
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
@@ -3255,8 +3449,20 @@ export function renderMarkdownFromCanonical({
   }
   md += `- **Coverage Status**: **${coverageStatus}**\n`;
   md += `- **Audit Intent**: \`${sanitizeInlineText(auditIntent || 'DISCOVERY')}\`\n`;
-  md += '- **Audit Axiom**: **Presumption of Non-Pass (Default-Deny on Authority Claims)**\n\n';
-  md += '---\n\n';
+  md += '- **Audit Axiom**: **Presumption of Non-Pass (Default-Deny on Authority Claims)**\n';
+  if (canDeclareClean !== null && canDeclareClean !== undefined) {
+    md += `- **Can Declare Clean**: **${Boolean(canDeclareClean)}**\n`;
+  }
+  if (assuranceLevel) {
+    md += `- **Assurance Level**: **${sanitizeInlineText(assuranceLevel)}**\n`;
+  }
+  if (scanRunId || manifest?.scanRunId) {
+    md += `- **Scan Run ID**: \`${sanitizeInlineText(scanRunId || manifest.scanRunId)}\`\n`;
+  }
+  if (projectId || manifest?.projectId) {
+    md += `- **Project ID**: \`${sanitizeInlineText(projectId || manifest.projectId)}\`\n`;
+  }
+  md += '\n---\n\n';
 
   // Coverage Reconciliation Section
   if (manifest && (manifest.mode === 'review' || manifest.reviewInventory || (Array.isArray(manifest.changedFiles) && !Array.isArray(manifest.entries)))) {
@@ -3496,6 +3702,7 @@ export function generateToolIntegrityManifest(toolRoot = null) {
     'scripts/finalize-scan.mjs',
     'scripts/build-inventory.mjs',
     'scripts/build-threat-model.mjs',
+    'scripts/project-context.mjs',
     'scripts/validate-attack-path.mjs',
     'scripts/validate-patch.mjs',
     'scripts/render-sarif.mjs',
@@ -3571,6 +3778,7 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     'scripts/finalize-scan.mjs',
     'scripts/build-inventory.mjs',
     'scripts/build-threat-model.mjs',
+    'scripts/project-context.mjs',
     'scripts/validate-attack-path.mjs',
     'scripts/validate-patch.mjs',
     'scripts/render-sarif.mjs',

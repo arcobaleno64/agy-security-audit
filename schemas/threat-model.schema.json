@@ -36,7 +36,7 @@
           "trustLevel": { "type": "string", "enum": ["untrusted", "semi-trusted", "privileged"] },
           "description": { "type": "string" },
           "status": { "type": "string", "enum": ["FACT", "ASSUMPTION"] },
-          "evidence": { "type": ["object", "null"] }
+          "evidence": { "type": ["object", "array", "null"] }
         }
       }
     },
@@ -49,7 +49,7 @@
           "name": { "type": "string" },
           "criticality": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
           "description": { "type": "string" },
-          "evidence": { "type": ["object", "null"] }
+          "evidence": { "type": ["object", "array", "null"] }
         }
       }
     },
@@ -62,9 +62,11 @@
           "boundary": { "type": "string" },
           "description": { "type": "string" },
           "status": { "type": "string", "enum": ["FACT", "ASSUMPTION"] },
-          "evidence": { "type": ["object", "null"] }
+          "evidence": { "type": ["object", "array", "null"] }
         }
       }
-    }
+    },
+    "contextStatus": { "type": "string", "enum": ["CONFIRMED", "GENERIC_SECURITY_REVIEW", "SUGGESTED", "ABSENT"] },
+    "assuranceLimitation": { "type": ["string", "null"] }
   }
 }

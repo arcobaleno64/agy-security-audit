@@ -1,0 +1,23 @@
+{
+  "projectId": "security-audit",
+  "projectType": "cli-agent-security-assurance",
+  "languages": [
+    "JavaScript"
+  ],
+  "runtime": [
+    "Node.js"
+  ],
+  "entrypoints": [
+    "skills/security-audit/scripts/finalize-scan.mjs",
+    "skills/security-audit/scripts/build-inventory.mjs",
+    "skills/security-audit/scripts/build-threat-model.mjs",
+    "skills/security-audit/scripts/validate-attack-path.mjs",
+    "skills/security-audit/scripts/validate-patch.mjs",
+    "skills/security-audit/scripts/render-sarif.mjs",
+    "skills/security-audit/scripts/prepare-review-context.mjs",
+    "skills/security-audit/scripts/standards-mapping.mjs"
+  ],
+  "dataStores": [],
+  "externalServices": [],
+  "source": "REPOSITORY_EVIDENCE"
+}

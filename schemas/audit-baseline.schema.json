@@ -27,6 +27,16 @@
     "canonicalFindingsSummary": {
       "type": "object"
     },
+    "projectContextFingerprint": { "type": ["string", "null"] },
+    "securityPropertiesFingerprint": { "type": ["string", "null"] },
+    "provenanceTracking": {
+      "type": "object",
+      "properties": {
+        "trackedDirty": { "type": "boolean" },
+        "untrackedDirty": { "type": "boolean" },
+        "ignoredArtifactsPresent": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "completedAt": { "type": "string" }
   }
 }

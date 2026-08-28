@@ -14,6 +14,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getHardenedGitProvenance } from './safe-git.mjs';
+import {
+  loadProjectSecurityContext,
+  computeProjectContextFingerprint,
+  computeSecurityPropertiesFingerprint
+} from './project-context.mjs';
+import { isPathContained } from './prepare-review-context.mjs';
 
 /**
  * Stage A: Scans repository for deterministic facts: languages, manifests, frameworks, entrypoints, and profiles (R2-P0-09).
@@ -408,15 +414,37 @@ export function discoverComponents(repoRoot, inventory = null) {
 /**
  * Generates the active Component × Family discovery dispatch matrix.
  */
-export function generateDiscoveryMatrix(components = [], inScopeFamilies = []) {
+/**
+ * Generates the active Component × Family discovery dispatch matrix (R9-P1-02).
+ * Supports component-driven applicability filtering with explicit reasons.
+ */
+export function generateDiscoveryMatrix(components = [], inScopeFamilies = [], applicabilityMap = {}) {
   const matrix = [];
   for (const comp of components) {
+    const compName = comp.name || comp.id;
     for (const fam of inScopeFamilies) {
+      const isExplicitNotApplicable = applicabilityMap[compName] && applicabilityMap[compName][fam] === false;
+      const explicitReason = (applicabilityMap[compName] && applicabilityMap[compName][`${fam}:reason`]) || null;
+
+      let status = 'PENDING';
+      let reason = null;
+      if (isExplicitNotApplicable) {
+        status = 'NOT_APPLICABLE';
+        reason = explicitReason || `Family '${fam}' is not applicable to component '${compName}' per architecture scope.`;
+      } else if (compName === 'ContextPreparation' && fam === 'auth/authz/tenancy') {
+        status = 'NOT_APPLICABLE';
+        reason = 'Context preparation is local filesystem sandbox; multi-tenant authz is not applicable.';
+      } else if (compName === 'GitBoundary' && fam === 'network/SSRF') {
+        status = 'NOT_APPLICABLE';
+        reason = 'Git boundary isolates local git process invocations; remote SSRF is not applicable.';
+      }
+
       matrix.push({
-        component: comp.name,
+        component: compName,
         family: fam,
         criticality: comp.criticality || 'medium',
-        status: 'PENDING'
+        status,
+        ...(reason ? { reason } : {})
       });
     }
   }
@@ -424,21 +452,71 @@ export function generateDiscoveryMatrix(components = [], inScopeFamilies = []) {
 }
 
 /**
- * Stage C: Builds standard repository-specific Threat Model conforming to Section 17, 30 & 34 (R2-P0-09).
+ * Validates a Threat Model against evidence and quality gates (R9-P1-02, R9-T08, R9-T09).
+ */
+export function validateThreatModel(threatModel, repoRoot = process.cwd()) {
+  if (!threatModel) return { valid: false, errors: ['Threat model is null or undefined'], warnings: [] };
+  const rootResolved = path.resolve(repoRoot);
+  const errors = [];
+  const warnings = [];
+
+  const comps = Array.isArray(threatModel.components) ? threatModel.components : [];
+  if (comps.length === 0) {
+    errors.push('Threat model must contain at least 1 component');
+  }
+
+  for (const comp of comps) {
+    const compName = comp.name || comp.id || 'unknown';
+    const evidenceList = Array.isArray(comp.evidence) ? comp.evidence : (comp.evidence ? [comp.evidence] : []);
+    if (evidenceList.length === 0) {
+      errors.push(`Component '${compName}' has no repository evidence and cannot become authoritative (R9-T09)`);
+      comp.isAuthoritative = false;
+    } else {
+      let foundValid = false;
+      for (const ev of evidenceList) {
+        const evPath = typeof ev === 'string' ? ev : (ev.path || '');
+        if (evPath) {
+          const resolved = path.resolve(rootResolved, evPath);
+          if (isPathContained(rootResolved, resolved) && fs.existsSync(resolved)) {
+            foundValid = true;
+            break;
+          }
+        }
+      }
+      if (!foundValid) {
+        errors.push(`Component '${compName}' physical evidence does not exist in repository (R9-T09)`);
+        comp.isAuthoritative = false;
+      } else {
+        comp.isAuthoritative = true;
+      }
+    }
+  }
+
+  const actors = Array.isArray(threatModel.actors) ? threatModel.actors : [];
+  for (const a of actors) {
+    const isGeneric = ['user', 'admin', 'attacker', 'external-attacker', 'authenticated-user'].includes(String(a.id).toLowerCase());
+    const hasEvidence = a.source === 'REPOSITORY_EVIDENCE' || a.source === 'USER_CONFIRMED' || (a.evidence && Object.keys(a.evidence).length > 0);
+    if (isGeneric && !hasEvidence) {
+      warnings.push(`Actor '${a.id}' is a generic actor without repository evidence (R9-T08)`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Stage C: Builds standard repository-specific Threat Model conforming to Section 17, 30 & 34 (R2-P0-09 & R9-P1-02).
  */
 export function buildThreatModel(repoRoot = process.cwd()) {
   const rootResolved = path.resolve(repoRoot);
   const provenance = getHardenedGitProvenance(rootResolved);
   const inventory = detectRepositoryInventory(rootResolved);
-  const components = discoverComponents(rootResolved, inventory);
   const timestamp = new Date().toISOString();
   const threatModelId = `TM-${crypto.randomBytes(4).toString('hex')}`;
-
-  let pkg = {};
-  try {
-    const pkgContent = fs.readFileSync(path.join(rootResolved, 'package.json'), 'utf8');
-    pkg = JSON.parse(pkgContent) || {};
-  } catch {}
 
   const inScopeFamilies = [
     'auth/authz/tenancy',
@@ -453,12 +531,21 @@ export function buildThreatModel(repoRoot = process.cwd()) {
     'ai/agent-trust-boundaries'
   ];
 
-  const discoveryMatrix = generateDiscoveryMatrix(components, inScopeFamilies);
-  const systemPurpose = typeof pkg.description === 'string' && pkg.description.trim().length > 0
-    ? pkg.description.trim()
-    : `${inventory.primaryProfile.toUpperCase()} codebase subject to multi-profile security audit`;
+  // R9-P1-01 & R9-P1-02: Load Project Security Context (.security-audit/) if present
+  const projectContextRes = loadProjectSecurityContext(rootResolved);
+  const hasConfirmedContext = (projectContextRes.status === 'CONFIRMED' && projectContextRes.context);
 
-  // Ground actors strictly on evidence
+  let components;
+  let actors;
+  let trustBoundaries;
+  let securityProperties = [];
+  let contextStatus = 'GENERIC_SECURITY_REVIEW';
+  let assuranceLimitation = 'CONTEXT_LIMITED';
+  let projectContextFingerprint = null;
+  let securityPropertiesFingerprint = null;
+
+  const discovered = discoverComponents(rootResolved, inventory);
+
   const hasCi = fs.existsSync(path.join(rootResolved, '.github')) ||
                 fs.existsSync(path.join(rootResolved, '.gitlab-ci.yml')) ||
                 fs.existsSync(path.join(rootResolved, 'Dockerfile'));
@@ -477,8 +564,130 @@ export function buildThreatModel(repoRoot = process.cwd()) {
         ? { path: inventory.entrypoints[0]?.path || 'bin/', manifestOrigin: 'cli-user-boundary', confidence: 'high' }
         : null);
 
-  const authComp = components.find(c => c.name === 'Auth');
-  const persistenceComp = components.find(c => c.name === 'Persistence');
+  const authComp = discovered.find(c => c.name === 'Auth');
+  const persistenceComp = discovered.find(c => c.name === 'Persistence');
+
+  const defaultActors = [
+    {
+      id: 'external-attacker',
+      trustLevel: 'untrusted',
+      description: 'External actor interacting via network, public APIs, or CLI parameters',
+      status: attackerEvidence ? 'FACT' : 'ASSUMPTION',
+      evidence: attackerEvidence
+    },
+    {
+      id: 'authenticated-user',
+      trustLevel: 'semi-trusted',
+      description: 'Standard tenant user attempting horizontal or vertical privilege escalation',
+      status: authComp ? 'FACT' : 'ASSUMPTION',
+      evidence: authComp ? authComp.evidence : null
+    },
+    {
+      id: 'system-operator',
+      trustLevel: 'privileged',
+      description: 'Authorized administrator configuring environment and deployments',
+      status: operatorEvidence ? 'FACT' : 'ASSUMPTION',
+      evidence: operatorEvidence
+    }
+  ];
+
+  const defaultBoundaries = [
+    {
+      boundary: 'untrusted-ingress-to-controller',
+      description: 'External data ingress passing into internal application logic',
+      status: inventory.entrypoints.length > 0 ? 'FACT' : 'ASSUMPTION',
+      evidence: inventory.entrypoints[0] ? { path: inventory.entrypoints[0].path, manifestOrigin: 'entrypoint-boundary', confidence: 'high' } : null
+    },
+    {
+      boundary: 'controller-to-persistence',
+      description: 'Application logic interacting with persistent datastores or external APIs',
+      status: persistenceComp ? 'FACT' : 'ASSUMPTION',
+      evidence: persistenceComp ? persistenceComp.evidence : null
+    },
+    {
+      boundary: 'application-to-environment',
+      description: 'Process environment, filesystem operations, and subshell executions',
+      status: 'FACT',
+      evidence: { path: './', manifestOrigin: 'process-environment-boundary', confidence: 'high' }
+    }
+  ];
+
+  if (hasConfirmedContext) {
+    const ctx = projectContextRes.context;
+    const ctxComps = (ctx.trustModel?.components || []).map(c => {
+      const name = c.name || c.id;
+      const disc = discovered.find(d => d.name === name || d.id === name);
+      let evidence = c.evidence;
+      if (Array.isArray(evidence) && evidence.length > 0 && typeof evidence[0] === 'string') {
+        evidence = { path: evidence[0], manifestOrigin: 'project-context', confidence: 'high' };
+      }
+      return {
+        name,
+        id: c.id || name,
+        description: c.description || disc?.description || `Evidenced component ${name}`,
+        criticality: c.criticality || disc?.criticality || 'medium',
+        evidence: evidence || disc?.evidence,
+        source: c.source || 'REPOSITORY_EVIDENCE',
+        isAuthoritative: c.isAuthoritative !== false
+      };
+    });
+    for (const d of discovered) {
+      if (!ctxComps.some(c => c.name === d.name || c.id === d.id)) {
+        ctxComps.push({ ...d, isAuthoritative: true });
+      }
+    }
+    components = ctxComps;
+
+    const ctxActors = (ctx.actors || []).map(a => ({
+      id: a.id,
+      trustLevel: a.trustLevel || 'untrusted',
+      description: a.description || '',
+      status: a.status || (a.source === 'REPOSITORY_EVIDENCE' ? 'FACT' : 'ASSUMPTION'),
+      evidence: a.evidence || (a.source === 'REPOSITORY_EVIDENCE' ? { manifestOrigin: a.source, confidence: 'high' } : null)
+    }));
+    for (const da of defaultActors) {
+      if (!ctxActors.some(a => a.id === da.id)) {
+        ctxActors.push(da);
+      }
+    }
+    actors = ctxActors;
+
+    const ctxBoundaries = (ctx.trustModel?.trustBoundaries || []).map(b => ({
+      boundary: b.boundary || b.name,
+      description: b.description || '',
+      status: b.status || 'FACT',
+      evidence: b.evidence || null
+    }));
+    for (const db of defaultBoundaries) {
+      if (!ctxBoundaries.some(b => b.boundary === db.boundary)) {
+        ctxBoundaries.push(db);
+      }
+    }
+    trustBoundaries = ctxBoundaries;
+
+    securityProperties = ctx.securityProperties || [];
+    contextStatus = 'CONFIRMED';
+    assuranceLimitation = null;
+    projectContextFingerprint = projectContextRes.projectContextFingerprint;
+    securityPropertiesFingerprint = projectContextRes.securityPropertiesFingerprint;
+  } else {
+    components = discovered;
+    actors = defaultActors;
+    trustBoundaries = defaultBoundaries;
+    contextStatus = 'GENERIC_SECURITY_REVIEW';
+    assuranceLimitation = 'CONTEXT_LIMITED';
+  }
+
+  const discoveryMatrix = generateDiscoveryMatrix(components, inScopeFamilies);
+  let pkg = {};
+  try {
+    const pkgContent = fs.readFileSync(path.join(rootResolved, 'package.json'), 'utf8');
+    pkg = JSON.parse(pkgContent) || {};
+  } catch {}
+
+  const systemPurpose = typeof pkg.description === 'string' && pkg.description.trim().length > 0
+    ? pkg.description.trim()
+    : `${inventory.primaryProfile.toUpperCase()} codebase subject to multi-profile security audit`;
 
   return {
     schemaVersion: '1',
@@ -496,53 +705,17 @@ export function buildThreatModel(repoRoot = process.cwd()) {
       manifestsCount: inventory.manifests.length
     },
     systemPurpose,
-    actors: [
-      {
-        id: 'external-attacker',
-        trustLevel: 'untrusted',
-        description: 'External actor interacting via network, public APIs, or CLI parameters',
-        status: attackerEvidence ? 'FACT' : 'ASSUMPTION',
-        evidence: attackerEvidence
-      },
-      {
-        id: 'authenticated-user',
-        trustLevel: 'semi-trusted',
-        description: 'Standard tenant user attempting horizontal or vertical privilege escalation',
-        status: authComp ? 'FACT' : 'ASSUMPTION',
-        evidence: authComp ? authComp.evidence : null
-      },
-      {
-        id: 'system-operator',
-        trustLevel: 'privileged',
-        description: 'Authorized administrator configuring environment and deployments',
-        status: operatorEvidence ? 'FACT' : 'ASSUMPTION',
-        evidence: operatorEvidence
-      }
-    ],
+    actors,
     components,
     entrypoints: inventory.entrypoints,
-    trustBoundaries: [
-      {
-        boundary: 'untrusted-ingress-to-controller',
-        description: 'External data ingress passing into internal application logic',
-        status: inventory.entrypoints.length > 0 ? 'FACT' : 'ASSUMPTION',
-        evidence: inventory.entrypoints[0] ? { path: inventory.entrypoints[0].path, manifestOrigin: 'entrypoint-boundary', confidence: 'high' } : null
-      },
-      {
-        boundary: 'controller-to-persistence',
-        description: 'Application logic interacting with persistent datastores or external APIs',
-        status: persistenceComp ? 'FACT' : 'ASSUMPTION',
-        evidence: persistenceComp ? persistenceComp.evidence : null
-      },
-      {
-        boundary: 'application-to-environment',
-        description: 'Process environment, filesystem operations, and subshell executions',
-        status: 'FACT',
-        evidence: { path: './', manifestOrigin: 'process-environment-boundary', confidence: 'high' }
-      }
-    ],
+    trustBoundaries,
+    securityProperties,
     inScopeFamilies,
     discoveryMatrix,
+    contextStatus,
+    assuranceLimitation,
+    projectContextFingerprint,
+    securityPropertiesFingerprint,
     explicitAssumptions: [
       'Git operations isolated against external diff and fsmonitor overrides via safe-git wrapper.',
       'Candidate findings cannot self-assert verdicts and must achieve quorum under Default-Deny.',

@@ -25,13 +25,23 @@
               "SCANNED_TEST_EXECUTABLE",
               "EXCLUDED_VENDORED",
               "EXCLUDED_GENERATED_VERIFIED",
-              "EXCLUDED_STATIC_ASSET"
+              "EXCLUDED_STATIC_ASSET",
+              "EXCLUDED_ANALYSIS_ARTIFACT"
             ]
           },
           "fileCount": { "type": "integer", "minimum": 0 },
           "reason": { "type": "string" }
         }
       }
-    }
+    },
+    "scanRunId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "targetRevision": { "type": "string" },
+    "startedAt": { "type": "string" },
+    "completedAt": { "type": ["string", "null"] },
+    "complete": { "type": "boolean" },
+    "auditIntent": { "type": "string", "enum": ["DISCOVERY", "VALIDATION", "REGRESSION"] },
+    "finalVerdict": { "type": ["string", "null"] },
+    "canDeclareClean": { "type": "boolean" }
   }
 }

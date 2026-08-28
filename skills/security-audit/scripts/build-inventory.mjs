@@ -24,8 +24,14 @@ export function categorizeDirectory(dirName) {
   if (['node_modules', 'vendor', 'third_party', 'bower_components'].includes(trimmed)) {
     return { status: 'EXCLUDED_VENDORED', classification: 'EXCLUDED_VENDORED', kind: 'EXCLUDED', reason: 'Third-party vendor dependencies' };
   }
-  if (['dist', 'build', 'out', 'target', '.next', '.nuxt', 'coverage', '.cache'].includes(raw) ||
-      ['dist', 'build', 'out', 'target', 'coverage'].includes(trimmed)) {
+  // R9-P0-02: Deterministic scanner database and analysis artifacts
+  if (['codeql-db', '.semgrep', '.nyc_output', 'coverage', '.sonar', '.scannerwork'].includes(trimmed) ||
+      ['codeql-db', '.semgrep', '.nyc_output', 'coverage'].includes(raw) ||
+      trimmed.startsWith('codeql-db') || trimmed.startsWith('.semgrep')) {
+    return { status: 'EXCLUDED_ANALYSIS_ARTIFACT', classification: 'EXCLUDED_ANALYSIS_ARTIFACT', kind: 'EXCLUDED', reason: 'Deterministic scanner database or analysis artifacts' };
+  }
+  if (['dist', 'build', 'out', 'target', '.next', '.nuxt', '.cache'].includes(raw) ||
+      ['dist', 'build', 'out', 'target'].includes(trimmed)) {
     return { status: 'EXCLUDED_GENERATED_VERIFIED', classification: 'EXCLUDED_GENERATED_VERIFIED', kind: 'EXCLUDED', reason: 'Compiler or build output artifacts' };
   }
   if (['.git', '.vscode', '.idea', 'docs', 'assets', 'images', 'static', 'reports', 'scratch'].includes(raw) ||
@@ -58,7 +64,7 @@ export function categorizeDirectory(dirName) {
 }
 
 /**
- * Classifies an individual file into granular attack surface categories (R2-P0-10).
+ * Classifies an individual file into granular attack surface categories (R2-P0-10 & R9-P0-02).
  */
 export function classifyFile(filePath, repoRoot = process.cwd()) {
   const norm = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
@@ -69,8 +75,13 @@ export function classifyFile(filePath, repoRoot = process.cwd()) {
     return { classification: 'EXCLUDED_VENDORED', isScanned: false, reason: 'Vendored third-party dependency' };
   }
 
+  // 1b. Deterministic scanner database and analysis artifacts (R9-P0-02)
+  if (/(?:^|\/)(?:codeql-db|\.semgrep|\.nyc_output|coverage|\.sonar|\.scannerwork)\//i.test(lower)) {
+    return { classification: 'EXCLUDED_ANALYSIS_ARTIFACT', isScanned: false, reason: 'Deterministic scanner database or analysis artifacts' };
+  }
+
   // 2. Verified compiler output artifacts
-  if (/(?:^|\/)(?:dist|build|out|target|coverage)\//i.test(lower)) {
+  if (/(?:^|\/)(?:dist|build|out|target)\//i.test(lower)) {
     return { classification: 'EXCLUDED_GENERATED_VERIFIED', isScanned: false, reason: 'Verified build output artifact' };
   }
 
@@ -343,10 +354,28 @@ export function buildScanManifest({
   const provenance = getHardenedGitProvenance(repoRoot);
   const timestamp = new Date().toISOString();
   const scanId = `${mode.toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
+  const scanRunId = `SCAN-${crypto.randomBytes(4).toString('hex')}`;
+  let projectId = path.basename(path.resolve(repoRoot));
+  try {
+    const pkgPath = path.join(path.resolve(repoRoot), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const p = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (p.name) projectId = p.name;
+    }
+  } catch {}
 
   const manifest = {
     schemaVersion: '1',
     scanId,
+    scanRunId,
+    projectId,
+    targetRevision: provenance.revisionId,
+    startedAt: timestamp,
+    completedAt: null,
+    complete: false,
+    auditIntent: 'DISCOVERY',
+    finalVerdict: null,
+    canDeclareClean: false,
     mode,
     target: {
       root: repoRoot,
@@ -360,9 +389,7 @@ export function buildScanManifest({
     effort,
     policy,
     trustMode,
-    createdAt: timestamp,
-    completedAt: null,
-    complete: false
+    createdAt: timestamp
   };
 
   if (mode === 'scan' && directoryManifest) {

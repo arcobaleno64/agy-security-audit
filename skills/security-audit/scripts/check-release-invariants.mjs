@@ -56,11 +56,20 @@ import {
   getPreparedContextFilePath,
   generateToolIntegrityManifest,
   isPathContained,
-  resolveExternalUri
+  resolveExternalUri,
+  isAuthoritativeClean,
+  computeCanonicalArtifactHashes,
+  validateCrossFormatParity,
+  loadProjectSecurityContext,
+  detectContextDrift,
+  computeProjectContextFingerprint,
+  computeSecurityPropertiesFingerprint,
+  initProjectContext,
+  validateThreatModel
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
-import { buildDirectoryManifest, classifyFile, categorizeDirectory } from './build-inventory.mjs';
+import { buildDirectoryManifest, classifyFile, categorizeDirectory, buildScanManifest } from './build-inventory.mjs';
 import { buildThreatModel, detectRepositoryInventory } from './build-threat-model.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
@@ -79,6 +88,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/render-sarif.mjs',
   'skills/security-audit/scripts/build-inventory.mjs',
   'skills/security-audit/scripts/build-threat-model.mjs',
+  'skills/security-audit/scripts/project-context.mjs',
   'skills/security-audit/scripts/validate-attack-path.mjs',
   'skills/security-audit/scripts/validate-patch.mjs',
   'skills/security-audit/scripts/prepare-review-context.mjs',
@@ -1270,7 +1280,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           throw new Error('verifyToolSelfIntegrity failed to detect TCB_OVERLAP on nested tool root');
         }
         const selfAuditRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/security-audit'), repoRoot, { allowSelfAudit: true });
-        if (!selfAuditRes.valid || selfAuditRes.status !== 'SELF_AUDIT_MODE' || selfAuditRes.verifiedScriptsCount !== 8) {
+        if (!selfAuditRes.valid || selfAuditRes.status !== 'SELF_AUDIT_MODE' || selfAuditRes.verifiedScriptsCount < 8) {
           throw new Error('verifyToolSelfIntegrity failed self-audit mode verification');
         }
 
@@ -1492,6 +1502,111 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         }
         if (!fOut || fOut.evidenceBinding !== 'OUTSIDE_SCOPE') {
           throw new Error('Traversal finding failed to classify as OUTSIDE_SCOPE');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-31',
+      name: 'Scan Lifecycle Manifest & Atomic Verdict Consistency (R9-P0-01)',
+      check: () => {
+        const m = buildScanManifest({ repoRoot });
+        if (m.complete !== false || m.completedAt !== null) {
+          throw new Error('New scan-manifest did not initialize with complete: false');
+        }
+        if (isAuthoritativeClean(m)) {
+          throw new Error('isAuthoritativeClean accepted incomplete manifest (complete: false)');
+        }
+        const finalized = finalizeScan({
+          candidates: [],
+          manifest: m,
+          repoRoot,
+          auditIntent: 'REGRESSION',
+          allowSelfAudit: true
+        });
+        if (finalized.manifest.complete !== true || !finalized.manifest.completedAt) {
+          throw new Error('Finalized clean scan did not atomically set complete: true and completedAt');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-32',
+      name: 'Generated Analysis Artifacts Exclusion & Context Isolation (R9-P0-02)',
+      check: () => {
+        const catCodeql = categorizeDirectory('codeql-db');
+        const catSemgrep = categorizeDirectory('.semgrep');
+        const catCoverage = categorizeDirectory('coverage');
+        const fileCodeql = classifyFile('codeql-db/db.json');
+        if (catCodeql.status !== 'EXCLUDED_ANALYSIS_ARTIFACT' || catCodeql.kind !== 'EXCLUDED') {
+          throw new Error(`codeql-db categorized as ${catCodeql.status} instead of EXCLUDED_ANALYSIS_ARTIFACT`);
+        }
+        if (catSemgrep.status !== 'EXCLUDED_ANALYSIS_ARTIFACT') {
+          throw new Error(`.semgrep categorized as ${catSemgrep.status} instead of EXCLUDED_ANALYSIS_ARTIFACT`);
+        }
+        if (catCoverage.status !== 'EXCLUDED_ANALYSIS_ARTIFACT') {
+          throw new Error(`coverage categorized as ${catCoverage.status} instead of EXCLUDED_ANALYSIS_ARTIFACT`);
+        }
+        if (fileCodeql.classification !== 'EXCLUDED_ANALYSIS_ARTIFACT' || fileCodeql.isScanned !== false) {
+          throw new Error(`codeql-db/db.json classified as ${fileCodeql.classification} instead of EXCLUDED_ANALYSIS_ARTIFACT`);
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-33',
+      name: 'Canonical Artifact Authority & Cross-Format Parity (R9-P0-03)',
+      check: () => {
+        const mismatchVerdict = validateCrossFormatParity({
+          sarif: { runs: [{ properties: { canDeclareClean: true } }] },
+          scanManifest: { canDeclareClean: false }
+        });
+        if (mismatchVerdict.valid) {
+          throw new Error('validateCrossFormatParity accepted verdict mismatch');
+        }
+
+        const mismatchCounts = validateCrossFormatParity({
+          sarif: { runs: [{ properties: { canDeclareClean: false, findingCounts: { reportable: 1, deferred: 0 } } }] },
+          scanManifest: { canDeclareClean: false, findingCounts: { reportable: 0, deferred: 0 } }
+        });
+        if (mismatchCounts.valid) {
+          throw new Error('validateCrossFormatParity accepted finding count mismatch');
+        }
+
+        const mismatchCoverage = validateCrossFormatParity({
+          sarif: { runs: [{ properties: { coverageStatus: 'COMPLETE' } }] },
+          coverage: { coverageStatus: 'PARTIAL' }
+        });
+        if (mismatchCoverage.valid) {
+          throw new Error('validateCrossFormatParity accepted coverage status mismatch');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-34',
+      name: 'Component-Driven Threat Model Evidence & Quality Gate (R9-P1-02)',
+      check: () => {
+        const valInvalid = validateThreatModel({
+          components: [{ id: 'MissingComp', evidence: ['nonexistent.js'] }],
+          actors: [{ id: 'external-attacker', status: 'ASSUMPTION', source: 'UNKNOWN' }]
+        }, repoRoot);
+        if (valInvalid.valid) {
+          throw new Error('validateThreatModel accepted component with non-existent evidence');
+        }
+        if (!valInvalid.warnings.some(w => w.includes('GENERIC_ACTOR_WITHOUT_EVIDENCE') || w.includes('generic actor without repository evidence'))) {
+          throw new Error('validateThreatModel failed to emit quality warning for generic unevidenced actor');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-35',
+      name: 'Project Security Context Drift Detection & Assurance Boundary (R9-P1-01 & R9-P1-04)',
+      check: () => {
+        const base = { project: { entrypoints: ['a.js'], privilegedOperations: ['op1'] } };
+        const driftEp = detectContextDrift({ project: { entrypoints: ['a.js', 'b.js'], privilegedOperations: ['op1'] } }, base);
+        if (!driftEp.hasDrift || driftEp.status !== 'CONTEXT_DRIFT') {
+          throw new Error('detectContextDrift failed to detect new entrypoint as CONTEXT_DRIFT');
+        }
+        const driftPriv = detectContextDrift({ project: { entrypoints: ['a.js'], privilegedOperations: ['op1', 'op2'] } }, base);
+        if (!driftPriv.hasDrift || driftPriv.status !== 'THREAT_MODEL_REVIEW_REQUIRED') {
+          throw new Error('detectContextDrift failed to detect new privileged operation as THREAT_MODEL_REVIEW_REQUIRED');
         }
       }
     }

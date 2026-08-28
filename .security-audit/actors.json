@@ -1,0 +1,23 @@
+[
+  {
+    "id": "LOCAL_OPERATOR",
+    "description": "Authorized local developer executing AGY audit commands in workspace",
+    "trustLevel": "privileged",
+    "source": "REPOSITORY_EVIDENCE",
+    "confidence": "HIGH"
+  },
+  {
+    "id": "SUBAGENT_REVIEWER",
+    "description": "Subagent assigned to inspect code within shadow context under Default-Deny",
+    "trustLevel": "semi-trusted",
+    "source": "REPOSITORY_EVIDENCE",
+    "confidence": "HIGH"
+  },
+  {
+    "id": "UNTRUSTED_REPOSITORY_INPUT",
+    "description": "Untrusted source code or git history under review potentially containing adversarial payloads",
+    "trustLevel": "untrusted",
+    "source": "REPOSITORY_EVIDENCE",
+    "confidence": "HIGH"
+  }
+]

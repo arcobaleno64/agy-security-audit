@@ -1,0 +1,12 @@
+[
+  {
+    "id": "ASM-001",
+    "assumption": "Local Node.js standard library and crypto primitives are cryptographically sound.",
+    "source": "USER_CONFIRMED"
+  },
+  {
+    "id": "ASM-002",
+    "assumption": "Reviewers have read-only access and cannot invoke arbitrary commands outside declared safe-git wrappers.",
+    "source": "REPOSITORY_EVIDENCE"
+  }
+]
