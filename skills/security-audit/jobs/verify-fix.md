@@ -1,7 +1,7 @@
 # Job Specification: Fix Verification (`verify-fix`)
 
 ## Overview
-The `verify-fix` job automates the rigorous verification of candidate remediation patches, ensuring that the target vulnerability is neutralized under the Presumption of Non-Pass without introducing secondary vulnerabilities or build regressions.
+The `verify-fix` job automates the rigorous verification of candidate remediation patches under regression semantics (`auditIntent: REGRESSION`), ensuring that the target vulnerability is neutralized under the Presumption of Non-Pass without introducing secondary vulnerabilities or build regressions. Reruns only re-explore attack surfaces affected by the change.
 
 ## Workflow
 

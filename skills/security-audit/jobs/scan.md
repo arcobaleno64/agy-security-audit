@@ -6,6 +6,8 @@ Its core objectives are:
 - **Exhaustive Directory Accounting**: Derive top-level directory categorization directly from filesystem ground truth.
 - **Component × Vulnerability-Family Discovery**: Replace naïve global sink grepping with component-aware threat surface exploration.
 - **Auditable Canonical Artifacts**: Produce deterministic `scan-manifest.json`, `coverage.json`, `findings.json`, SARIF 2.1.0, and Markdown reports.
+- **Audit Intent**: Operates primarily under `auditIntent: DISCOVERY` (or `REGRESSION` when verifying fixes across repository scope).
+- **No Finding Quota**: Zero findings in a fully reconciled scan is a valid outcome (`canDeclareClean: true`).
 
 ---
 

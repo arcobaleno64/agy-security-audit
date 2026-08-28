@@ -460,6 +460,64 @@ export function isPathContained(repoRoot, filePath) {
 }
 
 /**
+ * Validates a Component x Vulnerability-Family Discovery Matrix Cell.
+ * Enforces zero finding quota: 'REVIEWED_NO_CANDIDATE' is a legitimate successful review outcome.
+ * Permitted cell statuses: 'PENDING', 'REVIEWED_NO_CANDIDATE', 'CANDIDATE', 'NOT_APPLICABLE', 'UNRESOLVED'.
+ */
+export function validateDiscoveryCell(cell, repoRoot = null) {
+  if (!cell || typeof cell !== 'object') {
+    return { valid: false, error: 'Discovery cell must be an object' };
+  }
+  if (!cell.component || typeof cell.component !== 'string' || cell.component.trim().length === 0) {
+    return { valid: false, error: 'Discovery cell requires a non-empty string component' };
+  }
+  if (!cell.family || typeof cell.family !== 'string' || cell.family.trim().length === 0) {
+    return { valid: false, error: 'Discovery cell requires a non-empty string vulnerability family' };
+  }
+  const validStatuses = ['PENDING', 'PENDING_DISCOVERY', 'REVIEWED_NO_CANDIDATE', 'CANDIDATE', 'NOT_APPLICABLE', 'UNRESOLVED'];
+  if (!validStatuses.includes(cell.status)) {
+    return { valid: false, error: `Invalid cell status '${cell.status}'; must be one of: ${validStatuses.join(', ')}` };
+  }
+  if (cell.status === 'REVIEWED_NO_CANDIDATE') {
+    if (!Array.isArray(cell.reviewedEvidence) || cell.reviewedEvidence.length === 0) {
+      return { valid: false, error: 'REVIEWED_NO_CANDIDATE requires non-empty reviewedEvidence array proving inspection' };
+    }
+    for (const ev of cell.reviewedEvidence) {
+      if (!ev || typeof ev.path !== 'string' || ev.path.trim().length === 0) {
+        return { valid: false, error: 'reviewedEvidence item must contain a non-empty string path' };
+      }
+      if (repoRoot) {
+        if (!isPathContained(repoRoot, ev.path)) {
+          return { valid: false, error: `reviewedEvidence path escapes repository: ${ev.path}` };
+        }
+        const resolved = path.resolve(repoRoot, ev.path);
+        if (!fs.existsSync(resolved)) {
+          return { valid: false, error: `reviewedEvidence file does not exist: ${ev.path}` };
+        }
+      }
+    }
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates an entire Component x Family Discovery Matrix.
+ */
+export function validateDiscoveryMatrix(matrix, repoRoot = null) {
+  if (!Array.isArray(matrix)) {
+    return { valid: false, error: 'Discovery matrix must be an array of cells' };
+  }
+  for (let i = 0; i < matrix.length; i++) {
+    const res = validateDiscoveryCell(matrix[i], repoRoot);
+    if (!res.valid) {
+      return { valid: false, error: `Cell [${i}] (${matrix[i]?.component} x ${matrix[i]?.family}): ${res.error}` };
+    }
+  }
+  return { valid: true, totalCells: matrix.length };
+}
+
+
+/**
  * Normalizes any OS path to an RFC 3986 compliant relative forward-slash URI.
  */
 export function normalizeUri(repoRoot, filePath) {
@@ -1363,10 +1421,18 @@ export function finalizeScan({
   repoRoot = process.cwd(),
   provenance = null,
   votes = [],
-  expectedMode = null
+  expectedMode = null,
+  auditIntent = 'DISCOVERY',
+  discoveryMatrix = []
 }) {
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
+  const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
+  const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
+    ? String(auditIntent).toUpperCase()
+    : 'DISCOVERY';
+  const safeMatrix = Array.isArray(discoveryMatrix) ? discoveryMatrix : [];
+  const matrixValidation = safeMatrix.length > 0 ? validateDiscoveryMatrix(safeMatrix, safeRepoRoot) : { valid: true };
 
   // 1. Coverage Reconciliation against real repoRoot
   const coverageReconciliation = reconcileCoverage(manifest, safeRepoRoot);
@@ -1538,7 +1604,7 @@ export function finalizeScan({
   const deferredCount = canonicalFindings.filter(f => f.disposition === 'DEFERRED').length;
   const suppressedCount = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED').length;
 
-  const canDeclareClean = (coverageStatus === 'COMPLETE' && confirmedCount === 0 && deferredCount === 0);
+  const canDeclareClean = (coverageStatus === 'COMPLETE' && confirmedCount === 0 && deferredCount === 0 && matrixValidation.valid);
 
   const summary = {
     totalCandidates: canonicalFindings.length,
@@ -1548,7 +1614,17 @@ export function finalizeScan({
     coverageStatus,
     manifestValid: coverageReconciliation.valid,
     coverageMode,
-    canDeclareClean
+    canDeclareClean,
+    auditIntent: safeAuditIntent,
+    cleanAssuranceBounded: canDeclareClean,
+    discoveryMatrixValid: matrixValidation.valid,
+    discoveryCellsSummary: {
+      total: safeMatrix.length,
+      reviewedNoCandidate: safeMatrix.filter(c => c.status === 'REVIEWED_NO_CANDIDATE').length,
+      candidates: safeMatrix.filter(c => c.status === 'CANDIDATE').length,
+      notApplicable: safeMatrix.filter(c => c.status === 'NOT_APPLICABLE').length,
+      unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length
+    }
   };
 
   return {
@@ -1558,7 +1634,9 @@ export function finalizeScan({
     manifest,
     manifestValidation: coverageReconciliation,
     provenance: provenance || getHardenedGitProvenance(repoRoot),
-    canonicalFindings
+    canonicalFindings,
+    auditIntent: safeAuditIntent,
+    discoveryMatrix: safeMatrix
   };
 
 }
@@ -1714,7 +1792,8 @@ export function renderSarifFromCanonical({
   manifest = null,
   coverageStatus = 'COMPLETE',
   provenance = null,
-  repoRoot = process.cwd()
+  repoRoot = process.cwd(),
+  auditIntent = 'DISCOVERY'
 }) {
   const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
   const rulesMap = new Map();
@@ -1748,17 +1827,17 @@ export function renderSarifFromCanonical({
       ruleId,
       ruleIndex,
       level: resultLevel,
-      message: { text: f.description || f.title },
+      message: { text: f.description || f.title || ruleId },
       locations: [
         {
           physicalLocation: {
             artifactLocation: {
-              uri: f.location.uri,
+              uri: normalizeUri(repoRoot, f.location.uri),
               uriBaseId: '%SRCROOT%'
             },
             region: {
-              startLine: f.location.startLine,
-              endLine: f.location.endLine
+              startLine: f.location.startLine || 1,
+              endLine: f.location.endLine || f.location.startLine || 1
             }
           }
         }
@@ -1770,12 +1849,13 @@ export function renderSarifFromCanonical({
       properties: {
         disposition: f.disposition,
         verdict: f.verdict,
-        dispositionReason: f.dispositionReason,
-        confidence: f.confidenceScore,
+        confidenceScore: f.confidenceScore,
         confidenceLevel: f.confidenceLevel,
         cvssV4: f.cvssV4,
-        computedRigor: f.rigor,
-        consensus: f.consensus
+        rigor: f.rigor,
+        fingerprint: f.fingerprint,
+        consensus: f.consensus,
+        dispositionReason: f.dispositionReason
       }
     });
   }
@@ -1794,6 +1874,9 @@ export function renderSarifFromCanonical({
     results,
     properties: {
       coverageStatus,
+      auditAxiom: 'Presumption of Non-Pass (Default-Deny on Authority Claims)',
+      auditIntent: auditIntent || 'DISCOVERY',
+      canDeclareClean: (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE').length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
       directoryReconciliationManifest: manifest
     }
   };
@@ -1813,7 +1896,8 @@ export function renderMarkdownFromCanonical({
   manifest = null,
   coverageStatus = 'COMPLETE',
   provenance = null,
-  repoRoot = process.cwd()
+  repoRoot = process.cwd(),
+  auditIntent = 'DISCOVERY'
 }) {
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
@@ -1827,7 +1911,8 @@ export function renderMarkdownFromCanonical({
     md += `- **Dirty Diff SHA-256**: \`${provenance.properties.dirtyDiffSha256}\`\n`;
   }
   md += `- **Coverage Status**: **${coverageStatus}**\n`;
-  md += '- **Audit Axiom**: **Presumption of Non-Pass (Default-Deny)**\n\n';
+  md += `- **Audit Intent**: \`${sanitizeInlineText(auditIntent || 'DISCOVERY')}\`\n`;
+  md += '- **Audit Axiom**: **Presumption of Non-Pass (Default-Deny on Authority Claims)**\n\n';
   md += '---\n\n';
 
   // Coverage Reconciliation Section
@@ -2028,7 +2113,9 @@ if (isDirectExecution) {
   const inputPath = getArg('--candidates') || getArg('--input');
   const votesPath = getArg('--votes');
   const manifestPath = getArg('--manifest');
+  const matrixPath = getArg('--matrix') || getArg('--discovery-matrix');
   const repoRootArg = getArg('--repo-root') || process.cwd();
+  const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
   const outputJsonPath = getArg('--output') || getArg('--output-json');
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
@@ -2044,13 +2131,18 @@ if (isDirectExecution) {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       }
 
+      let discoveryMatrix = [];
+      if (matrixPath && fs.existsSync(matrixPath)) {
+        discoveryMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
+      }
+
       const votes = loadVotes(votesPath);
       if (candidates.length > 0 && votes.length === 0) {
         console.warn('[DEFAULT-DENY] No verifier votes provided via --votes. All candidates will be derived as DEFERRED under Default-Deny.');
       }
 
       const repoRoot = path.resolve(repoRootArg);
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes });
+      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg, discoveryMatrix });
 
       if (outputJsonPath) {
         fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
@@ -2064,7 +2156,8 @@ if (isDirectExecution) {
           manifest: finalization.manifest,
           coverageStatus: finalization.coverageStatus,
           provenance: finalization.provenance,
-          repoRoot
+          repoRoot,
+          auditIntent: finalization.auditIntent
         });
         fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
         fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
@@ -2076,7 +2169,9 @@ if (isDirectExecution) {
           canonicalFindings: finalization.canonicalFindings,
           manifest: finalization.manifest,
           coverageStatus: finalization.coverageStatus,
-          provenance: finalization.provenance
+          provenance: finalization.provenance,
+          repoRoot,
+          auditIntent: finalization.auditIntent
         });
         fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
         fs.writeFileSync(outputMdPath, md, 'utf8');

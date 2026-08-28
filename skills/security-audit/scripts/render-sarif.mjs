@@ -44,7 +44,9 @@ import {
   validateVoteEvidence,
   deriveAuthoritativeRigor,
   validateCanonicalFindings,
-  validateBallot
+  validateBallot,
+  validateDiscoveryCell,
+  validateDiscoveryMatrix
 } from './finalize-scan.mjs';
 
 
@@ -103,20 +105,22 @@ export function getGitProvenance(repoRoot) {
  * Builds standard SARIF 2.1.0 document.
  * Centralized through finalizeScan to enforce default-deny and canonical contract.
  */
-export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [] }) {
+export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
-    votes
+    votes,
+    auditIntent
   });
   return renderSarifFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
     manifest: finalization.manifest,
     coverageStatus: finalization.coverageStatus,
     provenance: finalization.provenance,
-    repoRoot
+    repoRoot,
+    auditIntent: finalization.auditIntent
   });
 }
 
@@ -124,20 +128,22 @@ export function renderSarif({ findings = [], manifest = null, provenance = null,
  * Builds Human-Readable Markdown Audit Report with strict entity escaping and default-deny.
  * Centralized through finalizeScan to guarantee 100% parity with SARIF and JSON.
  */
-export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [] }) {
+export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
-    votes
+    votes,
+    auditIntent
   });
   return renderMarkdownFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
     manifest: finalization.manifest,
     coverageStatus: finalization.coverageStatus,
     provenance: finalization.provenance,
-    repoRoot
+    repoRoot,
+    auditIntent: finalization.auditIntent
   });
 }
 
@@ -2420,7 +2426,128 @@ export function runTests() {
 
   console.log('✔ 66. R1-P1-05 Invariant: Verifier ballot task-correlation nonce enforced fail-closed.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (66/66).');
+  // 67. R2-P0-01 / 02 / 03 Invariant: Zero-candidate discovery cell, Default-Deny claim model, and auditIntent convergence.
+  // 67.1 validateDiscoveryCell accepts REVIEWED_NO_CANDIDATE with concrete repository evidence
+  const validCell = {
+    component: 'Auth',
+    family: 'auth/authz/tenancy',
+    status: 'REVIEWED_NO_CANDIDATE',
+    reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }],
+    notes: 'Auth guards inspected, zero unmitigated vulnerabilities found.'
+  };
+  const cellRes1 = validateDiscoveryCell(validCell, process.cwd());
+  if (!cellRes1.valid) {
+    throw new Error(`R2-P0-01 VIOLATION: valid cell rejected: ${cellRes1.error}`);
+  }
+
+  // 67.2 validateDiscoveryCell rejects REVIEWED_NO_CANDIDATE with missing evidence (anti-lazy review)
+  const emptyEvidenceCell = {
+    component: 'Auth',
+    family: 'auth/authz/tenancy',
+    status: 'REVIEWED_NO_CANDIDATE',
+    reviewedEvidence: [],
+    notes: 'Trust me no findings'
+  };
+  const cellRes2 = validateDiscoveryCell(emptyEvidenceCell, process.cwd());
+  if (cellRes2.valid) {
+    throw new Error('R2-P0-01 VIOLATION: REVIEWED_NO_CANDIDATE accepted with empty evidence');
+  }
+
+  // 67.3 validateDiscoveryCell rejects non-existent evidence path
+  const nonExistentCell = {
+    component: 'Auth',
+    family: 'auth/authz/tenancy',
+    status: 'REVIEWED_NO_CANDIDATE',
+    reviewedEvidence: [{ path: 'nonexistent/file.ts', line: 1 }]
+  };
+  const cellRes3 = validateDiscoveryCell(nonExistentCell, process.cwd());
+  if (cellRes3.valid) {
+    throw new Error('R2-P0-01 VIOLATION: REVIEWED_NO_CANDIDATE accepted with non-existent file');
+  }
+
+  // 67.4 validateDiscoveryCell rejects invalid status
+  const invalidStatusCell = {
+    component: 'Auth',
+    family: 'auth/authz/tenancy',
+    status: 'COMPLETELY_SAFE',
+    reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }]
+  };
+  const cellRes4 = validateDiscoveryCell(invalidStatusCell, process.cwd());
+  if (cellRes4.valid) {
+    throw new Error('R2-P0-01 VIOLATION: Invalid cell status accepted');
+  }
+
+  // 67.5 Zero-candidate run under COMPLETE coverage achieves Bounded Clean Assurance
+  const cleanManifest = buildDirectoryManifest(process.cwd());
+  const zeroCandidateRun = finalizeScan({
+    candidates: [],
+    manifest: cleanManifest,
+    repoRoot: process.cwd(),
+    auditIntent: 'REGRESSION',
+    discoveryMatrix: [validCell]
+  });
+  if (!zeroCandidateRun.summary.canDeclareClean || !zeroCandidateRun.summary.cleanAssuranceBounded) {
+    throw new Error('R2-P0-01 VIOLATION: Clean run with 0 candidates could not declare bounded clean assurance');
+  }
+  if (zeroCandidateRun.summary.auditIntent !== 'REGRESSION') {
+    throw new Error(`R2-P0-03 VIOLATION: auditIntent REGRESSION not preserved in summary: ${zeroCandidateRun.summary.auditIntent}`);
+  }
+  if (zeroCandidateRun.summary.discoveryCellsSummary.reviewedNoCandidate !== 1) {
+    throw new Error('R2-P0-01 VIOLATION: discoveryCellsSummary did not count reviewedNoCandidate');
+  }
+
+  // 67.6 Markdown and SARIF express bounded assurance and auditIntent
+  const zeroSarif = renderSarifFromCanonical({
+    canonicalFindings: zeroCandidateRun.canonicalFindings,
+    manifest: cleanManifest,
+    coverageStatus: zeroCandidateRun.coverageStatus,
+    repoRoot: process.cwd(),
+    auditIntent: zeroCandidateRun.auditIntent
+  });
+  if (zeroSarif.runs[0].properties.auditIntent !== 'REGRESSION' || !zeroSarif.runs[0].properties.canDeclareClean) {
+    throw new Error('R2-P0-03 VIOLATION: SARIF run properties missing auditIntent or canDeclareClean');
+  }
+  const zeroMd = renderMarkdownFromCanonical({
+    canonicalFindings: zeroCandidateRun.canonicalFindings,
+    manifest: cleanManifest,
+    coverageStatus: zeroCandidateRun.coverageStatus,
+    repoRoot: process.cwd(),
+    auditIntent: zeroCandidateRun.auditIntent
+  });
+  if (!zeroMd.includes('Audit Intent') || !zeroMd.includes('REGRESSION')) {
+    throw new Error('R2-P0-03 VIOLATION: Markdown missing Audit Intent header');
+  }
+
+  // 67.7 validateDiscoveryMatrix validates arrays of cells fail-closed
+  const validMultiMatrix = [
+    validCell,
+    { component: 'API', family: 'injection/query/template/eval', status: 'PENDING' },
+    { component: 'FileHandling', family: 'filesystem/path/archive', status: 'NOT_APPLICABLE' }
+  ];
+  const matrixRes = validateDiscoveryMatrix(validMultiMatrix, process.cwd());
+  if (!matrixRes.valid || matrixRes.totalCells !== 3) {
+    throw new Error(`R2-P0-01 VIOLATION: valid discovery matrix rejected: ${matrixRes.error}`);
+  }
+  const invalidMultiMatrix = [validCell, invalidStatusCell];
+  const invalidMatrixRes = validateDiscoveryMatrix(invalidMultiMatrix, process.cwd());
+  if (invalidMatrixRes.valid) {
+    throw new Error('R2-P0-01 VIOLATION: discovery matrix containing invalid cell accepted as valid');
+  }
+
+  // 67.8 Malformed discoveryMatrix strictly denies clean declaration (Finding 01 fix)
+  const malformedMatrixRun = finalizeScan({
+    candidates: [],
+    manifest: cleanManifest,
+    repoRoot: process.cwd(),
+    discoveryMatrix: invalidMultiMatrix
+  });
+  if (malformedMatrixRun.summary.canDeclareClean || malformedMatrixRun.summary.discoveryMatrixValid) {
+    throw new Error('R2-P0-01 VIOLATION: Scan with invalid discoveryMatrix allowed canDeclareClean: true');
+  }
+
+  console.log('✔ 67. R2-P0-01 / 02 / 03 Invariant: Zero-candidate discovery cell, Default-Deny claim model, and auditIntent convergence.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (67/67).');
 
   } finally {
     gitFixture.cleanup();
@@ -2473,6 +2600,7 @@ const inputPath = getArg('--input') || getArg('--candidates');
 const votesPath = getArg('--votes');
 const manifestPath = getArg('--manifest');
 const repoRootArg = getArg('--repo-root') || process.cwd();
+const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
 const outputSarifPath = getArg('--output-sarif');
 const outputMdPath = getArg('--output-md');
 
@@ -2488,6 +2616,7 @@ if (canonicalPath || inputPath) {
 
     let canonicalFindings = [];
     let coverageStatus = 'COMPLETE';
+    let activeIntent = intentArg;
 
     if (canonicalPath) {
       // Production Canonical Pipeline: renderer formats pre-finalized canonical findings with invariant validation
@@ -2506,9 +2635,10 @@ if (canonicalPath || inputPath) {
         console.warn('[DEFAULT-DENY] Direct render without --votes. Under Default-Deny, all findings are derived as DEFERRED.');
       }
 
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes });
+      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg });
       canonicalFindings = finalization.canonicalFindings;
       coverageStatus = finalization.coverageStatus;
+      activeIntent = finalization.auditIntent;
     }
 
     if (outputSarifPath) {
@@ -2517,7 +2647,8 @@ if (canonicalPath || inputPath) {
         manifest,
         coverageStatus,
         provenance,
-        repoRoot
+        repoRoot,
+        auditIntent: activeIntent
       });
       fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
       fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
@@ -2530,7 +2661,8 @@ if (canonicalPath || inputPath) {
         manifest,
         coverageStatus,
         provenance,
-        repoRoot
+        repoRoot,
+        auditIntent: activeIntent
       });
       fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
       fs.writeFileSync(outputMdPath, md, 'utf8');

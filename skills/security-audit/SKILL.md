@@ -1,55 +1,42 @@
 ---
 name: security-audit
 description: >-
-  Conducts top-tier, multi-stage security audits, vulnerability hunting, and patch suggestions on the codebase or git diffs, benchmarked against Claude Security and NIST SP 800-115 standards. Employs elastic subagent swarm voting under a strict presumption of non-pass (default-deny), double-blind verification, CVSS v4.0 calibration, and SARIF 2.1.0 report generation. Use when the user asks to review code for security flaws, audit vulnerabilities, run security scans, or patch vulnerabilities.
+  Conducts evidence-backed, multi-stage security assurance reviews, vulnerability verification, and patch analysis on codebases or git diffs, informed by NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, and OWASP SAMM. Employs elastic subagent voting under Default-Deny on authority claims, double-blind 3-lens verification, CVSS v4.0 metrics, and SARIF 2.1.0 report generation. Use when the user asks to review code for security flaws, audit vulnerabilities, run security scans, or patch vulnerabilities.
 ---
 
 # AGY Security Audit Skill (`security-audit`)
 
-An elite, multi-stage security auditing workflow for Google Antigravity (AGY), modeled after Anthropic's Claude Security, NIST SP 800-115, and OWASP ASVS standards.
+An evidence-driven security assurance workflow for Google Antigravity (AGY), aligned with NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, CWE taxonomy, and CVSS v4.0.
 
-## Foundational Axiom: Presumption of Non-Pass (Default-Deny)
+## Foundational Axiom: Presumption of Non-Pass (Default-Deny on Authority Claims)
 
 > [!IMPORTANT]
-> **Every audited component, candidate vulnerability, and proposed patch is presumed `NON_PASS / UNVERIFIED` by default.**
-> No code is certified as compliant, no candidate finding is dismissed as `FALSE_POSITIVE`, and no patch is approved without affirmative, reproducible evidence.
+> **Authority claims (candidate findings, patches, and coverage claims) are unverified by default.**
+> An audited component is not presumed vulnerable; a completed review may legitimately produce zero candidates.
+> No candidate finding is certified as `REPORTABLE / CONFIRMED`, no candidate finding is dismissed as `SUPPRESSED / FALSE_POSITIVE`, and no patch is marked `VERIFIED` without affirmative, reproducible, evidence-bound proof.
+> A clean audit result means defined coverage is complete, no validated reportable findings remain, and no required evidence gaps remain. It represents bounded assurance within declared scope, not a universal safety certification.
 
 ---
 
 ## Startup Configuration & Customization Options
 
-When launched, the skill inspects explicit user flags or prompts for customization across 5 core dimensions:
+When launched, the skill inspects explicit user flags or prompts for customization across core dimensions:
 
 ```text
-/security-audit [--scope <codebase|changes|secrets|path>] [--concurrency <N>] [--strictness <paranoid|balanced|blocking>] [--patch] [--export]
+/security-audit [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--strictness <paranoid|balanced|blocking>] [--patch] [--export]
 ```
 
-### 1. Interactive Selection Menu (Defaults when not specified)
-1. **Audit Scope (`--scope`)**:
-   - `(Recommended) Git Changes`: Scan only uncommitted git diff or branch PR.
-   - `Whole Codebase`: Complete repository scan with full Directory Accounting manifest.
-   - `Secrets Only`: Rapid dedicated pass for hardcoded credentials with source masking.
-   - `Custom Path`: Restrict analysis to a specific directory (e.g. `src/auth/`).
-2. **Discovery Concurrency (`--concurrency`)**:
-   - `Lightweight (2 workers)`: Fast heuristic triage, lowest token consumption.
-   - `(Recommended) Standard (4 workers)`: 4 parallel discovery streams across component x family matrix.
-   - `High Concurrency (8 workers)`: Accelerated discovery across large codebases.
-   - `Custom (N workers)`: Sliding concurrency cap ($C \in [1, 16]$). Note: Concurrency controls discovery speed/cost and does NOT alter verification thresholds.
-3. **Strictness Policy (`--strictness`)**:
-   - `(Recommended) Paranoid Default-Deny`: Strict 3-lens unanimous confirmation (`supports === 3`) + affirmative taint flow.
-   - `Balanced`: Standard 3-lens confirmation.
-   - `Critical & High Only`: Filter to blocking vulnerabilities only.
-4. **Remediation Patching (`--patch`)**:
-   - `Report Only`: Output SARIF & Markdown reports only.
-   - `Suggest Patches`: Generate dual-track patches in Patch Jail with `git apply --check`.
-5. **Export Target (`--export`)**:
-   - `Brain Artifacts (Default)`: Kept isolated in Brain; clean working tree.
-   - `Export to Project`: Write copy to `./reports/security-audit.sarif` for CI/CD.
+### Dimension 0: Audit Intent (`auditIntent`)
+When executing security review, the skill operates under one of three distinct intents:
+1. **`DISCOVERY` (Default on initial run)**: Open exploration across declared components and vulnerability families to generate evidence-backed candidate hypotheses. Zero findings is a valid outcome; there is no finding quota.
+2. **`VALIDATION`**: Independent evaluation of candidate hypotheses via the 3-Lens panel (`REACHABILITY`, `DEFENSES`, `IMPACT`) to derive authoritative dispositions (`REPORTABLE`, `SUPPRESSED`, `DEFERRED`).
+3. **`REGRESSION` (Default on rerun / fix verification)**: Targeted verification of remediation patches and focused re-exploration restricted strictly to attack surfaces affected by changes. Reruns on the same scope default to `REGRESSION` to ensure convergence without infinite novelty hunting.
 
 ### Dimension 1: Audit Entry Modes
-1. **`review` (Diff Security Review)**: Modeled after `/security-review`. Focused scan scoped to git working diff, branch PR, or commit hash with 100% changed-file accounting. See [review.md](./jobs/review.md).
-2. **`scan` (Repository Security Scan)**: Modeled after Claude Security Standard Scan. Comprehensive whole-repository or scoped directory scan with deterministic Directory Accounting. See [scan.md](./jobs/scan.md).
-3. **`patch` (Remediation Patches)**: Dual-track remediation patch generation for verified findings under the Patch Jail.
+1. **`review` (Diff Security Review)**: Focused scan scoped to git working diff, branch PR, or commit hash with 100% changed-file accounting. See [review.md](./jobs/review.md).
+2. **`scan` (Repository Security Scan)**: Comprehensive whole-repository or scoped directory scan with deterministic Directory Accounting. See [scan.md](./jobs/scan.md).
+3. **`validate` (Candidate Validation)**: Focused 3-Lens evaluation of specific candidate hypotheses without rescanning the entire repository. See [validate.md](./jobs/validate.md).
+4. **`patch` / `verify-fix` (Remediation Patches & Verification)**: Dual-track remediation patch generation and 3-lens patch verification under Patch Jail isolation. See [verify-fix.md](./jobs/verify-fix.md).
 
 ### Dimension 2: Four-Stage Pipeline
 ```

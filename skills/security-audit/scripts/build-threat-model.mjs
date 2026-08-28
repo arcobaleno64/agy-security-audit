@@ -170,7 +170,7 @@ export function generateDiscoveryMatrix(components = [], inScopeFamilies = []) {
         component: comp.name,
         family: fam,
         criticality: comp.criticality || 'medium',
-        status: 'PENDING_DISCOVERY'
+        status: 'PENDING'
       });
     }
   }

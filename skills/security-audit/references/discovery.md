@@ -33,8 +33,8 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
 
 ---
 
-## 4. Discovery Execution Matrix
-During Stage 2, discovery subagents generate candidate hypotheses for every non-empty intersection:
+## 4. Discovery Execution Matrix & Cell Outcomes
+During Stage 2, discovery subagents systematically inspect non-empty intersections across components and vulnerability families:
 
 ```text
                Auth   API   Persistence   FileHandling   Jobs   PluginSystem
@@ -45,9 +45,31 @@ parser          [X]   [X]       [X]            [X]        [X]       [X]
 secrets/crypto  [X]   [ ]       [X]            [ ]        [ ]       [ ]
 ```
 
-Each discovery hypothesis must document:
-- Identified Source (where attacker input enters)
-- Taint Propagation Path
-- Suspect Sink (where hazardous execution occurs)
-- Bound Candidate ID
+### Cell Outcome State Machine
+Every matrix intersection must resolve to an explicit machine-readable status:
+- **`PENDING`**: Cell awaiting assignment or inspection.
+- **`REVIEWED_NO_CANDIDATE`**: Thoroughly inspected; existing mitigations, architectural patterns, or absence of dangerous sinks prevent vulnerability. **This is a successful, legitimate review outcome.**
+- **`CANDIDATE`**: Concrete, unverified hypothesis with valid source, sink, and taint path.
+- **`NOT_APPLICABLE`**: Component has no relevant code implementing features for this family.
+- **`UNRESOLVED`**: Inspected but ambiguous; marked for manual assessment.
+
+### No Finding Quota Rule
+> [!IMPORTANT]
+> **There is no finding quota.**
+> A reviewed cell may legitimately produce zero candidates. Do not formulate a vulnerability hypothesis unless concrete repository evidence supports a plausible violated security property.
+> Coverage completeness is judged by whether declared cells were reviewed (`cell reviewed?`), NOT by how many candidates were generated.
+
+### Cell Schema Example
+```json
+{
+  "component": "Auth",
+  "family": "auth/authz/tenancy",
+  "status": "REVIEWED_NO_CANDIDATE",
+  "reviewedEvidence": [
+    { "path": "src/auth/authorize.ts", "line": 18 }
+  ],
+  "notes": "Authorization middleware enforces tenant isolation on all routes."
+}
+```
+
 

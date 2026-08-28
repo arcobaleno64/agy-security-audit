@@ -1,6 +1,6 @@
 # Security Policy & Trust Model
 
-## 1. Supported Trust Models
+## 1. Supported Trust Models & Scope of Authorization
 
 The `security-audit` plugin operates under two explicit trust models:
 
@@ -14,16 +14,22 @@ The `security-audit` plugin operates under two explicit trust models:
 - **Requirement**: Execution must occur under Antigravity terminal sandboxing (`agy --sandbox`).
 - **Boundaries**: All tool invocations require strict authorization; dynamic command execution outside isolated containers is prohibited.
 
+### 1.3 Authorized Defensive Use Only & Safe Proof Policy
+- **Authorized Scope**: `security-audit` is designed strictly for defensive security assurance of repositories owned, controlled, or explicitly authorized by the user or organization.
+- **Non-Destructive Guarantee**: The plugin never conducts live remote penetration testing, third-party network egress probing, credential stuffing, data exfiltration, persistence, or destructive commands.
+- **Safe Proof Standards**: Vulnerability verification prioritizes static taint traces, local unit-test fixtures, and benign proof-of-concept indicators. Live harmful exploitation is explicitly prohibited and never required to establish a reportable code vulnerability.
+
 ---
 
 ## 2. Hardening & Guardrails (v1.0.0 / Production)
 
-
-### 2.1 Presumption of Non-Pass (Default-Deny)
-- Under Default-Deny, all candidate findings, coverage records, and patches begin in an unverified state.
+### 2.1 Presumption of Non-Pass (Default-Deny on Authority Claims)
+- Under Default-Deny, all authority claims (candidate findings, remediation patches, and coverage claims) begin in an unverified state.
+- Audited components are not presumed vulnerable; a completed review may legitimately produce zero candidates.
 - Candidates cannot self-assert `CONFIRMED` or `REPORTABLE` status.
 - Zero votes, lack of verifier quorum (< 2 independent votes), or missing consensus automatically forces candidates into `DEFERRED` (NEEDS_MANUAL_REVIEW).
 - If coverage is `PARTIAL` or `UNCHECKABLE`, the audit engine is mathematically barred from certifying the repository as clean ("no vulnerabilities found").
+- A clean audit result represents bounded assurance that declared coverage was reconciled completely with zero reportable findings, not a universal certification of flawless code.
 
 ### 2.2 Git Provenance Hardening
 - Target repository `.git/config` settings such as `diff.external`, `core.fsmonitor`, textconv, or hooks can execute arbitrary binaries.

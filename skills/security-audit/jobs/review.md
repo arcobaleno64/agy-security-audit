@@ -6,6 +6,8 @@ Its core objectives are:
 - **Maximum Precision & Minimal Noise**: Report only high-confidence, actionable vulnerabilities introduced or modified by the change.
 - **Zero Full-Repo Bloat**: Restrict inspection strictly to changed files and minimal necessary context.
 - **No Runtime Exploitation**: Focus on static taint propagation, source-to-sink flow, and security-sensitive behavioral diffs without requiring sandbox execution.
+- **Audit Intent**: Operates under `auditIntent: DISCOVERY` on PRs/diffs, or `REGRESSION` on remediation PRs.
+- **No Finding Quota**: Clean changes with 0 findings in complete review coverage achieve clean bounded assurance.
 
 ---
 

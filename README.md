@@ -1,9 +1,16 @@
 # Antigravity (AGY) Security Audit Plugin (`security-audit`) v1.0.0
 
-Evidence-backed, multi-stage security review and vulnerability hunting plugin for **Google Antigravity (AGY)**, modeled after Anthropic's **Claude Security**, OpenAI Codex Security principles, and NIST SP 800-115 standards.
+Evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Google Antigravity (AGY)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**.
 
-## 核心公理：以不通過為前提 (Presumption of Non-Pass / Default-Deny)
-所有受審代碼與弱點候選項目預設為 **`UNVERIFIED / NON_PASS`**。候選項目無法自行宣告 `CONFIRMED` 或 `REPORTABLE`；在無驗證者共識、法定人數不足（< 2 票）或 0 票狀態下一律強制歸類為 `DEFERRED` (`NEEDS_MANUAL_REVIEW`)。任何聲稱代碼安全或偽陽性者負有積極舉證責任（Affirmative Mitigation Proof）。當目錄核算覆蓋率不完整時，系統嚴格禁止宣告代碼庫為乾淨（Clean Claim Fail-Closed）。
+## 核心公理：權威聲明以不通過為前提 (Default-Deny on Authority Claims)
+所有權威聲明（弱點候選項目、補丁修復與覆蓋率完整性）預設為 **`UNVERIFIED`**。受審代碼本身不預設存在漏洞，審查合理產生 0 候選項（Zero Findings，無配額壓力）；候選項目無法自行宣告 `CONFIRMED` 或 `REPORTABLE`；在無驗證者共識、法定人數不足（< 2 票）或 0 票狀態下一律強制歸類為 `DEFERRED` (`NEEDS_MANUAL_REVIEW`)。當目錄核算覆蓋率不完整時，系統嚴格禁止宣告代碼庫為乾淨（Clean Claim Fail-Closed）。宣告乾淨（Clean）代表在界定範圍內無已驗證且未修復之實質弱點與證據缺口，屬於有界保證（Bounded Assurance），而非萬無一失的絕對認證。
+
+---
+
+## 審查意圖與收斂語義 (Audit Intents)
+1. **`DISCOVERY`**: 開放式探索代碼庫組件與弱點家族矩陣，產生附帶客觀證據之候選假說。無發現配額，0 弱點為合法常態。
+2. **`VALIDATION`**: 針對特定候選項進行獨立 3-Lens 面板審核，判定最終處置。
+3. **`REGRESSION`**: 補丁驗證與覆蓋收斂模式。重跑時僅重審受變更影響的攻擊面，防止無止盡的發散探索。
 
 ---
 

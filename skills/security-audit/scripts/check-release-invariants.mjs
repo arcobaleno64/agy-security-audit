@@ -18,9 +18,13 @@ import {
   validateCvssV4,
   redactSecrets,
   stripControlAndBidi,
-  renderSarifFromCanonical
+  renderSarifFromCanonical,
+  finalizeScan,
+  validateDiscoveryCell,
+  validateDiscoveryMatrix
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
+import { buildDirectoryManifest } from './build-inventory.mjs';
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 
 const REQUIRED_FILES = [
@@ -517,6 +521,61 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const resFakeRigor = deriveFinalDisposition(candidate, arbitraryEvVotes, { score: 0.95 }, repoRoot);
         if (resFakeRigor.disposition === 'REPORTABLE') {
           throw new Error('Fake candidate rigorMetrics granted REPORTABLE without validated source evidence');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-16',
+      name: 'Zero-Candidate Discovery Cell & Audit Intent Convergence',
+      check: () => {
+        const validCell = {
+          component: 'Auth',
+          family: 'auth/authz/tenancy',
+          status: 'REVIEWED_NO_CANDIDATE',
+          reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }],
+          notes: 'No unmitigated vulnerabilities found.'
+        };
+        const cellRes = validateDiscoveryCell(validCell, repoRoot);
+        if (!cellRes.valid) {
+          throw new Error(`Valid REVIEWED_NO_CANDIDATE cell failed validation: ${cellRes.error}`);
+        }
+
+        const badCell = {
+          component: 'Auth',
+          family: 'auth/authz/tenancy',
+          status: 'REVIEWED_NO_CANDIDATE',
+          reviewedEvidence: []
+        };
+        if (validateDiscoveryCell(badCell, repoRoot).valid) {
+          throw new Error('REVIEWED_NO_CANDIDATE accepted without inspection evidence');
+        }
+
+        const cleanManifest = buildDirectoryManifest(repoRoot);
+        const cleanRun = finalizeScan({
+          candidates: [],
+          manifest: cleanManifest,
+          repoRoot,
+          auditIntent: 'REGRESSION',
+          discoveryMatrix: [validCell]
+        });
+        if (!cleanRun.summary.canDeclareClean || cleanRun.summary.auditIntent !== 'REGRESSION') {
+          throw new Error('Zero candidate run with complete coverage failed to achieve bounded clean assurance');
+        }
+
+        // Validate matrix fail-closed behavior
+        const invalidMatrix = [validCell, { component: 'Bad', family: 'fam', status: 'INVALID_STATUS' }];
+        const matRes = validateDiscoveryMatrix(invalidMatrix, repoRoot);
+        if (matRes.valid) {
+          throw new Error('validateDiscoveryMatrix accepted invalid cell status');
+        }
+        const malformedRun = finalizeScan({
+          candidates: [],
+          manifest: cleanManifest,
+          repoRoot,
+          discoveryMatrix: invalidMatrix
+        });
+        if (malformedRun.summary.canDeclareClean) {
+          throw new Error('finalizeScan allowed canDeclareClean: true with invalid discovery matrix');
         }
       }
     }

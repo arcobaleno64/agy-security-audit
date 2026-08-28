@@ -1,7 +1,7 @@
 # Job Specification: Standalone Vulnerability Validation (`validate`)
 
 ## Overview
-The `validate` job decouples vulnerability verification from discovery. It accepts an externally supplied candidate vulnerability, finding JSON, or source-to-sink hypothesis, and dispatches the **Fixed 3-Lens Verifier Panel** to determine the definitive verdict without scanning the entire codebase.
+The `validate` job decouples vulnerability verification from discovery (`auditIntent: VALIDATION`). It accepts an externally supplied candidate vulnerability, finding JSON, or source-to-sink hypothesis, and dispatches the **Fixed 3-Lens Verifier Panel** to determine the definitive verdict without scanning the entire codebase.
 
 ## Workflow
 
