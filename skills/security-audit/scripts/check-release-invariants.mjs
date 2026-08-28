@@ -21,7 +21,10 @@ import {
   renderSarifFromCanonical,
   finalizeScan,
   validateDiscoveryCell,
-  validateDiscoveryMatrix
+  validateDiscoveryMatrix,
+  computeLineageFingerprint,
+  validateFindingLineage,
+  computeFindingFingerprint
 } from './finalize-scan.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
 import { buildDirectoryManifest } from './build-inventory.mjs';
@@ -55,6 +58,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/references/swarm-consensus.md',
   'skills/security-audit/references/threat-modeling.md',
   'skills/security-audit/references/verifier-protocol.md',
+  'skills/security-audit/references/finding-lineage.md',
   'agents/threat-modeler.md',
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',
@@ -576,6 +580,53 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         });
         if (malformedRun.summary.canDeclareClean) {
           throw new Error('finalizeScan allowed canDeclareClean: true with invalid discovery matrix');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-17',
+      name: 'Finding Lineage & Fingerprint v2 Line-Shift Invariance',
+      check: () => {
+        // 1. Line-shift invariance of lineageId
+        const idLine10 = computeLineageFingerprint({
+          ruleId: 'CWE-89',
+          uri: 'src/db.ts',
+          component: 'Database',
+          family: 'injection/query/template/eval',
+          symbol: 'executeRawQuery'
+        });
+        const idLine250 = computeLineageFingerprint({
+          ruleId: 'CWE-89',
+          uri: 'src/db.ts',
+          component: 'Database',
+          family: 'injection/query/template/eval',
+          symbol: 'executeRawQuery'
+        });
+        if (idLine10 !== idLine250) {
+          throw new Error('computeLineageFingerprint is not deterministic across invocations');
+        }
+
+        // 2. Exact location fingerprint differs across lines
+        const locFp1 = computeFindingFingerprint('CWE-89', 'src/db.ts', 10);
+        const locFp2 = computeFindingFingerprint('CWE-89', 'src/db.ts', 250);
+        if (locFp1 === locFp2) {
+          throw new Error('computeFindingFingerprint failed to differentiate different line numbers');
+        }
+
+        // 3. validateFindingLineage rejects invalid novelty
+        const badNov = validateFindingLineage({ novelty: 'SUPER_NOVEL' });
+        if (badNov.valid) {
+          throw new Error('validateFindingLineage accepted invalid novelty state');
+        }
+
+        // 4. validateFindingLineage requires whyNow on FIX_INTRODUCED and PREVIOUSLY_MISSED
+        const fixNoWhy = validateFindingLineage({ novelty: 'FIX_INTRODUCED', whyNow: '' });
+        if (fixNoWhy.valid) {
+          throw new Error('validateFindingLineage accepted FIX_INTRODUCED with empty whyNow');
+        }
+        const fixWithWhy = validateFindingLineage({ novelty: 'FIX_INTRODUCED', whyNow: 'Fix introduced new parameter' });
+        if (!fixWithWhy.valid) {
+          throw new Error('validateFindingLineage rejected valid FIX_INTRODUCED with whyNow');
         }
       }
     }

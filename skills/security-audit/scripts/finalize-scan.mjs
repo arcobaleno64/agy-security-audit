@@ -716,9 +716,10 @@ export function validateCvssV4(cvssObj) {
 /**
  * Unifies multi-run discovery candidate sets using deterministic fingerprints.
  */
-export function unionCandidates(runs = [], repoRoot = process.cwd()) {
+export function unionCandidates(runs = [], repoRoot = process.cwd(), options = {}) {
   if (!Array.isArray(runs) || runs.length === 0) return [];
-  const fingerprintMap = new Map();
+  const dedupeBy = options.dedupeBy || 'lineage'; // 'lineage' or 'location'
+  const candidateMap = new Map();
   const totalRuns = runs.length;
 
   for (let runIdx = 0; runIdx < totalRuns; runIdx++) {
@@ -732,30 +733,53 @@ export function unionCandidates(runs = [], repoRoot = process.cwd()) {
       const rawUri = loc.uri || loc.path || 'unknown';
       const normUri = normalizeUri(repoRoot, rawUri);
       const startLine = Number(loc.startLine) || 1;
-      const fp = computeFindingFingerprint(ruleId, normUri, startLine);
+      const locFp = computeFindingFingerprint(ruleId, normUri, startLine);
+      const sinkSymbol = c.symbol || c.sinkSymbol || c.sink?.symbol || '';
+      const sinkKind = c.sinkKind || c.sink?.kind || '';
+      const authoritativeLineageId = computeLineageFingerprint({
+        ruleId,
+        uri: normUri,
+        component: c.component || '',
+        family: c.family || '',
+        sinkKind,
+        symbol: sinkSymbol
+      });
 
-      if (!fingerprintMap.has(fp)) {
-        fingerprintMap.set(fp, {
+      const dedupeKey = (dedupeBy === 'lineage' && authoritativeLineageId)
+        ? `${authoritativeLineageId}${sinkSymbol ? '' : `:${startLine}`}`
+        : locFp;
+
+      if (!candidateMap.has(dedupeKey)) {
+        candidateMap.set(dedupeKey, {
           ...c,
-          id: c.id || `SEC-${fp.substring(0, 8)}`,
+          id: c.id || `SEC-${locFp.substring(0, 8)}`,
           location: {
             ...loc,
             uri: normUri,
             startLine
           },
-          fingerprint: fp,
+          fingerprint: locFp,
+          locationFingerprint: locFp,
+          lineageId: authoritativeLineageId,
+          lineage: c.lineage || {
+            lineageId: authoritativeLineageId,
+            novelty: 'NEW_SURFACE',
+            whyNow: null,
+            predecessorId: null,
+            stabilityImpact: false
+          },
           recurrenceCount: 1,
           runsObserved: [runIdx + 1],
           proofGaps: Array.isArray(c.proofGaps) ? [...c.proofGaps] : []
         });
-        seenInRun.add(fp);
+        seenInRun.add(dedupeKey);
       } else {
-        const existing = fingerprintMap.get(fp);
+        const existing = candidateMap.get(dedupeKey);
         // Only increment recurrence if not duplicate within this single run
-        if (!seenInRun.has(fp)) {
+        if (!seenInRun.has(dedupeKey)) {
           existing.recurrenceCount += 1;
           existing.runsObserved.push(runIdx + 1);
-          seenInRun.add(fp);
+          seenInRun.add(dedupeKey);
         }
 
         // Structurally deduplicate proof gaps across runs
@@ -779,7 +803,7 @@ export function unionCandidates(runs = [], repoRoot = process.cwd()) {
     }
   }
 
-  return Array.from(fingerprintMap.values());
+  return Array.from(candidateMap.values());
 }
 
 /**
@@ -1411,6 +1435,88 @@ export function computeFindingFingerprint(ruleId, uri, startLine) {
   return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 32);
 }
 
+export const VALID_NOVELTY_STATES = [
+  'NEW_SURFACE',
+  'PREVIOUSLY_MISSED',
+  'FIX_INTRODUCED',
+  'REFINEMENT',
+  'DUPLICATE',
+  'HARDENING'
+];
+
+/**
+ * Computes semantic lineage fingerprint v2.
+ * Independent of exact line shifts.
+ * Built from: ruleId + normalized relative uri + component + family + symbol/operation.
+ */
+export function computeLineageFingerprint({
+  ruleId = 'SEC-VULN',
+  uri = 'unknown',
+  component = '',
+  family = '',
+  sinkKind = '',
+  symbol = ''
+}) {
+  const r = String(ruleId || 'SEC').trim().toUpperCase();
+  const u = String(uri || 'unknown').replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  const c = String(component || '').trim().toLowerCase();
+  const f = String(family || '').trim().toLowerCase();
+  const s = String(symbol || sinkKind || '').trim().toLowerCase();
+  const payload = `L2:${r.length}:${r}:${u.length}:${u}:${c}:${f}:${s}`;
+  return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 32);
+}
+
+/**
+ * Validates the lineage and novelty metadata of a finding.
+ * Enforces non-empty whyNow rationale for FIX_INTRODUCED and PREVIOUSLY_MISSED.
+ */
+export function validateFindingLineage(lineage) {
+  if (!lineage || typeof lineage !== 'object') {
+    return {
+      valid: true,
+      lineage: {
+        lineageId: null,
+        novelty: 'NEW_SURFACE',
+        whyNow: null,
+        predecessorId: null,
+        stabilityImpact: false
+      }
+    };
+  }
+
+  const novelty = String(lineage.novelty || 'NEW_SURFACE').toUpperCase();
+  if (!VALID_NOVELTY_STATES.includes(novelty)) {
+    return {
+      valid: false,
+      error: `Invalid novelty '${lineage.novelty}'. Must be one of: ${VALID_NOVELTY_STATES.join(', ')}`
+    };
+  }
+
+  const needsWhyNow = (novelty === 'FIX_INTRODUCED' || novelty === 'PREVIOUSLY_MISSED');
+  if (needsWhyNow) {
+    if (!lineage.whyNow || typeof lineage.whyNow !== 'string' || lineage.whyNow.trim().length === 0) {
+      return {
+        valid: false,
+        error: `Novelty '${novelty}' strictly requires a non-empty 'whyNow' rationale explaining why this finding appeared now.`
+      };
+    }
+  }
+
+  const stabilityImpact = Boolean(lineage.stabilityImpact || novelty === 'PREVIOUSLY_MISSED');
+
+  return {
+    valid: true,
+    lineage: {
+      lineageId: lineage.lineageId || null,
+      novelty,
+      whyNow: lineage.whyNow || null,
+      predecessorId: lineage.predecessorId || null,
+      stabilityImpact
+    }
+  };
+}
+
+
 
 /**
  * Central deterministic finalizer: transforms candidates into canonical findings.
@@ -1564,16 +1670,44 @@ export function finalizeScan({
     }
 
 
-    const stableFingerprint = computeFindingFingerprint(ruleId, normalizedRelativeUri, startLine);
+    const locationFingerprint = computeFindingFingerprint(ruleId, normalizedRelativeUri, startLine);
+    const sinkSymbol = raw.symbol || raw.sinkSymbol || raw.sink?.symbol || '';
+    const sinkKind = raw.sinkKind || raw.sink?.kind || '';
+    const comp = raw.component || '';
+    const fam = raw.family || '';
+    const authoritativeLineageId = computeLineageFingerprint({
+      ruleId,
+      uri: normalizedRelativeUri,
+      component: comp,
+      family: fam,
+      sinkKind,
+      symbol: sinkSymbol
+    });
+
+    const lineageRes = validateFindingLineage(raw.lineage);
+    let finalDisposition = dispositionResult.disposition;
+    let finalVerdict = dispositionResult.mappedVerdict;
+    let finalReason = dispositionResult.reason;
+
+    if (raw.lineage && !lineageRes.valid) {
+      finalDisposition = 'DEFERRED';
+      finalVerdict = 'NEEDS_MANUAL_REVIEW';
+      finalReason = `Lineage validation failure: ${lineageRes.error}`;
+    }
+
+    const resolvedLineage = {
+      ...lineageRes.lineage,
+      lineageId: authoritativeLineageId
+    };
 
     canonicalFindings.push({
       id: candidateId,
       ruleId,
       title: titleRedacted,
       description: descRedacted,
-      disposition: dispositionResult.disposition,
-      verdict: dispositionResult.mappedVerdict,
-      dispositionReason: dispositionResult.reason,
+      disposition: finalDisposition,
+      verdict: finalVerdict,
+      dispositionReason: finalReason,
       severity,
       confidenceScore: confidence.score,
       confidenceLevel: confidence.level,
@@ -1591,7 +1725,10 @@ export function finalizeScan({
         unanimous: false,
         minorityEscalated: false
       },
-      fingerprint: stableFingerprint,
+      fingerprint: locationFingerprint,
+      locationFingerprint,
+      lineageId: authoritativeLineageId,
+      lineage: resolvedLineage,
       tags: raw.tags || [],
       proofGaps: Array.isArray(raw.proofGaps) ? raw.proofGaps : (dispositionResult.proofGaps || []),
       attackPath: raw.attackPath || null
@@ -1754,6 +1891,27 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       }
     }
 
+    const locFingerprint = computeFindingFingerprint(ruleId, uri, startLine);
+    const sinkSymbol = raw.symbol || raw.sinkSymbol || raw.sink?.symbol || '';
+    const sinkKind = raw.sinkKind || raw.sink?.kind || '';
+    const comp = raw.component || '';
+    const fam = raw.family || '';
+    const linId = computeLineageFingerprint({
+      ruleId,
+      uri,
+      component: comp,
+      family: fam,
+      sinkKind,
+      symbol: sinkSymbol
+    });
+    const linRes = validateFindingLineage(raw.lineage);
+
+    if (raw.lineage && !linRes.valid) {
+      disposition = 'DEFERRED';
+      verdict = 'NEEDS_MANUAL_REVIEW';
+      dispositionReason = `Presumption of Non-Pass: Invalid finding lineage: ${linRes.error}`;
+    }
+
     validated.push({
       ...raw,
       id,
@@ -1776,7 +1934,13 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd()) {
       disposition,
       verdict,
       dispositionReason,
-      fingerprint: raw.fingerprint || '',
+      fingerprint: locFingerprint,
+      locationFingerprint: locFingerprint,
+      lineageId: linId,
+      lineage: {
+        ...linRes.lineage,
+        lineageId: linId
+      },
       tags: Array.isArray(raw.tags) ? raw.tags : []
     });
   }
@@ -1844,7 +2008,9 @@ export function renderSarifFromCanonical({
       ],
       partialFingerprints: {
         primaryLocationLineHash: f.location.lineHash,
-        stableFingerprint: f.fingerprint
+        stableFingerprint: f.fingerprint,
+        locationFingerprint: f.locationFingerprint || f.fingerprint,
+        lineageFingerprint: f.lineageId || f.fingerprint
       },
       properties: {
         disposition: f.disposition,
@@ -1854,6 +2020,9 @@ export function renderSarifFromCanonical({
         cvssV4: f.cvssV4,
         rigor: f.rigor,
         fingerprint: f.fingerprint,
+        locationFingerprint: f.locationFingerprint || f.fingerprint,
+        lineageId: f.lineageId || f.fingerprint,
+        lineage: f.lineage || null,
         consensus: f.consensus,
         dispositionReason: f.dispositionReason
       }
@@ -1984,6 +2153,13 @@ export function renderMarkdownFromCanonical({
       md += `### [${sanitizeInlineText(f.severity)}] ${sanitizeInlineText(f.title)}\n\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
+      if (f.lineageId) {
+        const nov = f.lineage?.novelty || 'NEW_SURFACE';
+        md += `- **Lineage ID**: \`${sanitizeInlineText(f.lineageId)}\` (Novelty: \`${sanitizeInlineText(nov)}\`)\n`;
+      }
+      if (f.lineage?.whyNow) {
+        md += `- **Lineage Rationale (Why Now)**: ${sanitizeInlineText(f.lineage.whyNow)}\n`;
+      }
       md += `- **Confidence**: \`${f.confidenceScore}\` (${f.confidenceLevel})\n`;
       if (f.cvssV4?.vector) {
         md += `- **CVSS v4.0**: \`${sanitizeInlineText(f.cvssV4.vector)}\`${f.cvssV4.score !== null ? ` (Score: ${f.cvssV4.score})` : ' (Score: Unrated / Vector-Only)'}\n`;
@@ -2006,6 +2182,13 @@ export function renderMarkdownFromCanonical({
       md += `### [REVIEW REQUIRED] ${sanitizeInlineText(f.title)}\n\n`;
       md += `- **Rule / CWE**: \`${sanitizeInlineText(f.ruleId)}\`\n`;
       md += `- **Location**: \`${sanitizeInlineText(f.location.uri)}:${f.location.startLine}\`\n`;
+      if (f.lineageId) {
+        const nov = f.lineage?.novelty || 'NEW_SURFACE';
+        md += `- **Lineage ID**: \`${sanitizeInlineText(f.lineageId)}\` (Novelty: \`${sanitizeInlineText(nov)}\`)\n`;
+      }
+      if (f.lineage?.whyNow) {
+        md += `- **Lineage Rationale (Why Now)**: ${sanitizeInlineText(f.lineage.whyNow)}\n`;
+      }
       md += `- **Calculated Rigor**: \`${f.rigor.score}\` (${f.rigor.assuranceLevel})\n`;
       md += `- **Deferral Reason**: ${sanitizeInlineText(f.dispositionReason || 'Unproven taint flow or missing verifier consensus')}\n\n`;
       if (f.description) {

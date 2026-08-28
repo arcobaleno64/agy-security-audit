@@ -46,7 +46,10 @@ import {
   validateCanonicalFindings,
   validateBallot,
   validateDiscoveryCell,
-  validateDiscoveryMatrix
+  validateDiscoveryMatrix,
+  computeLineageFingerprint,
+  VALID_NOVELTY_STATES,
+  validateFindingLineage
 } from './finalize-scan.mjs';
 
 
@@ -2547,7 +2550,161 @@ export function runTests() {
 
   console.log('✔ 67. R2-P0-01 / 02 / 03 Invariant: Zero-candidate discovery cell, Default-Deny claim model, and auditIntent convergence.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (67/67).');
+  // 68. R2-P0-04 / 05 Invariant: Finding Lineage, Novelty state machine, and Fingerprint v2 line-shift invariance.
+  // 68.1 Lineage fingerprint is line-shift invariant for same semantic vulnerability
+  const lineageFpLine15 = computeLineageFingerprint({
+    ruleId: 'CWE-89',
+    uri: 'src/api.ts',
+    component: 'Auth',
+    family: 'injection/query/template/eval',
+    symbol: 'findUserById'
+  });
+  const lineageFpLine120 = computeLineageFingerprint({
+    ruleId: 'CWE-89',
+    uri: 'src/api.ts',
+    component: 'Auth',
+    family: 'injection/query/template/eval',
+    symbol: 'findUserById'
+  });
+  if (lineageFpLine15 !== lineageFpLine120) {
+    throw new Error('R2-P0-05 VIOLATION: Lineage fingerprint changed when symbol and rule were identical');
+  }
+
+  // 68.2 Exact location fingerprint changes when line number shifts
+  const locFp1 = computeFindingFingerprint('CWE-89', 'src/api.ts', 15);
+  const locFp2 = computeFindingFingerprint('CWE-89', 'src/api.ts', 120);
+  if (locFp1 === locFp2) {
+    throw new Error('R2-P0-05 VIOLATION: Exact location fingerprint failed to distinguish different lines');
+  }
+
+  // 68.3 validateFindingLineage validates novelty states and rejects invalid ones
+  const badNovelty = validateFindingLineage({ novelty: 'UNKNOWN_NOVELTY' });
+  if (badNovelty.valid) {
+    throw new Error('R2-P0-04 VIOLATION: validateFindingLineage accepted unrecognized novelty state');
+  }
+
+  // 68.4 validateFindingLineage enforces whyNow rationale on FIX_INTRODUCED and PREVIOUSLY_MISSED
+  const missingWhyNow = validateFindingLineage({ novelty: 'FIX_INTRODUCED', whyNow: '' });
+  if (missingWhyNow.valid) {
+    throw new Error('R2-P0-04 VIOLATION: FIX_INTRODUCED accepted with missing whyNow rationale');
+  }
+  const validWhyNow = validateFindingLineage({
+    novelty: 'FIX_INTRODUCED',
+    whyNow: 'Patch introduced new dynamic parameter into SQL query'
+  });
+  if (!validWhyNow.valid || validWhyNow.lineage.novelty !== 'FIX_INTRODUCED') {
+    throw new Error('R2-P0-04 VIOLATION: valid FIX_INTRODUCED with whyNow was rejected');
+  }
+
+  // 68.5 unionCandidates deduplicates findings across line shifts using semantic lineage
+  const runShift1 = [
+    {
+      ruleId: 'CWE-89',
+      location: { uri: 'src/api.ts', startLine: 15 },
+      symbol: 'findUserById',
+      title: 'SQLi Candidate'
+    }
+  ];
+  const runShift2 = [
+    {
+      ruleId: 'CWE-89',
+      location: { uri: 'src/api.ts', startLine: 25 }, // Shifted 10 lines down
+      symbol: 'findUserById',
+      title: 'SQLi Candidate shifted'
+    }
+  ];
+  const unionedShift = unionCandidates([runShift1, runShift2], process.cwd(), { dedupeBy: 'lineage' });
+  if (unionedShift.length !== 1 || unionedShift[0].recurrenceCount !== 2) {
+    throw new Error(`R2-P0-05 VIOLATION: unionCandidates failed to deduplicate shifted finding by lineage: length=${unionedShift.length}`);
+  }
+
+  // 68.6 finalizeScan populates dual fingerprints and validates lineage metadata
+  const lineageCandidate = {
+    id: 'SEC-LIN-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Query',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    lineage: {
+      novelty: 'NEW_SURFACE',
+      whyNow: null
+    }
+  };
+  const lineageScanRes = finalizeScan({
+    candidates: [lineageCandidate],
+    repoRoot: process.cwd()
+  });
+  const canonicalLin = lineageScanRes.canonicalFindings[0];
+  if (!canonicalLin.locationFingerprint || !canonicalLin.lineageId || !canonicalLin.lineage) {
+    throw new Error('R2-P0-04 VIOLATION: canonical finding missing locationFingerprint, lineageId, or lineage');
+  }
+  if (canonicalLin.lineage.novelty !== 'NEW_SURFACE') {
+    throw new Error('R2-P0-04 VIOLATION: canonical finding lineage novelty not preserved');
+  }
+
+  // 68.7 SARIF and Markdown render dual fingerprints and lineage
+  const linSarif = renderSarifFromCanonical({
+    canonicalFindings: [canonicalLin],
+    repoRoot: process.cwd()
+  });
+  if (!linSarif.runs[0].results[0].partialFingerprints.locationFingerprint ||
+      !linSarif.runs[0].results[0].partialFingerprints.lineageFingerprint) {
+    throw new Error('R2-P0-05 VIOLATION: SARIF result missing dual fingerprints');
+  }
+  const linMd = renderMarkdownFromCanonical({
+    canonicalFindings: [canonicalLin],
+    repoRoot: process.cwd()
+  });
+  if (!linMd.includes('Lineage ID') || !linMd.includes('NEW_SURFACE')) {
+    throw new Error('R2-P0-04 VIOLATION: Markdown missing Lineage ID or novelty');
+  }
+
+  // 68.8 validateCanonicalFindings downgrades invalid lineage fail-closed to DEFERRED (Finding 01 fix)
+  const canonicalWithBadLineage = [{
+    id: 'SEC-BAD-LIN',
+    ruleId: 'CWE-89',
+    severity: 'HIGH',
+    title: 'SQLi with fake novelty',
+    disposition: 'REPORTABLE',
+    verdict: 'CONFIRMED',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    lineage: { novelty: 'BOGUS_NOVELTY' },
+    consensus: { supports: 3, totalVotes: 3, refutes: 0, unanimous: true },
+    rigor: { score: 0.9 }
+  }];
+  const validatedBadLin = validateCanonicalFindings(canonicalWithBadLineage, process.cwd());
+  if (validatedBadLin[0].disposition !== 'DEFERRED' || validatedBadLin[0].verdict !== 'NEEDS_MANUAL_REVIEW') {
+    throw new Error('R2-P0-04 VIOLATION: validateCanonicalFindings failed to downgrade finding with invalid lineage');
+  }
+
+  // 68.9 Forged lineageId on candidate ingress is discarded and calculated authoritatively (Finding 02 fix)
+  const forgedCandidate = {
+    id: 'SEC-FORGE-01',
+    ruleId: 'CWE-89',
+    title: 'Candidate with forged lineageId',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    lineageId: 'FORGED_00000000000000000000000000'
+  };
+  const forgedScanRes = finalizeScan({
+    candidates: [forgedCandidate],
+    repoRoot: process.cwd()
+  });
+  if (forgedScanRes.canonicalFindings[0].lineageId === 'FORGED_00000000000000000000000000') {
+    throw new Error('R2-P0-05 VIOLATION: finalizeScan accepted untrusted client self-asserted lineageId');
+  }
+
+  // 68.10 Intra-run candidate separation: two different lines without symbol in same run are NOT shadowed (Finding 04 fix)
+  const intraRunCandidates = [
+    { ruleId: 'CWE-89', location: { uri: 'src/api.ts', startLine: 15 }, title: 'SQLi Sink 1' },
+    { ruleId: 'CWE-89', location: { uri: 'src/api.ts', startLine: 85 }, title: 'SQLi Sink 2' }
+  ];
+  const unionedIntra = unionCandidates([intraRunCandidates], process.cwd(), { dedupeBy: 'lineage' });
+  if (unionedIntra.length !== 2) {
+    throw new Error(`R2-P0-05 VIOLATION: unionCandidates shadowed distinct sinks without symbol: got ${unionedIntra.length}, expected 2`);
+  }
+
+  console.log('✔ 68. R2-P0-04 / 05 Invariant: Finding Lineage, Novelty state machine, and Fingerprint v2 line-shift invariance.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (68/68).');
 
   } finally {
     gitFixture.cleanup();
