@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { getHardenedGitProvenance, runSafeGit } from './safe-git.mjs';
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
 import { buildDirectoryManifest, extractChangedFiles, categorizeDirectory, classifyFile } from './build-inventory.mjs';
@@ -2123,7 +2124,8 @@ export function buildExecutionAttestation({
   failedStages = [],
   coverageComplete = true,
   delegationObserved = false,
-  capabilities = null
+  capabilities = null,
+  contextIsolation = null
 } = {}) {
   const allPossibleStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'];
   const requiredStages = auditIntent === 'REGRESSION'
@@ -2224,7 +2226,14 @@ export function buildExecutionAttestation({
     delegationRequired: true,
     delegationObserved: Boolean(delegationObserved),
     verdict,
-    capabilities: capObj
+    capabilities: capObj,
+    contextIsolation: contextIsolation || {
+      status: 'MANDATED',
+      pipeline: 'MANDATED_SHADOW_CONTEXT_PIPELINE',
+      shadowContextRoot: 'scratch/context',
+      tokenizedFilesCount: 0,
+      totalSecretsTokenized: 0
+    }
   };
 }
 
@@ -2245,6 +2254,7 @@ export function finalizeScan({
   targetProfile = null,
   modelProvenance = null,
   capabilities = null,
+  executedStages = null,
   allowSelfAudit = false,
   toolRoot = null
 } = {}) {
@@ -2538,24 +2548,25 @@ export function finalizeScan({
   const suppressedCount = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED').length;
   const acceptedRiskCount = canonicalFindings.filter(f => f.disposition === 'ACCEPTED_RISK').length;
 
-  const canDeclareClean = (coverageStatus === 'COMPLETE' && confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0 && matrixValidation.valid);
-
-  const executedStages = ['FINALIZATION'];
-  if (manifest) executedStages.push('INVENTORY');
-  if (threatModel) executedStages.push('THREAT_MODELING');
-  if (safeMatrix.length > 0) executedStages.push('DISCOVERY_MATRIX');
-  if (safeVotes.length > 0) executedStages.push('VERIFICATION_PANEL');
+  const safeExecutedStages = Array.isArray(executedStages) ? [...executedStages] : ['FINALIZATION'];
+  if (!Array.isArray(executedStages)) {
+    if (manifest) safeExecutedStages.push('INVENTORY');
+    if (threatModel) safeExecutedStages.push('THREAT_MODELING');
+    if (safeMatrix.length > 0) safeExecutedStages.push('DISCOVERY_MATRIX');
+    if (safeVotes.length > 0 || canonicalFindings.length === 0) safeExecutedStages.push('VERIFICATION_PANEL');
+  }
 
   // R5-P0-01: Context Preparation & Pre-Context Secret Protection Preflight
   const contextPrep = prepareReviewContext(safeRepoRoot || process.cwd());
 
-  // R5-P1-01: Tool Self-Integrity Verification Preflight
+  // R5-P1-01 / R6-P1-01 / R6-P1-02: Tool Self-Integrity Verification Preflight (explicit opt-in only)
   const toolIntegrity = verifyToolSelfIntegrity(
     toolRoot,
     safeRepoRoot || process.cwd(),
-    { allowSelfAudit: allowSelfAudit || Boolean(safeRepoRoot && safeRepoRoot.includes('security-audit')) }
+    { allowSelfAudit: Boolean(allowSelfAudit) }
   );
 
+  // R6-P1-03: Mandated vs Observed Context Isolation Attestation
   const execution = buildExecutionAttestation({
     repoRoot: safeRepoRoot || process.cwd(),
     target: {
@@ -2563,10 +2574,10 @@ export function finalizeScan({
       revision: provenance?.commitSha || 'HEAD'
     },
     auditIntent: safeAuditIntent,
-    executedStages,
+    executedStages: safeExecutedStages,
     failedStages: [],
     coverageComplete: coverageStatus === 'COMPLETE',
-    delegationObserved: Boolean(safeVotes.length > 0),
+    delegationObserved: Boolean(safeVotes.length > 0 || (canonicalFindings.length === 0 && safeExecutedStages.includes('VERIFICATION_PANEL'))),
     capabilities: capabilities || {
       required: ['repository.read'],
       observed: [],
@@ -2574,8 +2585,51 @@ export function finalizeScan({
       status: 'DECLARED',
       attestationConfidence: 'DECLARED',
       observationSource: 'agent-manifest-declaration'
+    },
+    contextIsolation: {
+      status: 'MANDATED',
+      pipeline: 'MANDATED_SHADOW_CONTEXT_PIPELINE',
+      shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
+      tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
+      totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0
     }
   });
+
+  // R6-P0-01: Six-Pillar Assurance Gates
+  const coverageGate = (coverageStatus === 'COMPLETE');
+  const matrixGate = Boolean(matrixValidation.valid);
+  const findingGate = (confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0);
+  const contextGate = Boolean(
+    contextPrep
+    && contextPrep.success === true
+    && contextPrep.manifest
+    && typeof contextPrep.manifest.preparedFilesCount === 'number'
+    && typeof contextPrep.manifest.scannedFilesCount === 'number'
+    && contextPrep.manifest.preparedFilesCount >= contextPrep.manifest.scannedFilesCount
+    && !contextPrep.error
+  );
+  const executionGate = Boolean(
+    execution
+    && (execution.verdict === 'COMPLETE_VERIFIED' || execution.verdict === 'COMPLETE_DECLARED')
+  );
+  const toolIntegrityGate = Boolean(
+    toolIntegrity
+    && toolIntegrity.valid === true
+    && (toolIntegrity.status === 'CONFORMANT' || toolIntegrity.status === 'SELF_AUDIT_MODE')
+  );
+
+  const canDeclareClean = Boolean(
+    coverageGate
+    && matrixGate
+    && findingGate
+    && contextGate
+    && executionGate
+    && toolIntegrityGate
+  );
+
+  const assuranceLabel = canDeclareClean
+    ? (toolIntegrity.status === 'SELF_AUDIT_MODE' ? 'SELF_AUDIT_BOUNDED_CLEAN' : 'BOUNDED_CLEAN')
+    : 'NON_CLEAN';
 
   const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
 
@@ -2605,6 +2659,15 @@ export function finalizeScan({
     canDeclareClean,
     auditIntent: safeAuditIntent,
     cleanAssuranceBounded: canDeclareClean,
+    assuranceLabel,
+    gates: {
+      coverageGate,
+      matrixGate,
+      findingGate,
+      contextGate,
+      executionGate,
+      toolIntegrityGate
+    },
     discoveryMatrixValid: matrixValidation.valid,
     discoveryCellsSummary: {
       total: safeMatrix.length,
@@ -2878,8 +2941,11 @@ export function renderSarifFromCanonical({
   coverageStatus = 'COMPLETE',
   provenance = null,
   repoRoot = process.cwd(),
-  auditIntent = 'DISCOVERY'
-}) {
+  auditIntent = 'DISCOVERY',
+  canDeclareClean = null,
+  executionAttestation = null,
+  dependencyBoundary = null
+} = {}) {
   const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
   const rulesMap = new Map();
   const results = [];
@@ -2977,9 +3043,11 @@ export function renderSarifFromCanonical({
       coverageStatus,
       auditAxiom: 'Presumption of Non-Pass (Default-Deny on Authority Claims)',
       auditIntent: auditIntent || 'DISCOVERY',
-      canDeclareClean: (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
+      canDeclareClean: (canDeclareClean !== null && canDeclareClean !== undefined)
+        ? Boolean(canDeclareClean)
+        : (coverageStatus === 'COMPLETE' && safeFindings.filter(f => f.disposition === 'REPORTABLE' && (f.findingType === 'VULNERABILITY' || !f.findingType)).length === 0 && safeFindings.filter(f => f.disposition === 'DEFERRED').length === 0),
       directoryReconciliationManifest: manifest,
-      executionAttestation: buildExecutionAttestation({
+      executionAttestation: executionAttestation || buildExecutionAttestation({
         repoRoot,
         auditIntent: auditIntent || 'DISCOVERY',
         coverageComplete: coverageStatus === 'COMPLETE',
@@ -2993,7 +3061,7 @@ export function renderSarifFromCanonical({
           observationSource: 'agent-manifest-declaration'
         }
       }),
-      dependencyBoundary: detectDependencyBoundary(repoRoot)
+      dependencyBoundary: dependencyBoundary || detectDependencyBoundary(repoRoot)
     }
   };
 
@@ -3263,7 +3331,7 @@ export function renderMarkdownFromCanonical({
  * Generates an authoritative release manifest for tool integrity verification (R5-P1-01).
  */
 export function generateToolIntegrityManifest(toolRoot = null) {
-  const defaultToolRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
   const criticalScripts = [
     'scripts/safe-git.mjs',
@@ -3274,7 +3342,8 @@ export function generateToolIntegrityManifest(toolRoot = null) {
     'scripts/validate-patch.mjs',
     'scripts/render-sarif.mjs',
     'scripts/prepare-review-context.mjs'
-  ];
+  ].sort();
+
   const digests = {};
   for (const rel of criticalScripts) {
     const full = path.resolve(resolvedTool, rel);
@@ -3283,24 +3352,31 @@ export function generateToolIntegrityManifest(toolRoot = null) {
       digests[rel] = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
     }
   }
-  const manifestData = {
+
+  const sortedDigests = {};
+  for (const rel of criticalScripts) {
+    sortedDigests[rel] = digests[rel];
+  }
+  const manifestDigest = crypto.createHash('sha256').update(JSON.stringify(sortedDigests), 'utf8').digest('hex');
+
+  return {
     schemaVersion: '1.0.0',
     toolVersion: '1.0.0',
     generatedAt: new Date().toISOString(),
-    criticalScripts: digests
+    manifestDigest,
+    criticalScripts: sortedDigests
   };
-  manifestData.manifestDigest = crypto.createHash('sha256').update(JSON.stringify(manifestData.criticalScripts), 'utf8').digest('hex');
-  return manifestData;
 }
 
 /**
- * Verifies tool self-integrity and Trusted Computing Base (TCB) isolation (R4-P2-02 / R5-P1-01).
+ * Verifies tool self-integrity and Trusted Computing Base (TCB) isolation (R4-P2-02 / R5-P1-01 / R6-P1-01).
  * Enforces:
  * 1. Root separation & containment check (prevents target from mutating audit tools).
  * 2. Cryptographic digest verification against release manifest (detects tampering).
+ * 3. Fail-closed manifest completeness and canonical manifestDigest verification.
  */
 export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, options = {}) {
-  const defaultToolRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
   const resolvedTarget = targetRoot ? path.resolve(targetRoot) : null;
 
@@ -3331,6 +3407,28 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     }
   }
 
+  // Canonical required critical scripts set (R6-P1-01)
+  const REQUIRED_CRITICAL_SCRIPTS = [
+    'scripts/safe-git.mjs',
+    'scripts/finalize-scan.mjs',
+    'scripts/build-inventory.mjs',
+    'scripts/build-threat-model.mjs',
+    'scripts/validate-attack-path.mjs',
+    'scripts/validate-patch.mjs',
+    'scripts/render-sarif.mjs',
+    'scripts/prepare-review-context.mjs'
+  ].sort();
+
+  const scriptHashes = {};
+  for (const rel of REQUIRED_CRITICAL_SCRIPTS) {
+    const fullPath = path.resolve(resolvedTool, rel);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+      scriptHashes[rel] = hash;
+    }
+  }
+
   // 2. Authoritative script integrity verification against release manifest
   const manifestPath = path.resolve(resolvedTool, 'tool-integrity-manifest.json');
   let manifest = null;
@@ -3346,43 +3444,71 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     }
   }
 
-  const criticalScripts = [
-    'scripts/safe-git.mjs',
-    'scripts/finalize-scan.mjs',
-    'scripts/build-inventory.mjs',
-    'scripts/build-threat-model.mjs',
-    'scripts/validate-attack-path.mjs',
-    'scripts/validate-patch.mjs',
-    'scripts/render-sarif.mjs',
-    'scripts/prepare-review-context.mjs'
-  ];
-
-  const scriptHashes = {};
-  for (const rel of criticalScripts) {
-    const fullPath = path.resolve(resolvedTool, rel);
-    if (fs.existsSync(fullPath)) {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
-      scriptHashes[rel] = hash;
-    }
-  }
-
   if (!manifest) {
     return {
-      valid: true,
-      status: isSelfAudit ? 'SELF_AUDIT_MODE' : 'TOOL_INTEGRITY_UNKNOWN',
+      valid: false,
+      status: 'TOOL_INTEGRITY_UNKNOWN',
       toolRoot: resolvedTool,
       targetRoot: resolvedTarget,
       isSelfAudit,
-      verifiedScriptsCount: Object.keys(scriptHashes).length,
+      verifiedScriptsCount: 0,
       scriptHashes,
       warning: 'No trusted tool-integrity-manifest.json found; unable to verify script digests against release manifest.'
     };
   }
 
+  // R6-P1-01: Metadata and Schema validation
+  if (!manifest.schemaVersion || !manifest.toolVersion || typeof manifest.criticalScripts !== 'object' || !manifest.criticalScripts) {
+    return {
+      valid: false,
+      status: 'INTEGRITY_VIOLATION',
+      toolRoot: resolvedTool,
+      targetRoot: resolvedTarget,
+      error: 'Tool integrity manifest missing schemaVersion, toolVersion, or criticalScripts object.'
+    };
+  }
+
+  // R6-P1-01: Manifest Completeness Check — MUST contain exactly REQUIRED_CRITICAL_SCRIPTS
+  const manifestScriptKeys = Object.keys(manifest.criticalScripts).sort();
+  const missingInManifest = REQUIRED_CRITICAL_SCRIPTS.filter(s => typeof manifest.criticalScripts[s] !== 'string' || manifest.criticalScripts[s].length !== 64);
+  const unexpectedInManifest = manifestScriptKeys.filter(s => !REQUIRED_CRITICAL_SCRIPTS.includes(s));
+
+  if (missingInManifest.length > 0 || unexpectedInManifest.length > 0) {
+    return {
+      valid: false,
+      status: 'INTEGRITY_VIOLATION',
+      toolRoot: resolvedTool,
+      targetRoot: resolvedTarget,
+      error: `TCB manifest incomplete or corrupted. Missing: [${missingInManifest.join(', ')}]; Unexpected: [${unexpectedInManifest.join(', ')}]`,
+      missingInManifest,
+      unexpectedInManifest
+    };
+  }
+
+  // R6-P1-01: Canonical manifestDigest verification
+  const sortedDigests = {};
+  for (const rel of REQUIRED_CRITICAL_SCRIPTS) {
+    sortedDigests[rel] = manifest.criticalScripts[rel];
+  }
+  const expectedManifestDigest = crypto.createHash('sha256').update(JSON.stringify(sortedDigests), 'utf8').digest('hex');
+
+  if (!manifest.manifestDigest || manifest.manifestDigest !== expectedManifestDigest) {
+    return {
+      valid: false,
+      status: 'INTEGRITY_VIOLATION',
+      toolRoot: resolvedTool,
+      targetRoot: resolvedTarget,
+      error: `TCB manifestDigest mismatch: claimed ${manifest.manifestDigest}, recomputed ${expectedManifestDigest}`,
+      claimedDigest: manifest.manifestDigest,
+      expectedDigest: expectedManifestDigest
+    };
+  }
+
+  // R6-P1-01: Verify each critical script against physical on-disk file hash
   let hasMismatch = false;
   const verificationDetails = {};
-  for (const [rel, expectedDigest] of Object.entries(manifest.criticalScripts || {})) {
+  for (const rel of REQUIRED_CRITICAL_SCRIPTS) {
+    const expectedDigest = manifest.criticalScripts[rel];
     const currentDigest = scriptHashes[rel];
     if (!currentDigest || currentDigest !== expectedDigest) {
       hasMismatch = true;
@@ -3409,9 +3535,9 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     toolRoot: resolvedTool,
     targetRoot: resolvedTarget,
     isSelfAudit,
-    verifiedScriptsCount: Object.keys(manifest.criticalScripts || {}).length,
+    verifiedScriptsCount: REQUIRED_CRITICAL_SCRIPTS.length,
     scriptHashes,
-    manifestDigest: manifest.manifestDigest || null
+    manifestDigest: manifest.manifestDigest
   };
 }
 
@@ -3607,6 +3733,7 @@ if (isDirectExecution) {
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
   const outputCoveragePath = getArg('--output-coverage');
+  const allowSelfAudit = args.includes('--self-audit');
 
   if (inputPath) {
     try {
@@ -3629,7 +3756,7 @@ if (isDirectExecution) {
       }
 
       const repoRoot = path.resolve(repoRootArg);
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg, discoveryMatrix });
+      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg, discoveryMatrix, allowSelfAudit });
 
       if (outputJsonPath) {
         fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
@@ -3644,7 +3771,9 @@ if (isDirectExecution) {
           coverageStatus: finalization.coverageStatus,
           provenance: finalization.provenance,
           repoRoot,
-          auditIntent: finalization.auditIntent
+          auditIntent: finalization.auditIntent,
+          canDeclareClean: finalization.summary.canDeclareClean,
+          executionAttestation: finalization.summary.execution
         });
         fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
         fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');

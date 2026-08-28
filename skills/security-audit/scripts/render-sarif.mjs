@@ -2536,7 +2536,8 @@ export function runTests() {
     manifest: cleanManifest,
     repoRoot: process.cwd(),
     auditIntent: 'REGRESSION',
-    discoveryMatrix: [validCell]
+    discoveryMatrix: [validCell],
+    allowSelfAudit: true
   });
   if (!zeroCandidateRun.summary.canDeclareClean || !zeroCandidateRun.summary.cleanAssuranceBounded) {
     throw new Error('R2-P0-01 VIOLATION: Clean run with 0 candidates could not declare bounded clean assurance');
@@ -3539,7 +3540,137 @@ export default appName;`;
 
   console.log('✔ 77. R5 Invariant: Pre-Context Secret Protection, Attestation Fail-Unknown, Real TCB Integrity, & Disposition Canaries.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (77/77).');
+  // 78. R6 Invariant: Assurance Gates (Execution Attestation, Context Prep, Tool Integrity bound to canDeclareClean), Fail-Closed Manifest Completeness, Explicit Self-Audit, and Mandated Context Isolation (R6-P0-01, R6-P1-01, R6-P1-02, R6-P1-03)
+  const fullManifest78 = buildDirectoryManifest(process.cwd());
+
+  // 78.1 Coverage COMPLETE + execution INCOMPLETE => canDeclareClean: false (R6-P0-01)
+  const executionIncompleteScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    auditIntent: 'REGRESSION',
+    allowSelfAudit: true,
+    capabilities: {
+      required: ['repository.read'],
+      observed: ['filesystem.write'],
+      forbidden: ['filesystem.write'],
+      status: 'VIOLATION'
+    }
+  });
+  if (executionIncompleteScan.summary.canDeclareClean !== false || executionIncompleteScan.summary.execution.verdict !== 'INCOMPLETE') {
+    throw new Error('R6-P0-01 VIOLATION: Execution attestation INCOMPLETE did not fail closed on canDeclareClean');
+  }
+
+  // 78.2 Coverage COMPLETE + execution DEGRADED (skipped stages) => canDeclareClean: false (R6-P0-01)
+  const executionDegradedScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    auditIntent: 'DISCOVERY',
+    allowSelfAudit: true
+  });
+  if (executionDegradedScan.summary.canDeclareClean !== false || executionDegradedScan.summary.execution.verdict !== 'DEGRADED') {
+    throw new Error('R6-P0-01 VIOLATION: Execution attestation DEGRADED did not fail closed on canDeclareClean');
+  }
+
+  // 78.3 Tool Integrity violation => canDeclareClean: false (R6-P0-01)
+  const toolViolationScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    auditIntent: 'REGRESSION',
+    allowSelfAudit: false
+  });
+  if (toolViolationScan.summary.canDeclareClean !== false || toolViolationScan.summary.toolIntegrity.status !== 'TCB_OVERLAP') {
+    throw new Error('R6-P0-01 VIOLATION: Tool integrity TCB_OVERLAP did not fail closed on canDeclareClean');
+  }
+
+  // 78.4 COMPLETE_DECLARED + valid context + valid tool + 0 findings => canDeclareClean: true (R6-P0-01)
+  const cleanDeclaredScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    auditIntent: 'REGRESSION',
+    allowSelfAudit: true,
+    capabilities: {
+      required: ['repository.read'],
+      observed: [],
+      forbidden: ['filesystem.write'],
+      status: 'DECLARED',
+      attestationConfidence: 'DECLARED',
+      observationSource: 'agent-manifest-declaration'
+    }
+  });
+  if (!cleanDeclaredScan.summary.canDeclareClean || cleanDeclaredScan.summary.execution.verdict !== 'COMPLETE_DECLARED') {
+    throw new Error('R6-P0-01 VIOLATION: Complete declared run with zero findings failed canDeclareClean');
+  }
+
+  // 78.5 COMPLETE_VERIFIED + valid context + valid tool + 0 findings => canDeclareClean: true (R6-P0-01)
+  const cleanVerifiedScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    auditIntent: 'REGRESSION',
+    allowSelfAudit: true,
+    capabilities: {
+      required: ['repository.read'],
+      observed: ['repository.read'],
+      forbidden: ['filesystem.write'],
+      status: 'CONFORMANT',
+      attestationConfidence: 'OBSERVED',
+      observationSource: 'runtime-telemetry'
+    }
+  });
+  if (!cleanVerifiedScan.summary.canDeclareClean || cleanVerifiedScan.summary.execution.verdict !== 'COMPLETE_VERIFIED') {
+    throw new Error('R6-P0-01 VIOLATION: Complete verified run with zero findings failed canDeclareClean');
+  }
+
+  // 78.6 R6-P1-01: TCB manifest omission and digest mismatch fail-closed check
+  const fakeManifestDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-tcb-fake-'));
+  try {
+    const emptyManifestPath = path.join(fakeManifestDir, 'tool-integrity-manifest.json');
+    fs.writeFileSync(emptyManifestPath, JSON.stringify({
+      schemaVersion: '1.0.0',
+      toolVersion: '1.0.0',
+      manifestDigest: '0000',
+      criticalScripts: {}
+    }), 'utf8');
+    const emptyManifestRes = verifyToolSelfIntegrity(fakeManifestDir, process.cwd(), { allowSelfAudit: true });
+    if (emptyManifestRes.valid || emptyManifestRes.status !== 'INTEGRITY_VIOLATION') {
+      throw new Error('R6-P1-01 VIOLATION: Manifest with empty criticalScripts was accepted as conformant');
+    }
+
+    const realManifest = generateToolIntegrityManifest(path.resolve(process.cwd(), 'skills/security-audit'));
+    const tamperedManifest = { ...realManifest, manifestDigest: 'deadbeef'.repeat(8) };
+    fs.writeFileSync(emptyManifestPath, JSON.stringify(tamperedManifest), 'utf8');
+    const tamperedDigestRes = verifyToolSelfIntegrity(fakeManifestDir, process.cwd(), { allowSelfAudit: true });
+    if (tamperedDigestRes.valid || tamperedDigestRes.status !== 'INTEGRITY_VIOLATION') {
+      throw new Error('R6-P1-01 VIOLATION: Manifest with forged manifestDigest was accepted as conformant');
+    }
+  } finally {
+    fs.rmSync(fakeManifestDir, { recursive: true, force: true });
+  }
+
+  // 78.7 R6-P1-02: Pathname sniffing removed — path containing 'security-audit' without allowSelfAudit triggers TCB_OVERLAP
+  const noSniffScan = finalizeScan({
+    candidates: [],
+    manifest: fullManifest78,
+    repoRoot: process.cwd(),
+    allowSelfAudit: false
+  });
+  if (noSniffScan.summary.toolIntegrity.status !== 'TCB_OVERLAP' || noSniffScan.summary.canDeclareClean) {
+    throw new Error('R6-P1-02 VIOLATION: Pathname containing "security-audit" implicitly activated self-audit mode');
+  }
+
+  // 78.8 R6-P1-03: Mandated vs Observed context isolation attestation
+  if (cleanDeclaredScan.summary.execution.contextIsolation.status !== 'MANDATED' ||
+      cleanDeclaredScan.summary.execution.contextIsolation.pipeline !== 'MANDATED_SHADOW_CONTEXT_PIPELINE') {
+    throw new Error('R6-P1-03 VIOLATION: Execution attestation failed to record MANDATED context isolation');
+  }
+
+  console.log('✔ 78. R6 Invariant: Assurance Gates (canDeclareClean bound to Execution, Context, & Tool Integrity), Fail-Closed Manifest, Explicit Self-Audit, & Mandated Context Isolation.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (78/78).');
 
   } finally {
     gitFixture.cleanup();

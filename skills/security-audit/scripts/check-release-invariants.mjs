@@ -640,7 +640,8 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           manifest: cleanManifest,
           repoRoot,
           auditIntent: 'REGRESSION',
-          discoveryMatrix: [validCell]
+          discoveryMatrix: [validCell],
+          allowSelfAudit: true
         });
         if (!cleanRun.summary.canDeclareClean || cleanRun.summary.auditIntent !== 'REGRESSION') {
           throw new Error('Zero candidate run with complete coverage failed to achieve bounded clean assurance');
@@ -1273,6 +1274,96 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const canaryDisp = runDispositionCanaries(repoRoot);
         if (!canaryDisp.pass || canaryDisp.status !== 'FINALIZER_CALIBRATED') {
           throw new Error('runDispositionCanaries failed to return FINALIZER_CALIBRATED');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-28',
+      name: 'Six-Pillar Assurance Gates, Fail-Closed TCB Manifest Completeness, Explicit Self-Audit, and Mandated Context Isolation (R6)',
+      check: () => {
+        const fullManifest = buildDirectoryManifest(repoRoot);
+
+        // 1. Coverage COMPLETE + execution INCOMPLETE => canDeclareClean: false (R6-P0-01)
+        const scanIncomplete = finalizeScan({
+          candidates: [],
+          manifest: fullManifest,
+          repoRoot,
+          auditIntent: 'REGRESSION',
+          allowSelfAudit: true,
+          capabilities: {
+            required: ['repository.read'],
+            observed: ['filesystem.write'],
+            forbidden: ['filesystem.write'],
+            status: 'VIOLATION'
+          }
+        });
+        if (scanIncomplete.summary.canDeclareClean !== false || scanIncomplete.summary.execution.verdict !== 'INCOMPLETE') {
+          throw new Error('SEC-INV-28: Execution attestation INCOMPLETE did not fail closed on canDeclareClean');
+        }
+
+        // 2. Coverage COMPLETE + execution DEGRADED => canDeclareClean: false (R6-P0-01)
+        const scanDegraded = finalizeScan({
+          candidates: [],
+          manifest: fullManifest,
+          repoRoot,
+          auditIntent: 'DISCOVERY',
+          allowSelfAudit: true
+        });
+        if (scanDegraded.summary.canDeclareClean !== false || scanDegraded.summary.execution.verdict !== 'DEGRADED') {
+          throw new Error('SEC-INV-28: Execution attestation DEGRADED did not fail closed on canDeclareClean');
+        }
+
+        // 3. Tool Integrity violation => canDeclareClean: false (R6-P0-01)
+        const scanOverlap = finalizeScan({
+          candidates: [],
+          manifest: fullManifest,
+          repoRoot,
+          auditIntent: 'REGRESSION',
+          allowSelfAudit: false
+        });
+        if (scanOverlap.summary.canDeclareClean !== false || scanOverlap.summary.toolIntegrity.status !== 'TCB_OVERLAP') {
+          throw new Error('SEC-INV-28: Tool integrity TCB_OVERLAP did not fail closed on canDeclareClean');
+        }
+
+        // 4. Fail-closed TCB manifest completeness and digest verification (R6-P1-01)
+        const tempFakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-inv28-'));
+        try {
+          const fakePath = path.join(tempFakeDir, 'tool-integrity-manifest.json');
+          fs.writeFileSync(fakePath, JSON.stringify({
+            schemaVersion: '1.0.0',
+            toolVersion: '1.0.0',
+            manifestDigest: '0000',
+            criticalScripts: {}
+          }), 'utf8');
+          const emptyRes = verifyToolSelfIntegrity(tempFakeDir, repoRoot, { allowSelfAudit: true });
+          if (emptyRes.valid || emptyRes.status !== 'INTEGRITY_VIOLATION') {
+            throw new Error('SEC-INV-28: Manifest with empty criticalScripts was accepted as conformant');
+          }
+        } finally {
+          fs.rmSync(tempFakeDir, { recursive: true, force: true });
+        }
+
+        // 5. Explicit self-audit authorization only — no pathname guessing (R6-P1-02)
+        const noSniff = finalizeScan({
+          candidates: [],
+          manifest: fullManifest,
+          repoRoot,
+          allowSelfAudit: false
+        });
+        if (noSniff.summary.toolIntegrity.status !== 'TCB_OVERLAP' || noSniff.summary.canDeclareClean) {
+          throw new Error('SEC-INV-28: Pathname containing "security-audit" implicitly activated self-audit mode');
+        }
+
+        // 6. Mandated Context Isolation (R6-P1-03)
+        const validClean = finalizeScan({
+          candidates: [],
+          manifest: fullManifest,
+          repoRoot,
+          auditIntent: 'REGRESSION',
+          allowSelfAudit: true
+        });
+        if (!validClean.summary.canDeclareClean || validClean.summary.execution.contextIsolation.status !== 'MANDATED') {
+          throw new Error('SEC-INV-28: Valid clean scan failed or contextIsolation was not MANDATED');
         }
       }
     }

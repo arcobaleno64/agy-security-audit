@@ -39,7 +39,7 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 - No shell string interpolation is permitted.
 
 ### 2.3 Pre-Context Secret Protection & Anti-Leakage
-- **Enforced Shadow Context Pipeline**: Review contexts are prepared by `prepare-review-context.mjs` into a dedicated sanitized shadow directory (`scratch/context/`). All agent file inspections, sink searches, and code snippets read exclusively from this prepared context.
+- **Mandated Shadow Context Pipeline**: Review contexts are prepared by `prepare-review-context.mjs` into a dedicated sanitized shadow directory (`scratch/context/`). All agent file inspections, sink searches, and code snippets are mandated by orchestrator protocol to read exclusively from this prepared context. When runtime filesystem sandboxing telemetry is available, context isolation is attested as `OBSERVED`, otherwise truthfully attested as `MANDATED`.
 - **Pre-Context Tokenization**: Raw plaintext secrets (AWS access keys, GitHub tokens, Bearer tokens, private keys, passwords, JWTs) are detected and tokenized locally before source code text is supplied to LLM inspection contexts (`tokenizeSecretsForContext`).
 - **Structure-Preserving Placeholders**: Secrets are replaced with structured identifiers (`<SECRET:class=...:hash=...>`) that preserve exact line numbers, line counts, and syntactic layout so dataflow continuity is maintained without exposing real secrets to model contexts.
 - **No Secret Map Leakage**: The secret resolution map is held strictly in ephemeral memory and is never serialized into agent-accessible files or review context artifacts.

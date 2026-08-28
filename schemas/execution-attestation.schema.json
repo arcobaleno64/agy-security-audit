@@ -38,6 +38,16 @@
         "observationSource": { "type": ["string", "null"] },
         "attestationConfidence": { "type": "string", "enum": ["OBSERVED", "DECLARED", "UNKNOWN"] }
       }
+    },
+    "contextIsolation": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["MANDATED", "DECLARED", "OBSERVED", "UNKNOWN"] },
+        "pipeline": { "type": "string" },
+        "shadowContextRoot": { "type": ["string", "null"] },
+        "tokenizedFilesCount": { "type": "number" },
+        "totalSecretsTokenized": { "type": "number" }
+      }
     }
   }
 }

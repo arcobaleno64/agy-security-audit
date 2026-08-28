@@ -85,12 +85,12 @@ When executing security review, the skill operates under one of three distinct i
 3. Detect project manifests (e.g. `package.json`, `go.mod`, `pom.xml`) and inspect security posture.
 
 ### Stage 2: Triage & Multi-Sink Security Assurance Review
-1. **Pre-Context Secret Protection & Context Preparation**:
+1. **Pre-Context Secret Protection & Mandated Shadow Context Pipeline**:
    Execute `prepare-review-context.mjs` to prepare sanitized, tokenized shadow files under `scratch/context/`:
    ```bash
    node skills/security-audit/scripts/prepare-review-context.mjs --repo-root .
    ```
-   All model/agent source inspections, sink searches, and code snippets MUST read from `scratch/context/` rather than raw repository files. Plaintext credentials are deterministically replaced with structured `<SECRET:class=...:hash=...>` placeholders while strictly preserving exact source line numbers.
+   All model/agent source inspections, sink searches, and code snippets MUST read from `scratch/context/` rather than raw repository files. Plaintext credentials are deterministically replaced with structured `<SECRET:class=...:hash=...>` placeholders while strictly preserving exact source line numbers. Orchestrator instructions mandate subagents inspect `scratch/context/`; when runtime sandbox telemetry is available it is attested as `OBSERVED`, otherwise truthfully attested as `MANDATED`.
 2. Execute Tier 2 Sink searches across prepared context using native `grep_search`:
    - Command injection sinks (`child_process`, `exec`, `spawn`).
    - Query & SQL sinks (`rawQuery`, `$where`, dynamic string interpolation).
