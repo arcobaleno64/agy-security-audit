@@ -26,7 +26,7 @@
     "coverageComplete": { "type": "boolean" },
     "delegationRequired": { "type": "boolean" },
     "delegationObserved": { "type": "boolean" },
-    "verdict": { "type": "string", "enum": ["COMPLETE", "INCOMPLETE", "DEGRADED"] },
+    "verdict": { "type": "string", "enum": ["COMPLETE", "COMPLETE_VERIFIED", "COMPLETE_DECLARED", "INCOMPLETE", "DEGRADED"] },
     "capabilities": {
       "type": "object",
       "required": ["required", "forbidden", "status"],
@@ -34,7 +34,9 @@
         "required": { "type": "array", "items": { "type": "string" } },
         "observed": { "type": "array", "items": { "type": "string" } },
         "forbidden": { "type": "array", "items": { "type": "string" } },
-        "status": { "type": "string", "enum": ["CONFORMANT", "VIOLATION", "UNKNOWN"] }
+        "status": { "type": "string", "enum": ["CONFORMANT", "VIOLATION", "DECLARED", "UNKNOWN"] },
+        "observationSource": { "type": ["string", "null"] },
+        "attestationConfidence": { "type": "string", "enum": ["OBSERVED", "DECLARED", "UNKNOWN"] }
       }
     }
   }

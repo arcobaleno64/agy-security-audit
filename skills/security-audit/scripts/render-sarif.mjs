@@ -73,7 +73,12 @@ import {
   computeExecutionEquivalenceKey,
   validateRiskAcceptance,
   verifyToolSelfIntegrity,
-  runCalibrationCanaries
+  runCalibrationCanaries,
+  runDispositionCanaries,
+  prepareReviewContext,
+  readPreparedFile,
+  getPreparedContextFilePath,
+  generateToolIntegrityManifest
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
@@ -3158,7 +3163,7 @@ export function runTests() {
     coverageComplete: true,
     delegationObserved: true
   });
-  if (fullAttestation.verdict !== 'COMPLETE' || fullAttestation.skippedStages.length !== 0) {
+  if (!fullAttestation.verdict.startsWith('COMPLETE') || fullAttestation.skippedStages.length !== 0) {
     throw new Error('R2-P1-05 VIOLATION: Complete attestation did not receive COMPLETE verdict');
   }
   if (degradedAttestation.verdict !== 'DEGRADED' || degradedAttestation.skippedStages.length === 0) {
@@ -3339,6 +3344,7 @@ export default appName;`;
 
   // 76.2 Capabilities Attestation
   const conformantAtt = buildExecutionAttestation({
+    delegationObserved: true,
     capabilities: {
       required: ['repository.read'],
       observed: ['repository.read'],
@@ -3346,7 +3352,7 @@ export default appName;`;
       status: 'CONFORMANT'
     }
   });
-  if (conformantAtt.capabilities.status !== 'CONFORMANT' || conformantAtt.verdict !== 'COMPLETE') {
+  if (conformantAtt.capabilities.status !== 'CONFORMANT' || !conformantAtt.verdict.startsWith('COMPLETE')) {
     throw new Error('R4-P1-02 VIOLATION: Conformant capabilities failed to produce COMPLETE verdict');
   }
   const violatingAtt = buildExecutionAttestation({
@@ -3436,7 +3442,7 @@ export default appName;`;
   if (sameRootCheck.valid || sameRootCheck.status !== 'TCB_ISOLATION_ERROR') {
     throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed to reject identical tool and target root');
   }
-  const validTcbCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd());
+  const validTcbCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd(), { allowSelfAudit: true });
   if (!validTcbCheck.valid || validTcbCheck.verifiedScriptsCount < 5) {
     throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed on valid scripts');
   }
@@ -3449,7 +3455,91 @@ export default appName;`;
 
   console.log('✔ 76. R4 Invariant: Pre-Context Secret Protection, Capabilities Attestation, Equivalence Key, Accepted Risk Waivers, TCB Isolation, & Canaries.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (76/76).');
+  // ---------------------------------------------------------------------------
+  // 77. R5 Invariant: Context Preparation, Fail-Unknown Attestation, Real TCB Integrity, & Disposition Canaries (R5-P0-01, R5-P0-02, R5-P1-01, R5-P1-02)
+  // ---------------------------------------------------------------------------
+  // 77.1 R5-P0-01 Pre-Context Secret Protection
+  const prepContextRes = prepareReviewContext(process.cwd());
+  if (!prepContextRes.success || !prepContextRes.manifest) {
+    throw new Error('R5-P0-01 VIOLATION: prepareReviewContext failed to return successful manifest');
+  }
+  const tokenizedAwsFile = readPreparedFile(process.cwd(), 'evals/secret-leak/sl-01-aws-key.js');
+  if (!tokenizedAwsFile || !tokenizedAwsFile.includes('<SECRET:class=AWS_ACCESS_KEY:hash=') || tokenizedAwsFile.includes('AKIAIOSFODNN7EXAMPLE')) {
+    throw new Error('R5-P0-01 VIOLATION: Prepared review context leaked raw plaintext secret or failed tokenization');
+  }
+  const rawAwsContent = fs.readFileSync(path.resolve(process.cwd(), 'evals/secret-leak/sl-01-aws-key.js'), 'utf8');
+  if (rawAwsContent.split(/\r?\n/).length !== tokenizedAwsFile.split(/\r?\n/).length) {
+    throw new Error('R5-P0-01 VIOLATION: Prepared context line count drifted from original source');
+  }
+
+  // 77.2 R5-P0-02 Capability Attestation Fail-Unknown
+  const defaultAtt = buildExecutionAttestation();
+  if (defaultAtt.capabilities.status !== 'UNKNOWN' || defaultAtt.capabilities.observed.length !== 0 || defaultAtt.capabilities.attestationConfidence !== 'UNKNOWN') {
+    throw new Error('R5-P0-02 VIOLATION: buildExecutionAttestation did not fail-unknown on empty telemetry');
+  }
+  if (defaultAtt.delegationObserved !== false) {
+    throw new Error('R5-P0-02 VIOLATION: delegationObserved was hard-coded true on empty parameters');
+  }
+  const declaredAtt = buildExecutionAttestation({
+    delegationObserved: true,
+    capabilities: { declaration: true }
+  });
+  if (declaredAtt.capabilities.status !== 'DECLARED' || declaredAtt.verdict !== 'COMPLETE_DECLARED') {
+    throw new Error('R5-P0-02 VIOLATION: Declared capabilities failed to map to COMPLETE_DECLARED verdict');
+  }
+  const verifiedAtt = buildExecutionAttestation({
+    delegationObserved: true,
+    capabilities: {
+      required: ['repository.read'],
+      observed: ['repository.read'],
+      forbidden: ['filesystem.write'],
+      status: 'CONFORMANT'
+    }
+  });
+  if (verifiedAtt.capabilities.status !== 'CONFORMANT' || verifiedAtt.verdict !== 'COMPLETE_VERIFIED') {
+    throw new Error('R5-P0-02 VIOLATION: Observed conformant capabilities failed to map to COMPLETE_VERIFIED verdict');
+  }
+
+  // 77.3 R5-P1-01 Real TCB Integrity Verification & Containment Check
+  const overlapCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd());
+  if (overlapCheck.valid || overlapCheck.status !== 'TCB_OVERLAP') {
+    throw new Error('R5-P1-01 VIOLATION: verifyToolSelfIntegrity failed to flag TCB_OVERLAP on nested tool root');
+  }
+  const selfAuditCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd(), { allowSelfAudit: true });
+  if (!selfAuditCheck.valid || selfAuditCheck.status !== 'SELF_AUDIT_MODE' || selfAuditCheck.verifiedScriptsCount !== 8) {
+    throw new Error(`R5-P1-01 VIOLATION: verifyToolSelfIntegrity failed self-audit mode verification: ${selfAuditCheck.error}`);
+  }
+
+  // 77.4 R5-P1-02 Rename Canaries & Model Provenance in Equivalence Key
+  const canaryDisp = runDispositionCanaries(process.cwd());
+  if (!canaryDisp.pass || canaryDisp.status !== 'FINALIZER_CALIBRATED' || canaryDisp.canariesChecked !== 3) {
+    throw new Error('R5-P1-02 VIOLATION: runDispositionCanaries failed to return FINALIZER_CALIBRATED status');
+  }
+  const canaryAlias = runCalibrationCanaries(process.cwd());
+  if (!canaryAlias.pass || canaryAlias.status !== 'CALIBRATED') {
+    throw new Error('R5-P1-02 VIOLATION: runCalibrationCanaries alias failed');
+  }
+
+  const modelScan = finalizeScan({
+    candidates: [],
+    repoRoot: process.cwd(),
+    allowSelfAudit: true,
+    modelProvenance: {
+      modelProvider: 'custom-adversarial-model',
+      modelIdentifier: 'deep-reasoning-pro-v2',
+      modelSnapshotImmutable: true
+    }
+  });
+  if (modelScan.baseline.modelProvider !== 'custom-adversarial-model' || modelScan.baseline.modelIdentifier !== 'deep-reasoning-pro-v2') {
+    throw new Error('R5-P1-02 VIOLATION: finalizeScan failed to wire modelProvenance into baseline');
+  }
+  if (modelScan.baseline.executionEquivalence !== 'FULL') {
+    throw new Error('R5-P1-02 VIOLATION: Immutable snapshot model failed to receive FULL execution equivalence');
+  }
+
+  console.log('✔ 77. R5 Invariant: Pre-Context Secret Protection, Attestation Fail-Unknown, Real TCB Integrity, & Disposition Canaries.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (77/77).');
 
   } finally {
     gitFixture.cleanup();

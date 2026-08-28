@@ -39,8 +39,11 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 - No shell string interpolation is permitted.
 
 ### 2.3 Pre-Context Secret Protection & Anti-Leakage
-- **Pre-Context Tokenization**: Raw plaintext secrets (AWS access keys, Bearer tokens, private keys, passwords, JWTs) are detected and tokenized locally before source code text is supplied to LLM inspection contexts (`tokenizeSecretsForContext`).
-- **Structure-Preserving Placeholders**: Secrets are replaced with structured identifiers (`<SECRET:class=...:hash=...>`) that preserve line numbers, line counts, and syntactic layout so dataflow continuity is maintained without exposing real secrets to model contexts.
+- **Enforced Shadow Context Pipeline**: Review contexts are prepared by `prepare-review-context.mjs` into a dedicated sanitized shadow directory (`scratch/context/`). All agent file inspections, sink searches, and code snippets read exclusively from this prepared context.
+- **Pre-Context Tokenization**: Raw plaintext secrets (AWS access keys, GitHub tokens, Bearer tokens, private keys, passwords, JWTs) are detected and tokenized locally before source code text is supplied to LLM inspection contexts (`tokenizeSecretsForContext`).
+- **Structure-Preserving Placeholders**: Secrets are replaced with structured identifiers (`<SECRET:class=...:hash=...>`) that preserve exact line numbers, line counts, and syntactic layout so dataflow continuity is maintained without exposing real secrets to model contexts.
+- **No Secret Map Leakage**: The secret resolution map is held strictly in ephemeral memory and is never serialized into agent-accessible files or review context artifacts.
+- **No Detokenization in Model/Report Path**: `detokenizeSecrets()` is strictly excluded from all model prompts, agent transcripts, SARIF outputs, and Markdown reports.
 - **Deterministic Finalizer Masking**: Reports and SARIF files emitted by `finalize-scan.mjs` redact any residual or tokenized secrets, suppressing line snippets for credential leaks (`CWE-798`) and outputting only safe fingerprints and location metadata.
 
 ### 2.4 Markdown & Output Injection Defenses

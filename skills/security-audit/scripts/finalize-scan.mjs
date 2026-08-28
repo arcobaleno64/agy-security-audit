@@ -15,6 +15,8 @@ import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs'
 import { buildDirectoryManifest, extractChangedFiles, categorizeDirectory, classifyFile } from './build-inventory.mjs';
 import { resolveStandardsMapping, detectDependencyBoundary } from './standards-mapping.mjs';
 export { categorizeDirectory, classifyFile, resolveStandardsMapping, detectDependencyBoundary };
+import { prepareReviewContext, getPreparedContextFilePath, readPreparedFile } from './prepare-review-context.mjs';
+export { prepareReviewContext, getPreparedContextFilePath, readPreparedFile };
 
 
 
@@ -436,7 +438,8 @@ export function inferDefectManagement(ruleId = '', title = '', securityProperty 
 }
 
 /**
- * Computes the canonical Execution Equivalence Key (R4-P1-03).
+ * Computes the canonical Execution Equivalence Key (R4-P1-03 / R5-P1-02).
+ * Uses deterministic length-prefixed encoding to eliminate delimiter ambiguity.
  */
 export function computeExecutionEquivalenceKey({
   targetRevision = 'HEAD',
@@ -462,7 +465,8 @@ export function computeExecutionEquivalenceKey({
     modelProvider || 'deterministic-local',
     modelIdentifier || 'unspecified'
   ];
-  return crypto.createHash('sha256').update(parts.join(':'), 'utf8').digest('hex');
+  const payload = parts.map(p => `${Buffer.byteLength(String(p), 'utf8')}:${String(p)}`).join(';');
+  return crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
 /**
@@ -554,6 +558,8 @@ export function buildAuditBaseline({
     schemaVersion: '1.0.0',
     toolVersion: '1.0.0',
     targetRevision: rev,
+    modelProvider,
+    modelIdentifier,
     scopeFingerprint: scopeHash,
     surfaceFingerprint: surfaceHash,
     threatModelFingerprint: tmHash,
@@ -2116,7 +2122,7 @@ export function buildExecutionAttestation({
   executedStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'],
   failedStages = [],
   coverageComplete = true,
-  delegationObserved = true,
+  delegationObserved = false,
   capabilities = null
 } = {}) {
   const allPossibleStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'];
@@ -2129,32 +2135,77 @@ export function buildExecutionAttestation({
   const executedSet = new Set(safeExecuted);
   const skippedStages = requiredStages.filter(s => !executedSet.has(s));
 
-  // Capabilities Attestation (R4-P1-02)
+  // Capabilities Attestation (R4-P1-02 & R5-P0-02: Default-Unknown)
   const defaultRequired = ['repository.read'];
   const defaultForbidden = ['filesystem.write', 'process.execute', 'network.external'];
   let capObj;
+
   if (capabilities && typeof capabilities === 'object') {
     const req = Array.isArray(capabilities.required) ? capabilities.required : defaultRequired;
-    const obs = Array.isArray(capabilities.observed) ? capabilities.observed : defaultRequired;
+    const obs = Array.isArray(capabilities.observed) ? capabilities.observed : [];
     const forb = Array.isArray(capabilities.forbidden) ? capabilities.forbidden : defaultForbidden;
+
     let stat = capabilities.status;
+    let confidence = capabilities.attestationConfidence;
+    let source = capabilities.observationSource || null;
+
     if (!stat) {
-      const hasForbidden = obs.some(c => forb.includes(c));
-      stat = hasForbidden ? 'VIOLATION' : 'CONFORMANT';
+      if (obs.length > 0) {
+        const hasForbidden = obs.some(c => forb.includes(c));
+        stat = hasForbidden ? 'VIOLATION' : 'CONFORMANT';
+        confidence = 'OBSERVED';
+        source = source || 'runtime-telemetry';
+      } else if (capabilities.declaration || confidence === 'DECLARED') {
+        stat = 'DECLARED';
+        confidence = 'DECLARED';
+        source = source || 'agent-manifest-declaration';
+      } else {
+        stat = 'UNKNOWN';
+        confidence = 'UNKNOWN';
+        source = null;
+      }
+    } else {
+      if (!confidence) {
+        confidence = (stat === 'CONFORMANT' || stat === 'VIOLATION') && obs.length > 0
+          ? 'OBSERVED'
+          : (stat === 'DECLARED' ? 'DECLARED' : 'UNKNOWN');
+      }
     }
-    capObj = { required: req, observed: obs, forbidden: forb, status: stat };
+
+    capObj = {
+      required: req,
+      observed: obs,
+      forbidden: forb,
+      status: stat,
+      observationSource: source,
+      attestationConfidence: confidence
+    };
   } else {
+    // Default-Unknown: absence of telemetry is NEVER assumed to be compliant
     capObj = {
       required: defaultRequired,
-      observed: defaultRequired,
+      observed: [],
       forbidden: defaultForbidden,
-      status: 'CONFORMANT'
+      status: 'UNKNOWN',
+      observationSource: null,
+      attestationConfidence: 'UNKNOWN'
     };
   }
 
-  const isCapabilitiesConformant = capObj.status === 'CONFORMANT';
-  const isComplete = skippedStages.length === 0 && safeFailed.length === 0 && coverageComplete && delegationObserved && isCapabilitiesConformant;
-  const verdict = isComplete ? 'COMPLETE' : (coverageComplete && !safeFailed.length && isCapabilitiesConformant ? 'DEGRADED' : 'INCOMPLETE');
+  const stagesComplete = skippedStages.length === 0 && safeFailed.length === 0 && Boolean(coverageComplete);
+  let verdict;
+
+  if (capObj.status === 'VIOLATION' || safeFailed.length > 0) {
+    verdict = 'INCOMPLETE';
+  } else if (!stagesComplete) {
+    verdict = 'DEGRADED';
+  } else if (capObj.status === 'CONFORMANT' && capObj.attestationConfidence === 'OBSERVED' && delegationObserved) {
+    verdict = 'COMPLETE_VERIFIED';
+  } else if (capObj.status === 'DECLARED' || (stagesComplete && (delegationObserved || capObj.status === 'UNKNOWN'))) {
+    verdict = 'COMPLETE_DECLARED';
+  } else {
+    verdict = 'DEGRADED';
+  }
 
   return {
     schemaVersion: '1.0.0',
@@ -2192,7 +2243,10 @@ export function finalizeScan({
   discoveryMatrix = [],
   threatModel = null,
   targetProfile = null,
-  modelProvenance = null
+  modelProvenance = null,
+  capabilities = null,
+  allowSelfAudit = false,
+  toolRoot = null
 } = {}) {
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
@@ -2219,6 +2273,9 @@ export function finalizeScan({
 
   if (expectedMode && coverageMode !== expectedMode) {
     coverageStatus = 'PARTIAL';
+  }
+  if (!safeRepoRoot || !fs.existsSync(path.resolve(safeRepoRoot))) {
+    coverageStatus = 'UNCHECKABLE';
   }
 
 
@@ -2489,6 +2546,16 @@ export function finalizeScan({
   if (safeMatrix.length > 0) executedStages.push('DISCOVERY_MATRIX');
   if (safeVotes.length > 0) executedStages.push('VERIFICATION_PANEL');
 
+  // R5-P0-01: Context Preparation & Pre-Context Secret Protection Preflight
+  const contextPrep = prepareReviewContext(safeRepoRoot || process.cwd());
+
+  // R5-P1-01: Tool Self-Integrity Verification Preflight
+  const toolIntegrity = verifyToolSelfIntegrity(
+    toolRoot,
+    safeRepoRoot || process.cwd(),
+    { allowSelfAudit: allowSelfAudit || Boolean(safeRepoRoot && safeRepoRoot.includes('security-audit')) }
+  );
+
   const execution = buildExecutionAttestation({
     repoRoot: safeRepoRoot || process.cwd(),
     target: {
@@ -2499,7 +2566,15 @@ export function finalizeScan({
     executedStages,
     failedStages: [],
     coverageComplete: coverageStatus === 'COMPLETE',
-    delegationObserved: true
+    delegationObserved: Boolean(safeVotes.length > 0),
+    capabilities: capabilities || {
+      required: ['repository.read'],
+      observed: [],
+      forbidden: ['filesystem.write', 'process.execute', 'network.external'],
+      status: 'DECLARED',
+      attestationConfidence: 'DECLARED',
+      observationSource: 'agent-manifest-declaration'
+    }
   });
 
   const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
@@ -2510,7 +2585,10 @@ export function finalizeScan({
     canonicalFindings,
     threatModel,
     manifest,
-    provenance
+    provenance,
+    modelProvider: safeModelProvenance.modelProvider,
+    modelIdentifier: safeModelProvenance.modelIdentifier,
+    modelSnapshotImmutable: Boolean(modelProvenance?.modelSnapshotImmutable)
   });
 
   const summary = {
@@ -2538,7 +2616,9 @@ export function finalizeScan({
     execution,
     dependencyBoundary,
     baseline,
-    modelProvenance: safeModelProvenance
+    modelProvenance: safeModelProvenance,
+    toolIntegrity,
+    contextPreparation: contextPrep.manifest
   };
 
   return {
@@ -2552,7 +2632,9 @@ export function finalizeScan({
     auditIntent: safeAuditIntent,
     discoveryMatrix: safeMatrix,
     baseline,
-    modelProvenance: safeModelProvenance
+    modelProvenance: safeModelProvenance,
+    toolIntegrity,
+    contextPreparation: contextPrep.manifest
   };
 
 }
@@ -2901,7 +2983,15 @@ export function renderSarifFromCanonical({
         repoRoot,
         auditIntent: auditIntent || 'DISCOVERY',
         coverageComplete: coverageStatus === 'COMPLETE',
-        delegationObserved: true
+        delegationObserved: safeFindings.some(f => f.consensus && f.consensus.total > 0),
+        capabilities: {
+          required: ['repository.read'],
+          observed: [],
+          forbidden: ['filesystem.write', 'process.execute', 'network.external'],
+          status: 'DECLARED',
+          attestationConfidence: 'DECLARED',
+          observationSource: 'agent-manifest-declaration'
+        }
       }),
       dependencyBoundary: detectDependencyBoundary(repoRoot)
     }
@@ -3170,24 +3260,11 @@ export function renderMarkdownFromCanonical({
 }
 
 /**
- * Verifies tool self-integrity and Trusted Computing Base (TCB) isolation (R4-P2-02).
- * Ensures the target repository being reviewed cannot overwrite or tamper with authoritative audit scripts.
+ * Generates an authoritative release manifest for tool integrity verification (R5-P1-01).
  */
-export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null) {
+export function generateToolIntegrityManifest(toolRoot = null) {
   const defaultToolRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
   const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
-  const resolvedTarget = targetRoot ? path.resolve(targetRoot) : null;
-
-  // 1. TCB isolation check: tool root must not be identical to target root
-  if (resolvedTarget && resolvedTool === resolvedTarget) {
-    return {
-      valid: false,
-      status: 'TCB_ISOLATION_ERROR',
-      error: `TCB_ISOLATION_ERROR: Tool root (${resolvedTool}) and target root (${resolvedTarget}) cannot be identical.`
-    };
-  }
-
-  // 2. Authoritative script integrity verification
   const criticalScripts = [
     'scripts/safe-git.mjs',
     'scripts/finalize-scan.mjs',
@@ -3195,7 +3272,89 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null) {
     'scripts/build-threat-model.mjs',
     'scripts/validate-attack-path.mjs',
     'scripts/validate-patch.mjs',
-    'scripts/render-sarif.mjs'
+    'scripts/render-sarif.mjs',
+    'scripts/prepare-review-context.mjs'
+  ];
+  const digests = {};
+  for (const rel of criticalScripts) {
+    const full = path.resolve(resolvedTool, rel);
+    if (fs.existsSync(full)) {
+      const content = fs.readFileSync(full, 'utf8');
+      digests[rel] = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+    }
+  }
+  const manifestData = {
+    schemaVersion: '1.0.0',
+    toolVersion: '1.0.0',
+    generatedAt: new Date().toISOString(),
+    criticalScripts: digests
+  };
+  manifestData.manifestDigest = crypto.createHash('sha256').update(JSON.stringify(manifestData.criticalScripts), 'utf8').digest('hex');
+  return manifestData;
+}
+
+/**
+ * Verifies tool self-integrity and Trusted Computing Base (TCB) isolation (R4-P2-02 / R5-P1-01).
+ * Enforces:
+ * 1. Root separation & containment check (prevents target from mutating audit tools).
+ * 2. Cryptographic digest verification against release manifest (detects tampering).
+ */
+export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, options = {}) {
+  const defaultToolRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
+  const resolvedTarget = targetRoot ? path.resolve(targetRoot) : null;
+
+  let isSelfAudit = false;
+  if (resolvedTarget) {
+    const isIdentical = resolvedTool === resolvedTarget;
+    const isToolInsideTarget = resolvedTool.startsWith(resolvedTarget + path.sep);
+    const isTargetInsideTool = resolvedTarget.startsWith(resolvedTool + path.sep);
+
+    if (isIdentical) {
+      return {
+        valid: false,
+        status: 'TCB_ISOLATION_ERROR',
+        error: `TCB_ISOLATION_ERROR: Tool root (${resolvedTool}) and target root (${resolvedTarget}) cannot be identical.`
+      };
+    }
+
+    if (isToolInsideTarget || isTargetInsideTool) {
+      if (options.allowSelfAudit || options.selfAudit) {
+        isSelfAudit = true;
+      } else {
+        return {
+          valid: false,
+          status: 'TCB_OVERLAP',
+          error: `TCB_OVERLAP: Tool root (${resolvedTool}) and target root (${resolvedTarget}) overlap. Target repository can mutate audit tools. Specify allowSelfAudit: true for self-dogfood audit.`
+        };
+      }
+    }
+  }
+
+  // 2. Authoritative script integrity verification against release manifest
+  const manifestPath = path.resolve(resolvedTool, 'tool-integrity-manifest.json');
+  let manifest = null;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (err) {
+      return {
+        valid: false,
+        status: 'INTEGRITY_VIOLATION',
+        error: `Failed to parse tool-integrity-manifest.json: ${err.message}`
+      };
+    }
+  }
+
+  const criticalScripts = [
+    'scripts/safe-git.mjs',
+    'scripts/finalize-scan.mjs',
+    'scripts/build-inventory.mjs',
+    'scripts/build-threat-model.mjs',
+    'scripts/validate-attack-path.mjs',
+    'scripts/validate-patch.mjs',
+    'scripts/render-sarif.mjs',
+    'scripts/prepare-review-context.mjs'
   ];
 
   const scriptHashes = {};
@@ -3208,24 +3367,62 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null) {
     }
   }
 
+  if (!manifest) {
+    return {
+      valid: true,
+      status: isSelfAudit ? 'SELF_AUDIT_MODE' : 'TOOL_INTEGRITY_UNKNOWN',
+      toolRoot: resolvedTool,
+      targetRoot: resolvedTarget,
+      isSelfAudit,
+      verifiedScriptsCount: Object.keys(scriptHashes).length,
+      scriptHashes,
+      warning: 'No trusted tool-integrity-manifest.json found; unable to verify script digests against release manifest.'
+    };
+  }
+
+  let hasMismatch = false;
+  const verificationDetails = {};
+  for (const [rel, expectedDigest] of Object.entries(manifest.criticalScripts || {})) {
+    const currentDigest = scriptHashes[rel];
+    if (!currentDigest || currentDigest !== expectedDigest) {
+      hasMismatch = true;
+      verificationDetails[rel] = { expected: expectedDigest, actual: currentDigest || null, match: false };
+    } else {
+      verificationDetails[rel] = { expected: expectedDigest, actual: currentDigest, match: true };
+    }
+  }
+
+  if (hasMismatch) {
+    return {
+      valid: false,
+      status: 'INTEGRITY_VIOLATION',
+      toolRoot: resolvedTool,
+      targetRoot: resolvedTarget,
+      error: 'Tool script integrity mismatch detected: critical audit scripts have diverged from trusted release manifest.',
+      verificationDetails
+    };
+  }
+
   return {
     valid: true,
-    status: 'CONFORMANT',
+    status: isSelfAudit ? 'SELF_AUDIT_MODE' : 'CONFORMANT',
     toolRoot: resolvedTool,
     targetRoot: resolvedTarget,
-    verifiedScriptsCount: Object.keys(scriptHashes).length,
-    scriptHashes
+    isSelfAudit,
+    verifiedScriptsCount: Object.keys(manifest.criticalScripts || {}).length,
+    scriptHashes,
+    manifestDigest: manifest.manifestDigest || null
   };
 }
 
 /**
- * Runs calibration canaries before final verdict generation (R4-P2-03).
+ * Runs deterministic finalizer disposition canaries (R4-P2-03 / R5-P1-02).
  * Verifies that the verifier panel and disposition derivation logic cleanly map:
  * - SAFE_CONTROL -> SUPPRESSED
  * - KNOWN_POSITIVE -> REPORTABLE
  * - AMBIGUOUS -> DEFERRED
  */
-export function runCalibrationCanaries(repoRoot = process.cwd()) {
+export function runDispositionCanaries(repoRoot = process.cwd()) {
   const safeCandidate = {
     id: 'CANARY-SAFE',
     ruleId: 'CWE-89',
@@ -3257,7 +3454,7 @@ export function runCalibrationCanaries(repoRoot = process.cwd()) {
   if (safeDisp.disposition !== 'SUPPRESSED') {
     return {
       pass: false,
-      error: `REVIEWER_CALIBRATION_FAILURE: SAFE_CONTROL canary mapped to ${safeDisp.disposition} (expected SUPPRESSED)`
+      error: `FINALIZER_CALIBRATION_FAILURE: SAFE_CONTROL canary mapped to ${safeDisp.disposition} (expected SUPPRESSED)`
     };
   }
 
@@ -3291,7 +3488,7 @@ export function runCalibrationCanaries(repoRoot = process.cwd()) {
   if (positiveDisp.disposition !== 'REPORTABLE') {
     return {
       pass: false,
-      error: `REVIEWER_CALIBRATION_FAILURE: KNOWN_POSITIVE canary mapped to ${positiveDisp.disposition} (expected REPORTABLE)`
+      error: `FINALIZER_CALIBRATION_FAILURE: KNOWN_POSITIVE canary mapped to ${positiveDisp.disposition} (expected REPORTABLE)`
     };
   }
 
@@ -3313,14 +3510,25 @@ export function runCalibrationCanaries(repoRoot = process.cwd()) {
   if (ambDisp.disposition !== 'DEFERRED') {
     return {
       pass: false,
-      error: `REVIEWER_CALIBRATION_FAILURE: AMBIGUOUS canary mapped to ${ambDisp.disposition} (expected DEFERRED)`
+      error: `FINALIZER_CALIBRATION_FAILURE: AMBIGUOUS canary mapped to ${ambDisp.disposition} (expected DEFERRED)`
     };
   }
 
   return {
     pass: true,
-    status: 'CALIBRATED',
+    status: 'FINALIZER_CALIBRATED',
     canariesChecked: 3
+  };
+}
+
+/**
+ * Backward compatibility alias for runDispositionCanaries (R5-P1-02).
+ */
+export function runCalibrationCanaries(repoRoot = process.cwd()) {
+  const res = runDispositionCanaries(repoRoot);
+  return {
+    ...res,
+    status: res.status === 'FINALIZER_CALIBRATED' ? 'CALIBRATED' : res.status
   };
 }
 

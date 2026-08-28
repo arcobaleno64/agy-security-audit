@@ -49,7 +49,12 @@ import {
   computeExecutionEquivalenceKey,
   validateRiskAcceptance,
   verifyToolSelfIntegrity,
-  runCalibrationCanaries
+  runCalibrationCanaries,
+  runDispositionCanaries,
+  prepareReviewContext,
+  readPreparedFile,
+  getPreparedContextFilePath,
+  generateToolIntegrityManifest
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
@@ -66,6 +71,7 @@ const REQUIRED_FILES = [
   'plugin.json',
   'rules/AGENTS.md',
   'skills/security-audit/SKILL.md',
+  'skills/security-audit/tool-integrity-manifest.json',
   'skills/security-audit/scripts/safe-git.mjs',
   'skills/security-audit/scripts/finalize-scan.mjs',
   'skills/security-audit/scripts/render-sarif.mjs',
@@ -73,6 +79,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/build-threat-model.mjs',
   'skills/security-audit/scripts/validate-attack-path.mjs',
   'skills/security-audit/scripts/validate-patch.mjs',
+  'skills/security-audit/scripts/prepare-review-context.mjs',
   'skills/security-audit/scripts/standards-mapping.mjs',
   'skills/security-audit/scripts/run-evals.mjs',
   'skills/security-audit/scripts/run-semantic-eval.mjs',
@@ -1013,7 +1020,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           coverageComplete: true,
           delegationObserved: true
         });
-        if (attFull.verdict !== 'COMPLETE' || attDegraded.verdict !== 'DEGRADED') {
+        if (!attFull.verdict.startsWith('COMPLETE') || attDegraded.verdict !== 'DEGRADED') {
           throw new Error('buildExecutionAttestation failed stage completeness verdict derivation');
         }
 
@@ -1178,6 +1185,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
 
         // 2. Capabilities Attestation in buildExecutionAttestation
         const attConformant = buildExecutionAttestation({
+          delegationObserved: true,
           capabilities: {
             required: ['repository.read'],
             observed: ['repository.read'],
@@ -1185,7 +1193,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
             status: 'CONFORMANT'
           }
         });
-        if (attConformant.capabilities.status !== 'CONFORMANT' || attConformant.verdict !== 'COMPLETE') {
+        if (attConformant.capabilities.status !== 'CONFORMANT' || !attConformant.verdict.startsWith('COMPLETE')) {
           throw new Error('buildExecutionAttestation failed to assert conformant capabilities');
         }
 
@@ -1217,6 +1225,54 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const canRes = runCalibrationCanaries(repoRoot);
         if (!canRes.pass || canRes.status !== 'CALIBRATED') {
           throw new Error(`runCalibrationCanaries failed: ${canRes.error}`);
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-27',
+      name: 'Pre-Context Review Preparation, Fail-Unknown Attestation, Real TCB Verification, & Disposition Canaries (R5)',
+      check: () => {
+        // 1. Pre-Context Secret Protection via prepareReviewContext
+        const prep = prepareReviewContext(repoRoot);
+        if (!prep.success || !prep.manifest) {
+          throw new Error('prepareReviewContext failed to return valid manifest');
+        }
+        const prepAws = readPreparedFile(repoRoot, 'evals/secret-leak/sl-01-aws-key.js');
+        if (!prepAws || !prepAws.includes('<SECRET:class=AWS_ACCESS_KEY:hash=') || prepAws.includes('AKIAIOSFODNN7EXAMPLE')) {
+          throw new Error('Prepared review context contains raw plaintext secret');
+        }
+
+        // 2. Capability Attestation Fail-Unknown
+        const emptyAtt = buildExecutionAttestation();
+        if (emptyAtt.capabilities.status !== 'UNKNOWN' || emptyAtt.capabilities.observed.length !== 0 || emptyAtt.delegationObserved !== false) {
+          throw new Error('buildExecutionAttestation failed to fail-unknown on empty telemetry');
+        }
+        const declaredAtt = buildExecutionAttestation({ delegationObserved: true, capabilities: { declaration: true } });
+        if (declaredAtt.capabilities.status !== 'DECLARED' || declaredAtt.verdict !== 'COMPLETE_DECLARED') {
+          throw new Error('Declared capabilities failed to produce COMPLETE_DECLARED verdict');
+        }
+        const verifiedAtt = buildExecutionAttestation({
+          delegationObserved: true,
+          capabilities: { required: ['repository.read'], observed: ['repository.read'], forbidden: ['filesystem.write'], status: 'CONFORMANT' }
+        });
+        if (verifiedAtt.capabilities.status !== 'CONFORMANT' || verifiedAtt.verdict !== 'COMPLETE_VERIFIED') {
+          throw new Error('Observed conformant capabilities failed to produce COMPLETE_VERIFIED verdict');
+        }
+
+        // 3. Real TCB Verification & Overlap Detection
+        const overlapRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/security-audit'), repoRoot);
+        if (overlapRes.valid || overlapRes.status !== 'TCB_OVERLAP') {
+          throw new Error('verifyToolSelfIntegrity failed to detect TCB_OVERLAP on nested tool root');
+        }
+        const selfAuditRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/security-audit'), repoRoot, { allowSelfAudit: true });
+        if (!selfAuditRes.valid || selfAuditRes.status !== 'SELF_AUDIT_MODE' || selfAuditRes.verifiedScriptsCount !== 8) {
+          throw new Error('verifyToolSelfIntegrity failed self-audit mode verification');
+        }
+
+        // 4. Disposition Canaries & Model Provenance
+        const canaryDisp = runDispositionCanaries(repoRoot);
+        if (!canaryDisp.pass || canaryDisp.status !== 'FINALIZER_CALIBRATED') {
+          throw new Error('runDispositionCanaries failed to return FINALIZER_CALIBRATED');
         }
       }
     }

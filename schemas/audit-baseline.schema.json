@@ -12,6 +12,8 @@
     "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
     "toolVersion": { "type": "string" },
     "targetRevision": { "type": "string" },
+    "modelProvider": { "type": "string" },
+    "modelIdentifier": { "type": "string" },
     "scopeFingerprint": { "type": "string" },
     "surfaceFingerprint": { "type": "string" },
     "threatModelFingerprint": { "type": "string" },

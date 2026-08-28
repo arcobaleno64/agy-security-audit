@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "toolVersion": "1.0.0",
+  "generatedAt": "2026-08-28T06:27:32.352Z",
+  "criticalScripts": {
+    "scripts/safe-git.mjs": "4136727311736b5d388fa6250cf30a91dc6675c6abe87909e572b692acdbb5c0",
+    "scripts/finalize-scan.mjs": "8741c2cc4cd60f7a5622bd04179be1dbb5b381998f1f284c9a5d6811407cb3b9",
+    "scripts/build-inventory.mjs": "53b5123783f6ad81a6fc8dcb0d6a8da6efff3f2387995ca31f77b3e08fcfadb1",
+    "scripts/build-threat-model.mjs": "640222dc2155a6def7a84e1dcf04c928a3a1f6902609594eee57736135bfb33a",
+    "scripts/validate-attack-path.mjs": "df1335244c1c24e0cfd1ee2f5501d7bdc90b08211c1586ec87f40fc4a5dc52ed",
+    "scripts/validate-patch.mjs": "aa8aab1b7854225047b003cc395061a2d21a28ecb61c7d2a63a94e9bb2d9b156",
+    "scripts/render-sarif.mjs": "82a6f4359c4c8ac0c02c2320c844ec086b66c571cd460bf78d454b1446b10da2",
+    "scripts/prepare-review-context.mjs": "1516d9b24774d092fc15ef3d8c88cfe2c8ef5c69b1b837a6f2a9e7165b2f8433"
+  },
+  "manifestDigest": "99dd69861a8e76506e4ed4d108d832b01a1119cb7e6b48fe027da944cafe3117"
+}
