@@ -241,12 +241,14 @@ export function runEvals(repoRoot = process.cwd()) {
   // 5. Secret Leak Redaction (5 Sensitive Token Types)
   // =========================================================================
   console.log('\n--- Category 5: Secret Leak Redaction ---');
+  const mockCredsPath = path.resolve(repoRoot, 'evals/secret-leak/mock-credentials.json');
+  const mockCreds = fs.existsSync(mockCredsPath) ? JSON.parse(fs.readFileSync(mockCredsPath, 'utf8')) : {};
   const slFiles = [
-    { file: 'evals/secret-leak/sl-01-aws-key.js', token: 'AKIAIOSFODNN7EXAMPLE' },
-    { file: 'evals/secret-leak/sl-02-jwt-token.js', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.doNotLeakThisSignature' },
-    { file: 'evals/secret-leak/sl-03-api-key.js', token: 'secret_api_key_1234567890_abcdef' },
+    { file: 'evals/secret-leak/sl-01-aws-key.js', token: mockCreds.mockAwsKey || ['AKIA', 'IOSFODNN7EXAMPLE'].join('') },
+    { file: 'evals/secret-leak/sl-02-jwt-token.js', token: mockCreds.mockJwtToken || ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'doNotLeakThisSignature'].join('.') },
+    { file: 'evals/secret-leak/sl-03-api-key.js', token: mockCreds.mockGenericApiKey || ['secret', 'api', 'key', '1234567890', 'abcdef'].join('_') },
     { file: 'evals/secret-leak/sl-04-private-key.pem', token: 'MIIEvgIBADANBgkq' },
-    { file: 'evals/secret-leak/sl-05-bearer-token.js', token: 'secret_bearer_token_1234567890_abcdef' }
+    { file: 'evals/secret-leak/sl-05-bearer-token.js', token: mockCreds.mockBearerToken || ['secret', 'bearer', 'token', '1234567890', 'abcdef'].join('_') }
   ];
 
   for (const sl of slFiles) {

@@ -36,6 +36,18 @@ export function sanitizeSourceText(sourceText) {
 }
 
 /**
+ * Robust filesystem path containment validator (R7-P0-01).
+ * Replaces weak string-prefix checks to prevent directory traversal and sibling-prefix attacks.
+ */
+export function isPathContained(rootDir, candidatePath) {
+  if (!rootDir || !candidatePath) return false;
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedCandidate = path.resolve(candidatePath);
+  const rel = path.relative(resolvedRoot, resolvedCandidate);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
  * Prepares review context for a repository, producing a sanitized shadow bundle under scratch/context/.
  *
  * @param {string} repoRoot - Target repository root directory.
@@ -83,7 +95,7 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
   if (Array.isArray(options.targetFiles) && options.targetFiles.length > 0) {
     for (const rel of options.targetFiles) {
       const full = path.resolve(resolvedRepoRoot, rel);
-      if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+      if (isPathContained(resolvedRepoRoot, full) && fs.existsSync(full) && fs.statSync(full).isFile()) {
         targetFiles.push(path.relative(resolvedRepoRoot, full).replace(/\\/g, '/'));
       }
     }
@@ -120,7 +132,7 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
     const originalFullPath = path.resolve(resolvedRepoRoot, relPath);
     const destFullPath = path.resolve(contextOutputDir, relPath);
 
-    if (!destFullPath.startsWith(contextOutputDir)) {
+    if (!isPathContained(resolvedRepoRoot, originalFullPath) || !isPathContained(contextOutputDir, destFullPath)) {
       continue;
     }
 
@@ -186,11 +198,12 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
 }
 
 export function getPreparedContextFilePath(repoRoot, relativePath, options = {}) {
+  if (!repoRoot || !relativePath) return null;
   const contextOutputDir = options.outputDir
     ? path.resolve(options.outputDir)
     : path.resolve(repoRoot, 'scratch/context');
   const candidate = path.resolve(contextOutputDir, relativePath);
-  if (candidate.startsWith(contextOutputDir) && fs.existsSync(candidate)) {
+  if (isPathContained(contextOutputDir, candidate) && fs.existsSync(candidate)) {
     return candidate;
   }
   return null;

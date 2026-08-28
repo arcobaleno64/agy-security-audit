@@ -324,8 +324,7 @@ export function computeEvidenceSnapshot(repoRoot, relativePath, line = 1) {
   }
   const rootResolved = path.resolve(repoRoot);
   const resolved = path.resolve(repoRoot, relativePath);
-  const rel = path.relative(rootResolved, resolved);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+  if (!isPathContained(rootResolved, resolved)) {
     return { blobHash: null, lineHash: null, exists: false, error: 'Path traversal outside repository root' };
   }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
@@ -2038,26 +2037,94 @@ export function validateFindingLineage(lineage) {
  * Ingests external deterministic scanner outputs (CodeQL, Semgrep, Trivy, Gitleaks, osv-scanner)
  * via generic SARIF 2.1.0 or JSON adapter for semantic corroboration.
  */
+/**
+ * Cross-platform URI and path resolver for external tool SARIF/JSON evidence (R7-P0-02).
+ * Normalizes Windows backslashes, percent-encoded characters, and file:// URLs regardless of host platform.
+ */
+export function resolveExternalUri(repoRoot, rawUri) {
+  if (!rawUri || rawUri === 'unknown') return 'unknown';
+  let clean = String(rawUri).trim();
+  if (clean.startsWith('file://')) {
+    clean = clean.replace(/^file:\/\/\/?/, '');
+    if (!/^[a-zA-Z]:/.test(clean) && !clean.startsWith('/')) {
+      clean = '/' + clean;
+    }
+  }
+  try {
+    clean = decodeURIComponent(clean);
+  } catch {
+    // ignore decode error
+  }
+  clean = clean.replaceAll('\\', '/');
+  const resolvedRoot = path.resolve(repoRoot).replaceAll('\\', '/');
+  let rel;
+  if (/^[a-zA-Z]:\//.test(clean) || clean.startsWith('/')) {
+    rel = path.relative(resolvedRoot, clean);
+  } else {
+    rel = clean;
+  }
+  return rel.replaceAll('\\', '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+}
+
+/**
+ * External Tool Evidence Interface (R2-P1-06 & R7-P0-02)
+ * Ingests external deterministic scanner outputs (CodeQL, Semgrep, Trivy, Gitleaks, osv-scanner)
+ * via generic SARIF 2.1.0 or JSON adapter for semantic corroboration.
+ * Enforces cross-platform URI normalization, shadow context duplicate detection,
+ * and granular evidence-binding accounting (BOUND, UNBOUND_PATH, UNBOUND_MISSING_FILE, GENERATED_DUPLICATE, OUTSIDE_SCOPE).
+ */
 export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
-  if (!input) return { success: false, error: 'No input provided', findings: [] };
+  if (!input) {
+    return {
+      success: false,
+      error: 'No input provided',
+      parsedCount: 0,
+      canonicalCount: 0,
+      boundCount: 0,
+      unboundCount: 0,
+      duplicateGeneratedCount: 0,
+      count: 0,
+      findings: []
+    };
+  }
   let data = input;
   if (typeof input === 'string') {
     if (fs.existsSync(input)) {
       try {
         data = JSON.parse(fs.readFileSync(input, 'utf8'));
       } catch (err) {
-        return { success: false, error: `Failed reading external evidence file: ${err.message}`, findings: [] };
+        return {
+          success: false,
+          error: `Failed reading external evidence file: ${err.message}`,
+          parsedCount: 0,
+          canonicalCount: 0,
+          boundCount: 0,
+          unboundCount: 0,
+          duplicateGeneratedCount: 0,
+          count: 0,
+          findings: []
+        };
       }
     } else {
       try {
         data = JSON.parse(input);
       } catch {
-        return { success: false, error: 'Input string is neither valid file path nor valid JSON', findings: [] };
+        return {
+          success: false,
+          error: 'Input string is neither valid file path nor valid JSON',
+          parsedCount: 0,
+          canonicalCount: 0,
+          boundCount: 0,
+          unboundCount: 0,
+          duplicateGeneratedCount: 0,
+          count: 0,
+          findings: []
+        };
       }
     }
   }
 
-  const findings = [];
+  const rawItems = [];
   // Case A: Standard SARIF 2.1.0 (Semgrep, CodeQL, Trivy)
   if (data && data.version === '2.1.0' && Array.isArray(data.runs)) {
     for (const run of data.runs) {
@@ -2067,49 +2134,140 @@ export function ingestExternalEvidence(input, repoRoot = process.cwd()) {
         const ruleId = res.ruleId || 'EXTERNAL-FINDING';
         const rawUri = res.locations?.[0]?.physicalLocation?.artifactLocation?.uri || 'unknown';
         const startLine = Number(res.locations?.[0]?.physicalLocation?.region?.startLine || 1);
-        const normUri = normalizeUri(repoRoot, rawUri);
-        const snapshot = computeEvidenceSnapshot(repoRoot, normUri, startLine);
-        findings.push({
+        rawItems.push({
           tool: toolName,
           ruleId,
           title: res.message?.text || ruleId,
-          location: { uri: normUri, startLine },
+          rawUri,
+          startLine,
           severity: String(res.level || 'warning').toUpperCase(),
-          evidenceHash: snapshot.error ? null : snapshot.lineHash,
           rawFinding: res
         });
       }
     }
-    return { success: true, count: findings.length, findings };
-  }
+  } else {
+    // Case B: Array of scanner items or object with results/vulnerabilities
+    const rawList = Array.isArray(data)
+      ? data
+      : (Array.isArray(data?.results) ? data.results : (Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : null));
 
-  // Case B: Array of scanner items or object with results/vulnerabilities
-  const rawList = Array.isArray(data)
-    ? data
-    : (Array.isArray(data?.results) ? data.results : (Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : null));
-
-  if (rawList) {
-    for (const item of rawList) {
-      const tool = item.tool || item.scanner || 'EXTERNAL_SCANNER';
-      const ruleId = item.ruleId || item.cwe || item.id || 'EXTERNAL-FINDING';
-      const rawUri = item.location?.uri || item.file || item.path || 'unknown';
-      const startLine = Number(item.location?.startLine || item.line || 1);
-      const normUri = normalizeUri(repoRoot, rawUri);
-      const snapshot = computeEvidenceSnapshot(repoRoot, normUri, startLine);
-      findings.push({
-        tool,
-        ruleId,
-        title: item.title || item.message || ruleId,
-        location: { uri: normUri, startLine },
-        severity: String(item.severity || 'MEDIUM').toUpperCase(),
-        evidenceHash: snapshot.error ? null : snapshot.lineHash,
-        rawFinding: item
-      });
+    if (rawList) {
+      for (const item of rawList) {
+        const tool = item.tool || item.scanner || 'EXTERNAL_SCANNER';
+        const ruleId = item.ruleId || item.cwe || item.id || 'EXTERNAL-FINDING';
+        const rawUri = item.location?.uri || item.file || item.path || 'unknown';
+        const startLine = Number(item.location?.startLine || item.line || 1);
+        rawItems.push({
+          tool,
+          ruleId,
+          title: item.title || item.message || ruleId,
+          rawUri,
+          startLine,
+          severity: String(item.severity || 'MEDIUM').toUpperCase(),
+          rawFinding: item
+        });
+      }
+    } else {
+      return {
+        success: false,
+        error: 'Unsupported external evidence format',
+        parsedCount: 0,
+        canonicalCount: 0,
+        boundCount: 0,
+        unboundCount: 0,
+        duplicateGeneratedCount: 0,
+        count: 0,
+        findings: []
+      };
     }
-    return { success: true, count: findings.length, findings };
   }
 
-  return { success: false, error: 'Unsupported external evidence format', findings: [] };
+  const resolvedRepoRoot = path.resolve(repoRoot);
+  const findings = [];
+  let canonicalCount = 0;
+  let boundCount = 0;
+  let unboundCount = 0;
+  let duplicateGeneratedCount = 0;
+  const seenSignatures = new Set();
+
+  for (const item of rawItems) {
+    const relPath = resolveExternalUri(resolvedRepoRoot, item.rawUri);
+    const isShadow = relPath.startsWith('scratch/context/');
+    const canonicalUri = isShadow ? relPath.slice('scratch/context/'.length) : relPath;
+    const sig = `${item.tool}::${item.ruleId}::${canonicalUri}::${item.startLine}`;
+
+    let isDuplicate = false;
+    if (isShadow || seenSignatures.has(sig)) {
+      if (seenSignatures.has(sig)) {
+        isDuplicate = true;
+      } else if (isShadow && fs.existsSync(path.resolve(resolvedRepoRoot, canonicalUri))) {
+        const hasOriginal = rawItems.some(other => {
+          const otherRel = resolveExternalUri(resolvedRepoRoot, other.rawUri);
+          return otherRel === canonicalUri && other.ruleId === item.ruleId && other.startLine === item.startLine;
+        });
+        if (hasOriginal) {
+          isDuplicate = true;
+        }
+      }
+    }
+
+    let evidenceBinding;
+    let evidenceHash = null;
+
+    if (isDuplicate) {
+      evidenceBinding = 'GENERATED_DUPLICATE';
+      duplicateGeneratedCount++;
+      const snap = computeEvidenceSnapshot(resolvedRepoRoot, canonicalUri, item.startLine);
+      evidenceHash = snap.error ? null : snap.lineHash;
+    } else {
+      seenSignatures.add(sig);
+      canonicalCount++;
+      const fullPath = path.resolve(resolvedRepoRoot, canonicalUri);
+      if (!isPathContained(resolvedRepoRoot, fullPath)) {
+        evidenceBinding = 'OUTSIDE_SCOPE';
+        unboundCount++;
+      } else {
+        const snap = computeEvidenceSnapshot(resolvedRepoRoot, canonicalUri, item.startLine);
+        if (snap.exists && !snap.error && snap.lineHash) {
+          evidenceBinding = 'BOUND';
+          evidenceHash = snap.lineHash;
+          boundCount++;
+        } else if (!snap.exists) {
+          evidenceBinding = 'UNBOUND_MISSING_FILE';
+          unboundCount++;
+        } else {
+          evidenceBinding = 'UNBOUND_PATH';
+          unboundCount++;
+        }
+      }
+    }
+
+    findings.push({
+      tool: item.tool,
+      ruleId: item.ruleId,
+      title: item.title,
+      location: {
+        uri: isShadow ? canonicalUri : relPath,
+        startLine: item.startLine,
+        ...(isShadow ? { originalShadowUri: relPath } : {})
+      },
+      severity: item.severity,
+      evidenceBinding,
+      evidenceHash,
+      rawFinding: item.rawFinding
+    });
+  }
+
+  return {
+    success: true,
+    parsedCount: rawItems.length,
+    canonicalCount,
+    boundCount,
+    unboundCount,
+    duplicateGeneratedCount,
+    count: canonicalCount,
+    findings
+  };
 }
 
 /**
@@ -3762,14 +3920,19 @@ if (isDirectExecution) {
       const repoRoot = path.resolve(repoRootArg);
       const ingested = ingestExternalEvidence(externalSarifPath, repoRoot);
       console.log(`\n=== External Evidence Ingestion: ${externalSarifPath} ===`);
-      console.log(`Success:                 ${ingested.success}`);
-      console.log(`Total Findings Ingested: ${ingested.count}`);
+      console.log(`Success:                   ${ingested.success}`);
+      console.log(`Parsed Findings Count:     ${ingested.parsedCount}`);
+      console.log(`Canonical Findings Count:  ${ingested.canonicalCount}`);
+      console.log(`Bound Findings Count:      ${ingested.boundCount}`);
+      console.log(`Unbound Findings Count:    ${ingested.unboundCount}`);
+      console.log(`Generated Duplicates:      ${ingested.duplicateGeneratedCount}`);
       if (ingested.findings && ingested.findings.length > 0) {
-        console.log('\nIngested Findings:');
+        console.log('\nIngested Findings Sample:');
         ingested.findings.slice(0, 15).forEach((f, idx) => {
           const locStr = f.location ? `${f.location.uri}:${f.location.startLine}` : 'unknown';
           const toolStr = f.tool ? ` [${f.tool}]` : '';
-          console.log(`  [${idx + 1}] ${f.ruleId || 'N/A'}${toolStr} -> ${locStr}`);
+          const bindingStr = f.evidenceBinding ? ` [${f.evidenceBinding}]` : '';
+          console.log(`  [${idx + 1}] ${f.ruleId || 'N/A'}${toolStr} -> ${locStr}${bindingStr}`);
           if (f.evidenceHash) {
             console.log(`      Evidence Hash: ${f.evidenceHash.slice(0, 16)}...`);
           }

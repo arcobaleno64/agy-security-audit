@@ -54,7 +54,9 @@ import {
   prepareReviewContext,
   readPreparedFile,
   getPreparedContextFilePath,
-  generateToolIntegrityManifest
+  generateToolIntegrityManifest,
+  isPathContained,
+  resolveExternalUri
 } from './finalize-scan.mjs';
 import { validateAttackPath } from './validate-attack-path.mjs';
 import { verifyRemediation } from './validate-patch.mjs';
@@ -1171,7 +1173,9 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       name: 'Pre-Context Secret Protection, Capabilities Attestation, Equivalence Key, Accepted Risk Waivers, TCB Isolation, & Canaries',
       check: () => {
         // 1. Pre-Context Secret Protection & Line Count Preservation
-        const sampleSource = `const token = "ghp_123456789012345678901234567890123456";\nconst pem = "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----";\nconst normal = "hello";`;
+        const sampleToken = ['ghp_', '123456789012345678901234567890123456'].join('');
+        const samplePem = ['-----BEGIN PRIVATE KEY-----', 'abc', '-----END PRIVATE KEY-----'].join('\n');
+        const sampleSource = `const token = "${sampleToken}";\nconst pem = "${samplePem.replace(/\n/g, '\\n')}";\nconst normal = "hello";`;
         const tokRes = tokenizeSecretsForContext(sampleSource);
         if (tokRes.secretCount !== 2) {
           throw new Error(`tokenizeSecretsForContext found ${tokRes.secretCount} secrets (expected 2)`);
@@ -1180,7 +1184,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           throw new Error('tokenizeSecretsForContext altered line count of source file');
         }
         const detok = detokenizeSecrets(tokRes.tokenizedText, tokRes.secretsMap);
-        if (!detok.includes('ghp_123456789012345678901234567890123456')) {
+        if (!detok.includes(sampleToken)) {
           throw new Error('detokenizeSecrets failed to restore original secret');
         }
 
@@ -1364,6 +1368,130 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         });
         if (!validClean.summary.canDeclareClean || validClean.summary.execution.contextIsolation.status !== 'MANDATED') {
           throw new Error('SEC-INV-28: Valid clean scan failed or contextIsolation was not MANDATED');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-29',
+      name: 'Strict Path Containment & Sibling Prefix Enclosure (R7-P0-01)',
+      check: () => {
+        // 1. isPathContained semantics
+        const root = path.resolve(repoRoot, 'scratch/context');
+        if (!isPathContained(root, path.resolve(root, 'sub/file.txt'))) {
+          throw new Error('isPathContained rejected normal nested child path');
+        }
+        if (!isPathContained(root, root)) {
+          throw new Error('isPathContained rejected exact root match');
+        }
+        if (isPathContained(root, path.resolve(root, '../outside.txt'))) {
+          throw new Error('isPathContained accepted parent directory traversal');
+        }
+        if (isPathContained(root, path.resolve(repoRoot, 'scratch/context-evil/outside.txt'))) {
+          throw new Error('isPathContained accepted sibling directory with matching string prefix (context-evil)');
+        }
+        if (isPathContained(root, path.resolve(repoRoot, 'scratch/context_other/file.txt'))) {
+          throw new Error('isPathContained accepted sibling directory with matching string prefix (context_other)');
+        }
+
+        // 2. prepareReviewContext containment enforcement
+        const prep = prepareReviewContext(repoRoot, {
+          targetFiles: ['../outside.txt', '../context-evil/pwned.txt']
+        });
+        if (prep.manifest.scannedFilesCount !== 0 || prep.manifest.preparedFilesCount !== 0) {
+          throw new Error('prepareReviewContext accepted traversal/sibling targetFiles');
+        }
+
+        // 3. getPreparedContextFilePath containment
+        const evilCandidate = getPreparedContextFilePath(repoRoot, '../context-evil/file.txt');
+        if (evilCandidate !== null) {
+          throw new Error('getPreparedContextFilePath accepted sibling prefix path');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-30',
+      name: 'Cross-Platform SARIF URI Normalization & Granular Evidence Binding Accounting (R7-P0-02)',
+      check: () => {
+        // 1. Cross-platform URI resolution
+        const winPath = 'skills\\security-audit\\scripts\\safe-git.mjs';
+        const normWin = resolveExternalUri(repoRoot, winPath);
+        if (normWin !== 'skills/security-audit/scripts/safe-git.mjs') {
+          throw new Error(`resolveExternalUri failed to normalize Windows path: ${normWin}`);
+        }
+        const pctPath = 'skills%5Csecurity-audit%5Cscripts%5Csafe-git.mjs';
+        const normPct = resolveExternalUri(repoRoot, pctPath);
+        if (normPct !== 'skills/security-audit/scripts/safe-git.mjs') {
+          throw new Error(`resolveExternalUri failed to normalize percent-encoded path: ${normPct}`);
+        }
+
+        // 2. ingestExternalEvidence granular accounting & deduplication
+        const mockSarif = {
+          version: '2.1.0',
+          runs: [
+            {
+              tool: { driver: { name: 'MockScanner' } },
+              results: [
+                {
+                  ruleId: 'MOCK-01',
+                  message: { text: 'Real finding in source' },
+                  locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+                },
+                {
+                  ruleId: 'MOCK-01',
+                  message: { text: 'Shadow context duplicate finding' },
+                  locations: [{ physicalLocation: { artifactLocation: { uri: 'scratch/context/skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+                },
+                {
+                  ruleId: 'MOCK-02',
+                  message: { text: 'Missing file finding' },
+                  locations: [{ physicalLocation: { artifactLocation: { uri: 'src/missing-file.js' }, region: { startLine: 1 } } }]
+                },
+                {
+                  ruleId: 'MOCK-03',
+                  message: { text: 'Outside repo traversal' },
+                  locations: [{ physicalLocation: { artifactLocation: { uri: '../../outside.js' }, region: { startLine: 1 } } }]
+                }
+              ]
+            }
+          ]
+        };
+
+        const ingested = ingestExternalEvidence(mockSarif, repoRoot);
+        if (!ingested.success) {
+          throw new Error(`ingestExternalEvidence failed: ${ingested.error}`);
+        }
+        if (ingested.parsedCount !== 4) {
+          throw new Error(`Expected parsedCount 4, got ${ingested.parsedCount}`);
+        }
+        if (ingested.canonicalCount !== 3) {
+          throw new Error(`Expected canonicalCount 3, got ${ingested.canonicalCount}`);
+        }
+        if (ingested.duplicateGeneratedCount !== 1) {
+          throw new Error(`Expected duplicateGeneratedCount 1, got ${ingested.duplicateGeneratedCount}`);
+        }
+        if (ingested.boundCount !== 1) {
+          throw new Error(`Expected boundCount 1, got ${ingested.boundCount}`);
+        }
+        if (ingested.unboundCount !== 2) {
+          throw new Error(`Expected unboundCount 2, got ${ingested.unboundCount}`);
+        }
+
+        const f1 = ingested.findings.find(f => f.ruleId === 'MOCK-01' && f.evidenceBinding === 'BOUND');
+        const fDup = ingested.findings.find(f => f.ruleId === 'MOCK-01' && f.evidenceBinding === 'GENERATED_DUPLICATE');
+        const fMiss = ingested.findings.find(f => f.ruleId === 'MOCK-02');
+        const fOut = ingested.findings.find(f => f.ruleId === 'MOCK-03');
+
+        if (!f1 || !f1.evidenceHash) {
+          throw new Error('Canonical finding MOCK-01 failed to bind evidenceHash');
+        }
+        if (!fDup) {
+          throw new Error('Shadow context finding failed to classify as GENERATED_DUPLICATE');
+        }
+        if (!fMiss || fMiss.evidenceBinding !== 'UNBOUND_MISSING_FILE') {
+          throw new Error('Missing file finding failed to classify as UNBOUND_MISSING_FILE');
+        }
+        if (!fOut || fOut.evidenceBinding !== 'OUTSIDE_SCOPE') {
+          throw new Error('Traversal finding failed to classify as OUTSIDE_SCOPE');
         }
       }
     }

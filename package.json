@@ -23,6 +23,7 @@
     "agy",
     "security-audit",
     "claude-security",
+    "codex-security",
     "sarif",
     "cvss-v4",
     "subagents",
