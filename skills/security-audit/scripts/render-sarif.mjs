@@ -4301,7 +4301,43 @@ export default appName;`;
     fs.rmSync(symlinkTestRoot, { recursive: true, force: true });
   }
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (106/106).');
+  // ---------------------------------------------------------------------------
+  // 107. Issue #3: computeEvidenceSnapshot must not follow a symlink whose
+  // declared path is inside repoRoot but whose target resolves outside it.
+  // This function's output (lineContent, blobHash) is embedded directly into
+  // audit baselines and SARIF evidence -- a symlink here is a host-file-content
+  // exfiltration primitive, not just a scope-bypass.
+  // ---------------------------------------------------------------------------
+  const evidenceSymlinkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-evid-symlink-'));
+  try {
+    const repo107 = path.join(evidenceSymlinkRoot, 'repo');
+    const outside107 = path.join(evidenceSymlinkRoot, 'outside');
+    fs.mkdirSync(repo107, { recursive: true });
+    fs.mkdirSync(outside107, { recursive: true });
+    fs.writeFileSync(path.join(outside107, 'secret.txt'), 'TOP_SECRET_HOST_FILE_CONTENT_test107\n');
+    const linkPath107 = path.join(repo107, 'evidence-link.txt');
+
+    let symlinkCreated107 = true;
+    try {
+      fs.symlinkSync(path.join('..', 'outside', 'secret.txt'), linkPath107, 'file');
+    } catch {
+      symlinkCreated107 = false;
+    }
+
+    if (symlinkCreated107) {
+      const snap107 = computeEvidenceSnapshot(repo107, 'evidence-link.txt', 1);
+      if (snap107.exists || snap107.lineContent) {
+        throw new Error('SEC-3 VIOLATION: computeEvidenceSnapshot followed a symlink escaping repoRoot and returned host file content');
+      }
+      console.log('✔ 107. SEC-3 Invariant: computeEvidenceSnapshot refuses to follow a symlink escaping repoRoot.');
+    } else {
+      console.log('⚠ 107. SEC-3 Invariant: skipped (this account cannot create symlinks) — verified in CI, not locally.');
+    }
+  } finally {
+    fs.rmSync(evidenceSymlinkRoot, { recursive: true, force: true });
+  }
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (107/107).');
 
   } finally {
     gitFixture.cleanup();

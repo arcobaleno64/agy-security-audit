@@ -353,8 +353,23 @@ export function computeEvidenceSnapshot(repoRoot, relativePath, line = 1) {
   if (!isPathContained(rootResolved, resolved)) {
     return { blobHash: null, lineHash: null, exists: false, error: 'Path traversal outside repository root' };
   }
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+  // Issue #3: lstat, not stat, so a symlink is rejected rather than followed
+  // -- isPathContained above only validates the *declared* path lexically and
+  // says nothing about where a symlink target actually resolves.
+  let entryStat;
+  try {
+    entryStat = fs.lstatSync(resolved);
+  } catch {
     return { blobHash: null, lineHash: null, exists: false };
+  }
+  if (entryStat.isSymbolicLink()) {
+    return { blobHash: null, lineHash: null, exists: false, error: 'Evidence path is a symlink; symlinks are not followed for evidence snapshots' };
+  }
+  if (!entryStat.isFile()) {
+    return { blobHash: null, lineHash: null, exists: false };
+  }
+  if (!isRealPathContained(rootResolved, resolved)) {
+    return { blobHash: null, lineHash: null, exists: false, error: 'Resolved evidence path escapes repository root' };
   }
   try {
     const content = fs.readFileSync(resolved, 'utf8');
@@ -1009,6 +1024,30 @@ export function isPathContained(repoRoot, filePath) {
   const rootResolved = path.resolve(repoRoot);
   const relative = path.relative(rootResolved, resolved);
   return !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * Symlink-aware containment check (issue #3): isPathContained above is purely
+ * lexical and says nothing about where a symlink actually resolves. A repo
+ * can contain a tracked symlink whose own path is safely inside repoRoot
+ * while its target is not -- confirmed exploitable via computeEvidenceSnapshot,
+ * which reads through fs.readFileSync() (follows symlinks) to build the
+ * evidence content embedded in audit baselines and SARIF output. Mirrors the
+ * realpath check already applied in prepare-review-context.mjs (issue #2)
+ * and validate-attack-path.mjs.
+ */
+export function isRealPathContained(repoRoot, filePath) {
+  if (!repoRoot || !filePath) return false;
+  try {
+    const rootReal = fs.realpathSync(path.resolve(repoRoot));
+    const candidateReal = fs.realpathSync(path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath));
+    const rel = path.relative(rootReal, candidateReal);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  } catch {
+    // A path that cannot be resolved (dangling symlink, permission error) is
+    // not affirmatively proven safe -- default-deny.
+    return false;
+  }
 }
 
 /**
