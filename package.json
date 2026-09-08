@@ -19,9 +19,11 @@
     "test:stability": "node skills/security-audit/scripts/run-stability-eval.mjs",
     "test:stability-harness": "node skills/security-audit/scripts/run-stability-eval.mjs",
     "test:stability-recorded": "node skills/security-audit/scripts/run-stability-eval.mjs --recorded",
-    "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs"
+    "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs",
+    "bump-version": "node scripts/bump-version.mjs",
+    "check-version": "node scripts/bump-version.mjs --check",
+    "regen-integrity-manifest": "node scripts/regen-integrity-manifest.mjs"
   },
-
   "keywords": [
     "antigravity",
     "agy",

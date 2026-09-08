@@ -1,0 +1,119 @@
+name: Release
+on:
+  push:
+    tags:
+      - "v*"
+
+# Read-only by default. The write token is granted to one job, and that job
+# runs no code from the tag — see the comment on `publish`.
+permissions:
+  contents: read
+
+jobs:
+  # Everything that executes repository code, with a token that cannot publish.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+      # No dependencies and no lockfile by design.
+      - name: Assert tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag v$tag does not match package.json version $pkg. Run 'npm run bump-version $tag' before tagging." >&2
+            exit 1
+          fi
+          echo "Tag and package.json agree on $pkg."
+      # What users install is `main`, not this tag: `agy plugin install` resolves
+      # the repository's default branch, so a bump that merged to main is already
+      # live before this workflow ever runs. A tag that main cannot reach
+      # publishes a release for code nobody receives.
+      - name: Assert the tag is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${GITHUB_REF_NAME}" -q .status)"
+          case "$status" in
+            identical|behind) ;;
+            *)
+              echo "::error::$GITHUB_REF_NAME is not reachable from main (compare status: $status). Users install from main, so this tag would publish a release nobody can install." >&2
+              exit 1
+              ;;
+          esac
+          echo "$GITHUB_REF_NAME is reachable from main."
+      - run: npm test
+      - run: npm run test:evals
+      - run: npm run test:semantic
+      - run: npm run test:discovery
+      - run: npm run test:stability
+      - run: npm run check-version
+      - run: npm run check:release
+      # No equivalent of `claude plugin validate --strict` here: `agy plugin
+      # validate` needs the proprietary, authenticated Antigravity CLI binary,
+      # which cannot run on a GitHub-hosted runner. This gate is deliberately
+      # skipped, not silently absent -- validate locally with `agy plugin
+      # validate .` before tagging.
+
+  publish:
+    # The only job granted a write token below, and deliberately the only one
+    # with no checkout and no repository code of any kind: whoever can push a
+    # `v*` tag chooses what `npm test` and this tag's scripts run, and that must
+    # not share a job with a token that can publish.
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" -q .body)"
+          released_at="$(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S')"
+          {
+            printf 'Released: %s (UTC+8 台北)\n\n' "$released_at"
+            printf '%s\n' "$notes"
+          } > release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag
+
+  # Everything above tests the working copy the workflow was handed. This tests
+  # what a user gets: a bare clone of the published ref, with no build step --
+  # exactly how AGY's plugin install resolves a repository.
+  verify-published:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+      - name: Clone the published tag and run its own gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          git clone --quiet --depth 1 --branch "$GITHUB_REF_NAME" \
+            "https://github.com/${GITHUB_REPOSITORY}.git" published
+          cd published
+          if [ -d node_modules ]; then
+            echo "::error::The published tree ships node_modules; this plugin is meant to run with no installed dependencies." >&2
+            exit 1
+          fi
+          reported="$(node -p "require('./package.json').version")"
+          if [ "$reported" != "$tag" ]; then
+            echo "::error::The published $GITHUB_REF_NAME reports package.json version $reported." >&2
+            exit 1
+          fi
+          npm test
+          npm run check:release
+          echo "A bare clone of $GITHUB_REF_NAME passes its own release gate and reports $reported."

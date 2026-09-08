@@ -18,6 +18,12 @@ import { resolveStandardsMapping, detectDependencyBoundary } from './standards-m
 export { categorizeDirectory, classifyFile, resolveStandardsMapping, detectDependencyBoundary };
 import { prepareReviewContext, getPreparedContextFilePath, readPreparedFile } from './prepare-review-context.mjs';
 export { prepareReviewContext, getPreparedContextFilePath, readPreparedFile };
+
+// Single source of truth for the tool release version stamped into attestations,
+// baselines, and the TCB manifest. `scripts/bump-version.mjs` rewrites this line
+// (and package.json, and tool-integrity-manifest.json) together so a release
+// cannot bump one without the others going stale.
+export const TOOL_VERSION = '1.0.0';
 import {
   loadProjectSecurityContext,
   detectContextDrift,
@@ -568,7 +574,7 @@ export function buildAuditBaseline({
     coverageFingerprint: covHash,
     policyVersion,
     promptContractVersion,
-    toolVersion: '1.0.0',
+    toolVersion: TOOL_VERSION,
     modelProvider,
     modelIdentifier
   });
@@ -590,7 +596,7 @@ export function buildAuditBaseline({
 
   return {
     schemaVersion: '1.0.0',
-    toolVersion: '1.0.0',
+    toolVersion: TOOL_VERSION,
     targetRevision: rev,
     modelProvider,
     modelIdentifier,
@@ -2481,7 +2487,7 @@ export function finalizeScan({
     modelProvider: modelProvenance?.modelProvider || 'antigravity-orchestrator',
     modelIdentifier: modelProvenance?.modelIdentifier || 'unknown',
     executionDate: new Date().toISOString(),
-    toolVersion: '1.0.0',
+    toolVersion: TOOL_VERSION,
     promptContractVersion: '1.0.0',
     systemPromptIntegrity: modelProvenance?.systemPromptIntegrity || 'UNKNOWN'
   };
@@ -3461,7 +3467,7 @@ export function validateCanonicalFindings(findings, repoRoot = process.cwd(), op
       modelProvider: options.modelProvider || 'antigravity-orchestrator',
       modelIdentifier: options.modelIdentifier || 'unknown',
       executionDate: new Date().toISOString(),
-      toolVersion: '1.0.0',
+      toolVersion: TOOL_VERSION,
       promptContractVersion: '1.0.0',
       systemPromptIntegrity: 'UNKNOWN'
     };
@@ -3982,7 +3988,7 @@ export function generateToolIntegrityManifest(toolRoot = null) {
 
   return {
     schemaVersion: '1.0.0',
-    toolVersion: '1.0.0',
+    toolVersion: TOOL_VERSION,
     generatedAt: new Date().toISOString(),
     manifestDigest,
     criticalScripts: sortedDigests
