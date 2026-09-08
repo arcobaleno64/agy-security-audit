@@ -67,4 +67,22 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 
 ## 3. Reporting Vulnerabilities
 
-If you discover a security vulnerability or design flaw in this plugin, please open a private security advisory or report it responsibly to the project maintainers.
+If you discover a potential security vulnerability within `agy-security-audit`, please **do not** open a public GitHub issue.
+
+Instead, report it responsibly via either of:
+- **Private Security Disclosure** (preferred): Submit via [GitHub Security Advisories](https://github.com/arcobaleno64/agy-security-audit/security/advisories/new). It keeps the report, the discussion, and the eventual advisory in one place.
+- **Email**: <arcobaleno830623@gmail.com>, for anyone who cannot or would rather not use GitHub. This address is monitored by the maintainer; it is not a team inbox, so expect one person's response times.
+
+### Response Expectations
+- **Initial Response**: Within 48 hours.
+- **Status Update**: Within 7 business days.
+- **Fix & Patch Advisory**: Released in a timely patch release.
+
+### Supported Versions
+
+Only the current MINOR line is supported. Update this table with every MINOR bump.
+
+| Version | Supported |
+|---|---|
+| 1.0.x | :white_check_mark: |
+| < 1.0.0 | :x: |
