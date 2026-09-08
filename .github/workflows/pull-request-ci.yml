@@ -1,0 +1,35 @@
+name: Pull Request CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ci:
+    # Windows and Linux both carry assertions the other cannot: safe-git.mjs
+    # isolates the git config path with NUL on Windows and /dev/null elsewhere
+    # (skills/security-audit/scripts/safe-git.mjs:13-32), so a Linux-only runner
+    # would never execute the Windows branch and vice versa. macOS is included
+    # for parity with the sibling agy-plugin-cc project even though no branch is
+    # macOS-specific today.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+      # No dependencies and no lockfile by design (check:release asserts 0
+      # external dependencies), so there is nothing for `npm ci`/`npm install`
+      # to do — the scripts run directly under Node's own module resolution.
+      - run: npm test
+      - run: npm run test:evals
+      - run: npm run test:semantic
+      - run: npm run test:discovery
+      - run: npm run test:stability
+      - run: npm run check:release

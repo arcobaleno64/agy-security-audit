@@ -1,6 +1,8 @@
-# Antigravity (AGY) Security Audit Plugin (`security-audit`) v1.0.0
+# agy-security-audit (plugin ID: `security-audit`) v1.0.0
 
 Evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Google Antigravity (AGY)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
+
+Companion project to [`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc): where `agy-plugin-cc` delegates review work from Claude Code to AGY as a cross-model reviewer, `agy-security-audit` is the security-assurance plugin that runs natively inside AGY itself.
 
 ## 核心公理：權威聲明以不通過為前提 (Default-Deny on Authority Claims)
 所有權威聲明（弱點候選項目、補丁修復與覆蓋率完整性）預設為 **`UNVERIFIED`**。受審代碼本身不預設存在漏洞，審查合理產生 0 候選項（Zero Findings，無配額壓力）；候選項目無法自行宣告 `CONFIRMED` 或 `REPORTABLE`；在無驗證者共識、法定人數不足（< 2 票）或 0 票狀態下一律強制歸類為 `DEFERRED` (`NEEDS_MANUAL_REVIEW`)。當目錄核算覆蓋率不完整時，系統嚴格禁止宣告代碼庫為乾淨（Clean Claim Fail-Closed）。宣告乾淨（Clean）代表在界定範圍內無已驗證且未修復之實質弱點與證據缺口，屬於有界保證（Bounded Assurance），而非萬無一失的絕對認證。

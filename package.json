@@ -4,6 +4,10 @@
   "description": "Antigravity (AGY) evidence-backed, multi-stage security assurance plugin aligned with NIST SSDF, OWASP ASVS, and industry verification standards.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arcobaleno64/agy-security-audit.git"
+  },
   "scripts": {
     "test": "node skills/security-audit/scripts/render-sarif.mjs --test",
     "test:invariants": "node skills/security-audit/scripts/render-sarif.mjs --test",

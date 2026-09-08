@@ -1,0 +1,24 @@
+name: Semgrep
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Catch new rules landing in the `auto` ruleset between pushes.
+    - cron: '0 5 * * 1'
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep@sha256:51c9f53a4fce0d55e9abd08d7b96968654248a4b1122e77f20e0a49c0072446c # :latest, resolved 2026-09-08
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - run: semgrep scan --config auto --sarif --output semgrep.sarif .
+      - uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
