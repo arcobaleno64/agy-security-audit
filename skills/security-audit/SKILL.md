@@ -15,6 +15,7 @@ An evidence-driven security assurance workflow for Google Antigravity (AGY), ali
 > An audited component is not presumed vulnerable; a completed review may legitimately produce zero candidates.
 > No candidate finding is certified as `REPORTABLE / CONFIRMED`, no candidate finding is dismissed as `SUPPRESSED / FALSE_POSITIVE`, and no patch is marked `VERIFIED` without affirmative, reproducible, evidence-bound proof.
 > A clean audit result means defined coverage is complete, no validated reportable findings remain, and no required evidence gaps remain. It represents bounded assurance within declared scope, not a universal safety certification.
+> **This axiom binds the turn's conversational response, not only the written artifacts.** A number or verdict stated in chat that does not trace to `canonical-findings.json` is a Default-Deny violation, even when every artifact on disk is correct.
 
 ## Purpose Boundary
 
@@ -143,6 +144,10 @@ When executing security review, the skill operates under one of three distinct i
 
 2. Save the Markdown report as a **Brain Artifact** in `<appDataDir>\brain\<conversation-id>\AGY-SECURITY-RESULTS.md` via `write_to_file`.
 3. If remediation patches were requested, review [patching-jail.md](./references/patching-jail.md) and produce dual-track outputs in `scratch/patches/` with `git apply --check` validation.
+4. **Chat-Facing Summary Is Not a Separate Claim Surface**: The turn's conversational response is read before the certified artifacts, often instead of them, so it is bound by the same Default-Deny axiom as `canonical-findings.json` — never a looser one.
+   - State a CVSS v4 numeric score in prose **only if** `cvssV4.score` in the finalized canonical output for that finding is non-null. Quote that exact number; do not round, estimate, or reconstruct one from the vector or from `calibratedSeverity`.
+   - If `cvssV4.score` is `null`, the summary must say so in the same words the report uses — "Unrated" / "Vector-Only" — never a plausible-sounding number. `calibratedSeverity` (e.g. `CRITICAL`) may still be stated; it is a real, ballot-backed field. A numeric score that no ballot supplied is not.
+   - Before sending the summary, re-read it against `canonical-findings.json`: every number and severity label in the prose must trace to a field in that file. A claim that does not trace back is fabrication, not summarization, regardless of how confident it reads.
 
 
 ---
