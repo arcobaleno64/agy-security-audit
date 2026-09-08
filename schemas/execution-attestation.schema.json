@@ -26,6 +26,7 @@
     "coverageComplete": { "type": "boolean" },
     "delegationRequired": { "type": "boolean" },
     "delegationObserved": { "type": "boolean" },
+    "verificationStatus": { "type": "string" },
     "verdict": { "type": "string", "enum": ["COMPLETE", "COMPLETE_VERIFIED", "COMPLETE_DECLARED", "INCOMPLETE", "DEGRADED"] },
     "capabilities": {
       "type": "object",

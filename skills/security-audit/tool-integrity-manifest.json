@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.0.0",
-  "generatedAt": "2026-08-28T14:47:08.160Z",
-  "manifestDigest": "19768abce0fb3f4f476d36f3e4b0e9e100c90db0f95b2af1101ab645a628ecc1",
+  "generatedAt": "2026-09-08T03:20:12.148Z",
+  "manifestDigest": "6155b6677becf466141c37dcddeb4669574fb984a8e45d2c5921e156dd37056f",
   "criticalScripts": {
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
     "scripts/build-threat-model.mjs": "2ca2b6207947c7bea10f2d28468387562dc9f9df47db34a6d7da47d4dbfc8265",
-    "scripts/finalize-scan.mjs": "3cc652d4042966dc726ddcf5b2cfadc79a0fa3c743af87190d65899116e8b965",
+    "scripts/finalize-scan.mjs": "29b67ac5132df65025ea9fbbf0dcdb0c59f18cda0691bf04e678259e44abda72",
     "scripts/prepare-review-context.mjs": "81f28e58606f6709584086f97d4ca31b06c106032e6c420052424158fb72e3eb",
     "scripts/project-context.mjs": "472de5a9a8dfa08137978f1b28cad21487a4292832a1172f67db58d24c8e34ab",
     "scripts/render-sarif.mjs": "35af4b7af230de6bff00f49a9f1e929d1f89ae7f72516365f3e2ebef538fd784",

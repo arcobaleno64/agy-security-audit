@@ -2332,13 +2332,16 @@ export function buildExecutionAttestation({
   failedStages = [],
   coverageComplete = true,
   delegationObserved = false,
+  zeroCandidates = false,
+  canonicalFindingsCount = null,
   capabilities = null,
   contextIsolation = null
 } = {}) {
+  const isZeroCandidates = Boolean(zeroCandidates || canonicalFindingsCount === 0);
   const allPossibleStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'];
   const requiredStages = auditIntent === 'REGRESSION'
-    ? ['INVENTORY', 'VERIFICATION_PANEL', 'FINALIZATION']
-    : allPossibleStages;
+    ? (isZeroCandidates ? ['INVENTORY', 'FINALIZATION'] : ['INVENTORY', 'VERIFICATION_PANEL', 'FINALIZATION'])
+    : (isZeroCandidates ? ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'FINALIZATION'] : allPossibleStages);
 
   const safeExecuted = Array.isArray(executedStages) ? executedStages : [];
   const safeFailed = Array.isArray(failedStages) ? failedStages : [];
@@ -2409,9 +2412,9 @@ export function buildExecutionAttestation({
     verdict = 'INCOMPLETE';
   } else if (!stagesComplete) {
     verdict = 'DEGRADED';
-  } else if (capObj.status === 'CONFORMANT' && capObj.attestationConfidence === 'OBSERVED' && delegationObserved) {
+  } else if (capObj.status === 'CONFORMANT' && capObj.attestationConfidence === 'OBSERVED' && (delegationObserved || isZeroCandidates)) {
     verdict = 'COMPLETE_VERIFIED';
-  } else if (capObj.status === 'DECLARED' || (stagesComplete && (delegationObserved || capObj.status === 'UNKNOWN'))) {
+  } else if (capObj.status === 'DECLARED' || (stagesComplete && (delegationObserved || isZeroCandidates || capObj.status === 'UNKNOWN'))) {
     verdict = 'COMPLETE_DECLARED';
   } else {
     verdict = 'DEGRADED';
@@ -2431,8 +2434,9 @@ export function buildExecutionAttestation({
     skippedStages,
     failedStages: safeFailed,
     coverageComplete: Boolean(coverageComplete),
-    delegationRequired: true,
-    delegationObserved: Boolean(delegationObserved),
+    delegationRequired: !isZeroCandidates,
+    delegationObserved: isZeroCandidates ? false : Boolean(delegationObserved),
+    verificationStatus: isZeroCandidates ? 'NOT_APPLICABLE_ZERO_CANDIDATES' : (delegationObserved ? 'VERIFIED_PANEL' : 'UNVERIFIED'),
     verdict,
     capabilities: capObj,
     contextIsolation: contextIsolation || {
@@ -2756,7 +2760,25 @@ export function finalizeScan({
   const suppressedCount = canonicalFindings.filter(f => f.disposition === 'SUPPRESSED').length;
   const acceptedRiskCount = canonicalFindings.filter(f => f.disposition === 'ACCEPTED_RISK').length;
 
-  // R10-P0-01: Execution stages accounting under Default-Deny.
+  // R11-P0-01 & R11-P1-01: Matrix completion authority & critical zero second opinion
+  const unresolvedMatrixCells = safeMatrix.filter(c =>
+    ['PENDING', 'PENDING_DISCOVERY', 'PENDING_SECOND_OPINION', 'UNRESOLVED'].includes(c.status)
+  );
+
+  const unconfirmedCriticalZeros = safeMatrix.filter(c =>
+    (c.criticality === 'critical' || c.isCritical === true) &&
+    c.status === 'REVIEWED_NO_CANDIDATE'
+  );
+
+  const hasUnresolvedCells = unresolvedMatrixCells.length > 0;
+  const hasUnconfirmedCriticalZeros = unconfirmedCriticalZeros.length > 0;
+
+  // In DISCOVERY mode, matrix is mandatory for clean. In REGRESSION mode, if a matrix is provided, it must also be complete.
+  const isMatrixComplete = safeMatrix.length > 0
+    ? (matrixValidation.valid && !hasUnresolvedCells && !hasUnconfirmedCriticalZeros)
+    : (safeAuditIntent === 'REGRESSION');
+
+  // R10-P0-01 & R11-P0-01: Execution stages accounting under Default-Deny.
   // Spoofed stages are strictly rejected: every claimed stage must be verified by physical artifacts.
   const claimedStages = Array.isArray(executedStages) ? new Set(executedStages) : null;
   const safeExecutedStages = ['FINALIZATION'];
@@ -2767,7 +2789,7 @@ export function finalizeScan({
   if ((!claimedStages || claimedStages.has('THREAT_MODELING')) && threatModel && validateThreatModel(threatModel, safeRepoRoot || process.cwd()).valid) {
     safeExecutedStages.push('THREAT_MODELING');
   }
-  if ((!claimedStages || claimedStages.has('DISCOVERY_MATRIX')) && safeMatrix.length > 0) {
+  if ((!claimedStages || claimedStages.has('DISCOVERY_MATRIX')) && isMatrixComplete && safeMatrix.length > 0) {
     safeExecutedStages.push('DISCOVERY_MATRIX');
   }
   if ((!claimedStages || claimedStages.has('VERIFICATION_PANEL')) && (safeVotes.length > 0 || canonicalFindings.length === 0)) {
@@ -2784,7 +2806,7 @@ export function finalizeScan({
     { allowSelfAudit: Boolean(allowSelfAudit) }
   );
 
-  // R6-P1-03: Mandated vs Observed Context Isolation Attestation
+  // R6-P1-03 & R11-P1-02: Truthful Execution & Capabilities Attestation (no fake delegationObserved on zero candidates)
   const execution = buildExecutionAttestation({
     repoRoot: safeRepoRoot || process.cwd(),
     target: {
@@ -2795,7 +2817,9 @@ export function finalizeScan({
     executedStages: safeExecutedStages,
     failedStages: [],
     coverageComplete: coverageStatus === 'COMPLETE',
-    delegationObserved: Boolean(safeVotes.length > 0 || (canonicalFindings.length === 0 && safeExecutedStages.includes('VERIFICATION_PANEL'))),
+    delegationObserved: Boolean(safeVotes.length > 0),
+    zeroCandidates: canonicalFindings.length === 0,
+    canonicalFindingsCount: canonicalFindings.length,
     capabilities: capabilities || {
       required: ['repository.read'],
       observed: [],
@@ -2813,10 +2837,31 @@ export function finalizeScan({
     }
   });
 
-  // R6-P0-01: Six-Pillar Assurance Gates
+  // R11-P0-02: Context Drift baseline check and fail-closed enforcement (no silent swallow, no const reassignment)
+  const projectContextRes = loadProjectSecurityContext(safeRepoRoot || process.cwd());
+  const hasConfirmedProjectContext = (projectContextRes.status === 'CONFIRMED' && threatModel?.contextStatus !== 'GENERIC_SECURITY_REVIEW');
+
+  let contextDrift = null;
+  let contextDriftEvaluationError = null;
+  const loadedBaseline = loadBaselineContext(safeRepoRoot || process.cwd());
+
+  if (loadedBaseline.exists && loadedBaseline.baseline && projectContextRes.context) {
+    try {
+      contextDrift = detectContextDrift(projectContextRes.context, loadedBaseline.baseline);
+    } catch (err) {
+      contextDriftEvaluationError = err;
+      console.error(`[CONTEXT-DRIFT] Critical evaluation error: ${err.message}`);
+    }
+  }
+
+  const driftBlocksClean = (safeAuditIntent === 'REGRESSION') && (
+    contextDriftEvaluationError !== null ||
+    (contextDrift && contextDrift.hasDrift && ['THREAT_MODEL_REVIEW_REQUIRED', 'CONTEXT_DRIFT'].includes(contextDrift.status))
+  );
+
+  // R6-P0-01 & R11-P0-01: Six-Pillar Assurance Gates
   const coverageGate = (coverageStatus === 'COMPLETE');
-  const hasPendingSecondOpinion = safeMatrix.some(c => c.status === 'PENDING_SECOND_OPINION');
-  const matrixGate = Boolean(matrixValidation.valid && !hasPendingSecondOpinion);
+  const matrixGate = Boolean(matrixValidation.valid && isMatrixComplete);
   const findingGate = (confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0);
   const contextGate = Boolean(
     contextPrep
@@ -2837,7 +2882,7 @@ export function finalizeScan({
     && (toolIntegrity.status === 'CONFORMANT' || toolIntegrity.status === 'SELF_AUDIT_MODE')
   );
 
-  const canDeclareClean = Boolean(
+  const baseCleanEligible = Boolean(
     coverageGate
     && matrixGate
     && findingGate
@@ -2846,9 +2891,7 @@ export function finalizeScan({
     && toolIntegrityGate
   );
 
-  // R9-P1-01 & R9-P1-02: Project Security Context Gate (R9-T10 & R9-T11)
-  const projectContextRes = loadProjectSecurityContext(safeRepoRoot || process.cwd());
-  const hasConfirmedProjectContext = (projectContextRes.status === 'CONFIRMED' && threatModel?.contextStatus !== 'GENERIC_SECURITY_REVIEW');
+  const canDeclareClean = Boolean(baseCleanEligible && !driftBlocksClean);
 
   let assuranceLabel = 'NON_CLEAN';
   if (canDeclareClean) {
@@ -2861,24 +2904,16 @@ export function finalizeScan({
       // R9-T11: confirmed Project Security Context -> eligible for BOUNDED_CLEAN
       assuranceLabel = 'BOUNDED_CLEAN';
     }
-  }
-
-  // R10-P1-03: Context Drift baseline check and enforcement
-  let contextDrift = null;
-  const loadedBaseline = loadBaselineContext(safeRepoRoot || process.cwd());
-  if (loadedBaseline.exists && loadedBaseline.baseline && projectContextRes.context) {
-    try {
-      contextDrift = detectContextDrift(projectContextRes.context, loadedBaseline.baseline);
-      if (contextDrift.hasDrift && safeAuditIntent === 'REGRESSION') {
-        if (contextDrift.status === 'THREAT_MODEL_REVIEW_REQUIRED') {
-          canDeclareClean = false;
-          assuranceLabel = 'THREAT_MODEL_REVIEW_REQUIRED';
-        } else if (contextDrift.status === 'CONTEXT_DRIFT') {
-          canDeclareClean = false;
-          assuranceLabel = 'CONTEXT_DRIFT';
-        }
+  } else {
+    if (driftBlocksClean) {
+      if (contextDriftEvaluationError) {
+        assuranceLabel = 'CONTEXT_DRIFT_EVALUATION_FAILED';
+      } else if (contextDrift?.status === 'THREAT_MODEL_REVIEW_REQUIRED') {
+        assuranceLabel = 'THREAT_MODEL_REVIEW_REQUIRED';
+      } else if (contextDrift?.status === 'CONTEXT_DRIFT') {
+        assuranceLabel = 'CONTEXT_DRIFT';
       }
-    } catch {}
+    }
   }
 
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
@@ -2971,10 +3006,19 @@ export function finalizeScan({
     discoveryMatrixValid: matrixValidation.valid,
     discoveryCellsSummary: {
       total: safeMatrix.length,
+      applicableTotal: safeMatrix.filter(c => c.status !== 'NOT_APPLICABLE').length,
       reviewedNoCandidate: safeMatrix.filter(c => c.status === 'REVIEWED_NO_CANDIDATE').length,
+      confirmedZero: safeMatrix.filter(c => c.status === 'CONFIRMED_ZERO_CANDIDATE').length,
       candidates: safeMatrix.filter(c => c.status === 'CANDIDATE').length,
       notApplicable: safeMatrix.filter(c => c.status === 'NOT_APPLICABLE').length,
-      unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length
+      pending: safeMatrix.filter(c => ['PENDING', 'PENDING_DISCOVERY'].includes(c.status)).length,
+      pendingSecondOpinion: safeMatrix.filter(c => c.status === 'PENDING_SECOND_OPINION').length,
+      unresolved: safeMatrix.filter(c => c.status === 'UNRESOLVED').length,
+      unconfirmedCriticalZeros: unconfirmedCriticalZeros.length,
+      completionRate: safeMatrix.length > 0
+        ? Number((((safeMatrix.length - unresolvedMatrixCells.length - unconfirmedCriticalZeros.length) / safeMatrix.length) * 100).toFixed(1))
+        : 100.0,
+      isComplete: isMatrixComplete
     },
     contextDrift,
     execution,
@@ -4384,6 +4428,19 @@ if (isDirectExecution) {
       let discoveryMatrix = [];
       if (matrixPath && fs.existsSync(matrixPath)) {
         discoveryMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
+      } else if (fs.existsSync(path.resolve(repoRoot, 'scratch/discovery-matrix.json'))) {
+        try {
+          discoveryMatrix = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'scratch/discovery-matrix.json'), 'utf8'));
+        } catch {}
+      }
+
+      let executionAttestation = null;
+      if (attestationPathArg && fs.existsSync(attestationPathArg)) {
+        try {
+          executionAttestation = JSON.parse(fs.readFileSync(attestationPathArg, 'utf8'));
+        } catch (err) {
+          console.error(`[EXECUTION-ATTESTATION] Error parsing attestation from ${attestationPathArg}: ${err.message}`);
+        }
       }
 
       const votes = loadVotes(votesPath);
@@ -4436,7 +4493,8 @@ if (isDirectExecution) {
         discoveryMatrix,
         threatModel,
         executedStages,
-        allowSelfAudit
+        allowSelfAudit,
+        executionAttestation
       });
 
       if (outputJsonPath) {
