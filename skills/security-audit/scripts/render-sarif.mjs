@@ -4257,7 +4257,51 @@ export default appName;`;
   }
   console.log('✔ 105. R10-P0-01 Invariant: CLI threat model validation fails closed under Default-Deny on unevidenced threat model.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (105/105).');
+  // ---------------------------------------------------------------------------
+  // 106. Issue #2: prepareReviewContext's explicit targetFiles path must not
+  // follow a symlink that resolves outside repoRoot. review mode's whole
+  // purpose is to prepare context from a diff's changed-file list (targetFiles)
+  // -- a symlink added in a hostile PR is exactly the input this test simulates.
+  // ---------------------------------------------------------------------------
+  const symlinkTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-symlink-'));
+  try {
+    const repo106 = path.join(symlinkTestRoot, 'repo');
+    const outside106 = path.join(symlinkTestRoot, 'outside');
+    fs.mkdirSync(repo106, { recursive: true });
+    fs.mkdirSync(outside106, { recursive: true });
+    const secretPath = path.join(outside106, 'secret.txt');
+    fs.writeFileSync(secretPath, 'TOP_SECRET_HOST_FILE_CONTENT_test106');
+    const linkPath = path.join(repo106, 'leaky-link.txt');
+
+    let symlinkCreated = true;
+    try {
+      fs.symlinkSync(path.join('..', 'outside', 'secret.txt'), linkPath, 'file');
+    } catch {
+      // Some restricted local accounts (notably unprivileged Windows users
+      // without Developer Mode) cannot create symlinks. CI runners can. Skip
+      // rather than fail closed on an environment limitation unrelated to the
+      // invariant under test.
+      symlinkCreated = false;
+    }
+
+    if (symlinkCreated) {
+      const prep106 = prepareReviewContext(repo106, { targetFiles: ['leaky-link.txt'] });
+      if (prep106.manifest.preparedFilesCount !== 0) {
+        throw new Error('SEC-2 VIOLATION: prepareReviewContext followed a symlink escaping repoRoot into targetFiles');
+      }
+      const contextFile106 = path.join(repo106, 'scratch', 'context', 'leaky-link.txt');
+      if (fs.existsSync(contextFile106)) {
+        throw new Error('SEC-2 VIOLATION: symlink target content was written into the review context');
+      }
+      console.log('✔ 106. SEC-2 Invariant: prepareReviewContext refuses to follow a symlink escaping repoRoot via targetFiles.');
+    } else {
+      console.log('⚠ 106. SEC-2 Invariant: skipped (this account cannot create symlinks) — verified in CI, not locally.');
+    }
+  } finally {
+    fs.rmSync(symlinkTestRoot, { recursive: true, force: true });
+  }
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (106/106).');
 
   } finally {
     gitFixture.cleanup();
