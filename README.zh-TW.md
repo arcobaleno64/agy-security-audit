@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.0.0
+# agy-security-audit (plugin ID: `security-audit`) v1.1.1
 
 以證據為本、多階段的安全保證與弱點驗證外掛，專為 **Google Antigravity (AGY)** 打造，對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究等前沿代理安全框架的防禦性架構概念。
 
@@ -103,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 112 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 114 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測

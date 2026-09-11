@@ -23,3 +23,9 @@
 *.pdf binary
 *.zip binary
 *.tar.gz binary
+
+# Export ignore for clean release packaging (F-04)
+scratch/ export-ignore
+reports/ export-ignore
+codeql-db/ export-ignore
+evals/recorded-runs/ export-ignore

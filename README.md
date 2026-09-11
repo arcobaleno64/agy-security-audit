@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.0.0
+# agy-security-audit (plugin ID: `security-audit`) v1.1.1
 
 Evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Google Antigravity (AGY)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
 
@@ -103,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 112 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 114 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection

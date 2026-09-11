@@ -25,6 +25,24 @@ const JSON_TARGETS = [
   }
 ];
 
+const DOC_TARGETS = [
+  {
+    file: "README.md",
+    pattern: /^# agy-security-audit \(plugin ID: `security-audit`\) v[^\s]+/m,
+    replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
+  },
+  {
+    file: "README.zh-TW.md",
+    pattern: /^# agy-security-audit \(plugin ID: `security-audit`\) v[^\s]+/m,
+    replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
+  },
+  {
+    file: "SECURITY.md",
+    pattern: /^## 2\. Hardening & Guardrails \(v[^\s]+ \/ Production\)/m,
+    replacement: (v) => `## 2. Hardening & Guardrails (v${v} / Production)`
+  }
+];
+
 function usage() {
   return [
     "Usage:",
@@ -130,6 +148,21 @@ function checkVersions(root, expectedVersion) {
   if (toolVersion !== expectedVersion) {
     mismatches.push(`${TOOL_VERSION_FILE} TOOL_VERSION: expected ${expectedVersion}, found ${toolVersion}`);
   }
+  for (const doc of DOC_TARGETS) {
+    const fullPath = path.join(root, doc.file);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, "utf8");
+      const match = content.match(doc.pattern);
+      if (!match) {
+        mismatches.push(`${doc.file}: version heading pattern not found`);
+      } else {
+        const expectedHeading = doc.replacement(expectedVersion);
+        if (match[0] !== expectedHeading) {
+          mismatches.push(`${doc.file}: expected '${expectedHeading}', found '${match[0]}'`);
+        }
+      }
+    }
+  }
   return mismatches;
 }
 
@@ -165,6 +198,19 @@ function bumpVersion(root, version) {
   if (writeToolVersionConstant(root, version)) {
     changedFiles.push(TOOL_VERSION_FILE);
   }
+  for (const doc of DOC_TARGETS) {
+    const fullPath = path.join(root, doc.file);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, "utf8");
+      if (doc.pattern.test(content)) {
+        const updated = content.replace(doc.pattern, doc.replacement(version));
+        if (updated !== content) {
+          fs.writeFileSync(fullPath, updated, "utf8");
+          changedFiles.push(doc.file);
+        }
+      }
+    }
+  }
   return changedFiles;
 }
 
@@ -180,6 +226,9 @@ function main() {
       console.log(target.file);
     }
     console.log(TOOL_VERSION_FILE);
+    for (const doc of DOC_TARGETS) {
+      console.log(doc.file);
+    }
     return;
   }
 

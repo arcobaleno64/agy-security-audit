@@ -186,9 +186,13 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
     }
   }
 
+  const digestPayload = preparedFiles.map(f => `${f.relativePath}:${f.contentHash}`).sort().join('\n');
+  const manifestDigest = crypto.createHash('sha256').update(digestPayload, 'utf8').digest('hex');
+
   const manifest = {
     schemaVersion: '1.0.0',
     generatedAt: new Date().toISOString(),
+    manifestDigest,
     repoRoot: resolvedRepoRoot,
     contextRoot: contextOutputDir,
     scannedFilesCount: targetFiles.length,

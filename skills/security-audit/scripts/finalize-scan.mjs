@@ -25,7 +25,7 @@ export { isPathContained, isRealPathContained, assertContainedPath, safeReadFile
 // baselines, and the TCB manifest. `scripts/bump-version.mjs` rewrites this line
 // (and package.json, and tool-integrity-manifest.json) together so a release
 // cannot bump one without the others going stale.
-export const TOOL_VERSION = '1.1.0';
+export const TOOL_VERSION = '1.1.1';
 import {
   loadProjectSecurityContext,
   detectContextDrift,
@@ -2506,6 +2506,149 @@ export function buildExecutionAttestation({
 }
 
 /**
+ * Verifies runtime guard telemetry for context isolation attestation (F-02 / Invariant 113).
+ * Under Default-Deny, OBSERVED attestation requires conclusive affirmative proof:
+ * 1. Telemetry file exists in trusted execution location or repo mirror.
+ * 2. Parsed JSON lines are non-empty and structurally valid.
+ * 3. Event manifestDigest matches active shadow context manifest (prevents stale / forged replay).
+ * 4. Event conversationId matches current run (if specified).
+ * 5. Event timestamps fall within the scan execution window.
+ * 6. Zero illegal raw repository allowances (unshadowed target path must not be allowed).
+ */
+export function verifyGuardTelemetry({
+  telemetryPath = null,
+  artifactDirectoryPath = null,
+  shadowRoot = null,
+  manifestDigest = null,
+  conversationId = null,
+  scanStartedAt = null
+} = {}) {
+  const candidatePaths = [];
+  if (telemetryPath) {
+    candidatePaths.push({ path: path.resolve(telemetryPath), isTrusted: true });
+  }
+  if (artifactDirectoryPath) {
+    candidatePaths.push({
+      path: path.join(path.resolve(artifactDirectoryPath), 'shadow-guard-telemetry.jsonl'),
+      isTrusted: true
+    });
+  }
+  if (process.env.AGY_GUARD_TELEMETRY_PATH) {
+    candidatePaths.push({
+      path: path.resolve(process.env.AGY_GUARD_TELEMETRY_PATH),
+      isTrusted: true
+    });
+  }
+  if (shadowRoot) {
+    candidatePaths.push({
+      path: path.resolve(shadowRoot, 'guard-events.jsonl'),
+      isTrusted: false
+    });
+  }
+
+  let chosen = null;
+  for (const c of candidatePaths) {
+    if (fs.existsSync(c.path)) {
+      chosen = c;
+      break;
+    }
+  }
+
+  if (!chosen) {
+    return { verified: false, reason: 'NO_TELEMETRY_FOUND' };
+  }
+
+  let lines = [];
+  try {
+    lines = fs.readFileSync(chosen.path, 'utf8')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+  } catch (err) {
+    return { verified: false, reason: `READ_ERROR: ${err.message}` };
+  }
+
+  if (lines.length === 0) {
+    return { verified: false, reason: 'EMPTY_TELEMETRY' };
+  }
+
+  const events = [];
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      const evt = JSON.parse(lines[i]);
+      if (!evt || typeof evt !== 'object') {
+        return { verified: false, reason: `MALFORMED_EVENT_AT_LINE_${i + 1}` };
+      }
+      events.push(evt);
+    } catch {
+      return { verified: false, reason: `JSON_PARSE_ERROR_AT_LINE_${i + 1}` };
+    }
+  }
+
+  // 1. Manifest Digest Binding: every event must match the current active shadow context manifest digest
+  if (manifestDigest) {
+    for (const evt of events) {
+      if (!evt.manifestDigest || evt.manifestDigest !== manifestDigest) {
+        return {
+          verified: false,
+          reason: `MANIFEST_DIGEST_MISMATCH: expected ${manifestDigest}, got ${evt.manifestDigest || 'missing'}`
+        };
+      }
+    }
+  }
+
+  // 2. Conversation ID Binding (if specified or in env)
+  const effectiveConvId = conversationId || process.env.AGY_CONVERSATION_ID || null;
+  if (effectiveConvId) {
+    for (const evt of events) {
+      if (evt.conversationId && evt.conversationId !== 'UNKNOWN' && evt.conversationId !== effectiveConvId) {
+        return {
+          verified: false,
+          reason: `CONVERSATION_ID_MISMATCH: expected ${effectiveConvId}, got ${evt.conversationId}`
+        };
+      }
+    }
+  }
+
+  // 3. Time Window Validation
+  if (scanStartedAt) {
+    const startedMs = new Date(scanStartedAt).getTime();
+    if (!isNaN(startedMs)) {
+      for (const evt of events) {
+        const evtMs = new Date(evt.timestamp).getTime();
+        if (isNaN(evtMs) || evtMs < (startedMs - 60000)) {
+          return {
+            verified: false,
+            reason: 'EVENT_PREDATES_SCAN_WINDOW'
+          };
+        }
+      }
+    }
+  }
+
+  // 4. Zero Illegal Raw Access Allowances:
+  // If an event targets a raw file (outside scratch/context), decision MUST be 'deny'
+  for (const evt of events) {
+    const normalizedTarget = (evt.targetPath || '').replace(/\\/g, '/');
+    const isShadowPath = normalizedTarget.includes('scratch/context');
+    if (!isShadowPath && evt.decision === 'allow' && evt.action !== 'passthrough_outside_workspace') {
+      return {
+        verified: false,
+        reason: `ILLEGAL_RAW_ACCESS_ALLOWED: ${evt.targetPath}`
+      };
+    }
+  }
+
+  return {
+    verified: true,
+    telemetrySource: chosen.isTrusted ? 'TRUSTED_ARTIFACT_DIR' : 'WORKSPACE_MIRROR',
+    telemetryPath: chosen.path,
+    eventsCount: events.length,
+    manifestDigest: manifestDigest || null
+  };
+}
+
+/**
  * Central deterministic finalizer: transforms candidates into canonical findings.
  */
 export function finalizeScan({
@@ -2526,7 +2669,10 @@ export function finalizeScan({
   allowSelfAudit = false,
   toolRoot = null,
   toolProvenance = null,
-  contextIsolation = null
+  contextIsolation = null,
+  artifactDirectoryPath = null,
+  telemetryPath = null,
+  conversationId = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -2868,24 +3014,50 @@ export function finalizeScan({
   );
 
   const shadowRoot = contextPrep?.contextRoot || path.resolve(safeRepoRoot || process.cwd(), 'scratch/context');
-  const guardEventsFile = path.resolve(shadowRoot, 'guard-events.jsonl');
-  let hasRuntimeGuardTelemetry = false;
-  if (fs.existsSync(guardEventsFile)) {
-    try {
-      const lines = fs.readFileSync(guardEventsFile, 'utf8').split('\n').filter(l => l.trim().length > 0);
-      if (lines.length > 0) {
-        hasRuntimeGuardTelemetry = true;
-      }
-    } catch {}
-  }
+  const manifestDigest = contextPrep?.manifest?.manifestDigest || null;
+  const telemetryVerification = verifyGuardTelemetry({
+    telemetryPath,
+    artifactDirectoryPath,
+    shadowRoot,
+    manifestDigest,
+    conversationId,
+    scanStartedAt: contextPrep?.manifest?.createdAt || null
+  });
+  const hasRuntimeGuardTelemetry = telemetryVerification.verified;
 
-  const effectiveContextIsolation = contextIsolation || {
-    status: hasRuntimeGuardTelemetry ? 'OBSERVED' : 'MANDATED',
-    pipeline: hasRuntimeGuardTelemetry ? 'OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD' : 'MANDATED_SHADOW_CONTEXT_PIPELINE',
-    shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
-    tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
-    totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0
-  };
+  let effectiveContextIsolation;
+  if (contextIsolation && typeof contextIsolation === 'object') {
+    if (contextIsolation.status === 'OBSERVED' && !hasRuntimeGuardTelemetry) {
+      effectiveContextIsolation = {
+        ...contextIsolation,
+        status: 'MANDATED',
+        pipeline: 'MANDATED_SHADOW_CONTEXT_PIPELINE',
+        attestationWarning: `OBSERVED status claimed but unverified: ${telemetryVerification.reason}`
+      };
+    } else {
+      effectiveContextIsolation = {
+        ...contextIsolation,
+        guardTelemetry: hasRuntimeGuardTelemetry ? {
+          source: telemetryVerification.telemetrySource,
+          eventsCount: telemetryVerification.eventsCount,
+          manifestDigest: telemetryVerification.manifestDigest
+        } : null
+      };
+    }
+  } else {
+    effectiveContextIsolation = {
+      status: hasRuntimeGuardTelemetry ? 'OBSERVED' : 'MANDATED',
+      pipeline: hasRuntimeGuardTelemetry ? 'OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD' : 'MANDATED_SHADOW_CONTEXT_PIPELINE',
+      shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
+      tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
+      totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0,
+      guardTelemetry: hasRuntimeGuardTelemetry ? {
+        source: telemetryVerification.telemetrySource,
+        eventsCount: telemetryVerification.eventsCount,
+        manifestDigest: telemetryVerification.manifestDigest
+      } : null
+    };
+  }
 
   // R6-P1-03 & R11-P1-02: Truthful Execution & Capabilities Attestation (no fake delegationObserved on zero candidates)
   const execution = buildExecutionAttestation({
@@ -4243,6 +4415,7 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     };
   }
 
+  const toolProv = getToolProvenance(resolvedTool);
   return {
     valid: true,
     status: isSelfAudit ? 'SELF_AUDIT_MODE' : 'CONFORMANT',
@@ -4251,7 +4424,11 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     isSelfAudit,
     verifiedScriptsCount: REQUIRED_CRITICAL_SCRIPTS.length,
     scriptHashes,
-    manifestDigest: manifest.manifestDigest
+    manifestDigest: manifest.manifestDigest,
+    toolVersion: manifest.toolVersion || TOOL_VERSION,
+    toolRevision: toolProv.toolRevision,
+    toolIntegrityDigest: manifest.manifestDigest,
+    isDirty: toolProv.toolDirty
   };
 }
 

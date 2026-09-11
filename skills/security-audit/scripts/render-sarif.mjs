@@ -94,7 +94,8 @@ import {
   evaluateSecondOpinion,
   validateThreatModel,
   TOOL_VERSION,
-  getToolProvenance
+  getToolProvenance,
+  verifyGuardTelemetry
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
@@ -103,7 +104,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment } from './record-benchmark-run.mjs';
 
 
 
@@ -4468,16 +4469,10 @@ export default appName;`;
     fs.mkdirSync(path.join(fixtureContextDir, 'src'), { recursive: true });
 
     const rawFilePath = path.join(fixtureSrcDir, 'secrets.js');
-    const shadowFilePath = path.join(fixtureContextDir, 'src', 'secrets.js');
     fs.writeFileSync(rawFilePath, 'const key = "RAW_SECRET";\n', 'utf8');
-    fs.writeFileSync(shadowFilePath, 'const key = "<SECRET:class=KEY:hash=abc>";\n', 'utf8');
 
-    const manifestObj = {
-      schemaVersion: '1.0.0',
-      repoRoot: tempHookFixture,
-      contextRoot: fixtureContextDir
-    };
-    fs.writeFileSync(path.join(fixtureContextDir, 'context-manifest.json'), JSON.stringify(manifestObj), 'utf8');
+    const prep109 = prepareReviewContext(tempHookFixture);
+    const shadowFilePath = path.join(fixtureContextDir, 'src', 'secrets.js');
 
     const rawCallPayload = JSON.stringify({
       toolCall: {
@@ -4964,7 +4959,167 @@ export default appName;`;
 
   console.log('✔ 112. P0 Invariant: Fail-Closed Shadow Context Guard, Multi-Tool Matcher & Default-Deny Enforcement.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (112/112).');
+  // 113. P0 Invariant: Run-Bound Non-Replayable Guard Attestation (F-02)
+  const testRoot113 = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-attestation-test-'));
+  const trustedArtifacts113 = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-trusted-artifacts-'));
+  try {
+    const srcDir = path.join(testRoot113, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, 'app.js'), 'console.log("hello");\n', 'utf8');
+
+    const prep = prepareReviewContext(testRoot113);
+    const validDigest = prep.manifest.manifestDigest;
+
+    // 113.1 Genuine telemetry in artifactDirectoryPath upgrades to OBSERVED
+    const genuineEvent = {
+      timestamp: new Date().toISOString(),
+      conversationId: 'test-conv-123',
+      stepIdx: 1,
+      modelName: 'UNKNOWN',
+      manifestDigest: validDigest,
+      tool: 'view_file',
+      targetPath: 'src/app.js',
+      decision: 'deny',
+      action: 'shadow_context_deny',
+      reason: 'direct access blocked'
+    };
+    fs.writeFileSync(
+      path.join(trustedArtifacts113, 'shadow-guard-telemetry.jsonl'),
+      JSON.stringify(genuineEvent) + '\n',
+      'utf8'
+    );
+
+    const verifiedFinal = finalizeScan({
+      candidates: [],
+      repoRoot: testRoot113,
+      artifactDirectoryPath: trustedArtifacts113,
+      conversationId: 'test-conv-123'
+    });
+    if (verifiedFinal.summary.execution.contextIsolation.status !== 'OBSERVED') {
+      throw new Error(`ATTESTATION VIOLATION: expected OBSERVED, got ${verifiedFinal.summary.execution.contextIsolation.status}`);
+    }
+    if (verifiedFinal.summary.execution.contextIsolation.guardTelemetry?.source !== 'TRUSTED_ARTIFACT_DIR') {
+      throw new Error('ATTESTATION VIOLATION: expected telemetrySource TRUSTED_ARTIFACT_DIR');
+    }
+
+    // 113.2 Forged / cross-run telemetry with mismatched manifestDigest strictly fails upgrade
+    const forgedEventsFile = path.join(prep.contextRoot, 'guard-events.jsonl');
+    const forgedEvent = {
+      ...genuineEvent,
+      manifestDigest: '0000000000000000000000000000000000000000000000000000000000000000'
+    };
+    fs.writeFileSync(forgedEventsFile, JSON.stringify(forgedEvent) + '\n', 'utf8');
+
+    const forgedRes = verifyGuardTelemetry({
+      shadowRoot: prep.contextRoot,
+      manifestDigest: validDigest
+    });
+    if (forgedRes.verified) {
+      throw new Error('ATTESTATION VIOLATION: mismatched manifestDigest was accepted');
+    }
+
+    const forgedFinal = finalizeScan({
+      candidates: [],
+      repoRoot: testRoot113,
+      shadowRoot: prep.contextRoot
+    });
+    if (forgedFinal.summary.execution.contextIsolation.status !== 'MANDATED') {
+      throw new Error(`ATTESTATION VIOLATION: forged telemetry expected MANDATED, got ${forgedFinal.summary.execution.contextIsolation.status}`);
+    }
+
+    // 113.3 Empty or malformed telemetry file stays MANDATED
+    fs.writeFileSync(forgedEventsFile, '   \n\n', 'utf8');
+    const emptyRes = verifyGuardTelemetry({ shadowRoot: prep.contextRoot, manifestDigest: validDigest });
+    if (emptyRes.verified) {
+      throw new Error('ATTESTATION VIOLATION: empty telemetry was accepted');
+    }
+
+    // 113.4 Telemetry with illegal raw access allowance fails verification
+    const illegalEvent = {
+      ...genuineEvent,
+      decision: 'allow',
+      action: 'shadow_context_allow_raw'
+    };
+    fs.writeFileSync(forgedEventsFile, JSON.stringify(illegalEvent) + '\n', 'utf8');
+    const illegalRes = verifyGuardTelemetry({ shadowRoot: prep.contextRoot, manifestDigest: validDigest });
+    if (illegalRes.verified) {
+      throw new Error('ATTESTATION VIOLATION: illegal raw allowance telemetry was accepted');
+    }
+
+    // 113.5 Direct self-asserted OBSERVED claim without valid telemetry is downgraded under Default-Deny
+    fs.rmSync(forgedEventsFile, { force: true });
+    const spoofClaimFinal = finalizeScan({
+      candidates: [],
+      repoRoot: testRoot113,
+      contextIsolation: {
+        status: 'OBSERVED',
+        pipeline: 'SPOOFED_PIPELINE'
+      }
+    });
+    if (spoofClaimFinal.summary.execution.contextIsolation.status !== 'MANDATED') {
+      throw new Error(`ATTESTATION VIOLATION: unverified OBSERVED claim was not downgraded to MANDATED`);
+    }
+  } finally {
+    fs.rmSync(testRoot113, { recursive: true, force: true });
+    fs.rmSync(trustedArtifacts113, { recursive: true, force: true });
+  }
+
+  console.log('✔ 113. P0 Invariant: Run-Bound Non-Replayable Guard Attestation & Default-Deny Telemetry Downgrade.');
+
+  // 114. P1 Invariant: Empirical Benchmark Recorder True Provenance & UNKNOWN Discovery (F-03)
+  const testRoot114 = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-provenance-test-'));
+  try {
+    // 114.1 probeEnvironment called without active model or overrides defaults to UNKNOWN
+    const savedModel = process.env.AGY_MODEL;
+    const savedProvider = process.env.AGY_MODEL_PROVIDER;
+    delete process.env.AGY_MODEL;
+    delete process.env.AGY_MODEL_PROVIDER;
+
+    try {
+      const defaultEnv = probeEnvironment(testRoot114);
+      if (defaultEnv.modelId !== 'UNKNOWN') {
+        throw new Error(`PROVENANCE VIOLATION: expected modelId 'UNKNOWN', got '${defaultEnv.modelId}'`);
+      }
+      if (defaultEnv.modelProvider !== 'UNKNOWN') {
+        throw new Error(`PROVENANCE VIOLATION: expected modelProvider 'UNKNOWN', got '${defaultEnv.modelProvider}'`);
+      }
+      if (defaultEnv.toolVersion !== TOOL_VERSION) {
+        throw new Error(`PROVENANCE VIOLATION: expected toolVersion '${TOOL_VERSION}', got '${defaultEnv.toolVersion}'`);
+      }
+      if (defaultEnv.toolRevision && defaultEnv.toolRevision !== 'UNCHECKED_REVISION' && !/^[0-9a-f]{40}$/i.test(defaultEnv.toolRevision)) {
+        throw new Error(`PROVENANCE VIOLATION: toolRevision format invalid: ${defaultEnv.toolRevision}`);
+      }
+
+      // 114.2 Envelope generated from default probe validates cleanly against schema
+      const envelope = createBenchmarkRunEnvelope({
+        repoRoot: testRoot114,
+        candidates: [],
+        environment: defaultEnv
+      });
+      const valEnv = validateBenchmarkRunEnvelope(envelope);
+      if (!valEnv.valid) {
+        throw new Error(`PROVENANCE VIOLATION: envelope validation failed: ${valEnv.errors.join(', ')}`);
+      }
+
+      // 114.3 verifyToolSelfIntegrity returns accurate toolVersion and toolRevision
+      const selfIntegrity = verifyToolSelfIntegrity();
+      if (selfIntegrity.toolVersion !== TOOL_VERSION) {
+        throw new Error(`PROVENANCE VIOLATION: verifyToolSelfIntegrity toolVersion mismatch: ${selfIntegrity.toolVersion}`);
+      }
+      if (selfIntegrity.toolRevision !== defaultEnv.toolRevision) {
+        throw new Error(`PROVENANCE VIOLATION: verifyToolSelfIntegrity toolRevision mismatch`);
+      }
+    } finally {
+      if (savedModel !== undefined) process.env.AGY_MODEL = savedModel;
+      if (savedProvider !== undefined) process.env.AGY_MODEL_PROVIDER = savedProvider;
+    }
+  } finally {
+    fs.rmSync(testRoot114, { recursive: true, force: true });
+  }
+
+  console.log('✔ 114. P1 Invariant: Empirical Benchmark Recorder True Provenance & UNKNOWN Discovery.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (114/114).');
 
   } finally {
     gitFixture.cleanup();

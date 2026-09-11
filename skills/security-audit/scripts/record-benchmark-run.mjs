@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getHardenedGitProvenance } from './safe-git.mjs';
-import { verifyToolSelfIntegrity } from './finalize-scan.mjs';
+import { TOOL_VERSION, verifyToolSelfIntegrity, getToolProvenance } from './finalize-scan.mjs';
 
 /**
  * Probes the runtime environment to extract authoritative provenance.
@@ -32,34 +32,18 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
     }
   }
 
-  let toolProv = {};
-  try {
-    const selfIntegrity = verifyToolSelfIntegrity();
-    toolProv = {
-      toolVersion: selfIntegrity.toolVersion || '1.0.1',
-      toolRevision: selfIntegrity.toolRevision || null,
-      toolIntegrityDigest: selfIntegrity.computedDigest || selfIntegrity.manifestDigest || null,
-      toolDirty: selfIntegrity.isDirty ?? false
-    };
-  } catch {
-    toolProv = {
-      toolVersion: '1.0.1',
-      toolRevision: null,
-      toolIntegrityDigest: null,
-      toolDirty: false
-    };
-  }
-
-  const gitProv = getHardenedGitProvenance(repoRoot);
+  // Authoritative tool provenance from the security-audit tool root
+  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const toolProv = getToolProvenance(defaultToolRoot);
 
   return {
     agyVersion: agyVersion || 'UNKNOWN',
-    modelId: overrides.modelId || process.env.AGY_MODEL || 'gemini-3.8-flash',
-    modelProvider: overrides.modelProvider || process.env.AGY_MODEL_PROVIDER || 'google',
+    modelId: overrides.modelId || process.env.AGY_MODEL || 'UNKNOWN',
+    modelProvider: overrides.modelProvider || process.env.AGY_MODEL_PROVIDER || 'UNKNOWN',
     os: `${process.platform} (${process.arch})`,
     nodeVersion: process.version,
-    skillRevision: gitProv.revisionId || gitProv.commitSha || null,
-    toolVersion: toolProv.toolVersion,
+    skillRevision: toolProv.toolRevision,
+    toolVersion: toolProv.toolVersion || TOOL_VERSION,
     toolRevision: toolProv.toolRevision,
     toolIntegrityDigest: toolProv.toolIntegrityDigest,
     toolDirty: toolProv.toolDirty
