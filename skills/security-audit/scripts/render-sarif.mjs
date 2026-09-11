@@ -4495,21 +4495,23 @@ export default appName;`;
       timeout: 5000
     });
     const redirectParsed = JSON.parse(redirectRes);
-    if (redirectParsed.decision !== 'allow') {
-      throw new Error(`HOOK VIOLATION: redirected call did not allow: ${redirectRes}`);
+    if (redirectParsed.decision !== 'deny') {
+      throw new Error(`HOOK VIOLATION: raw file call expected decision: 'deny', got ${redirectRes}`);
     }
-    const expectedShadowNormalized = shadowFilePath.replace(/\\/g, '/');
-    if (redirectParsed.overwrite?.AbsolutePath !== expectedShadowNormalized) {
-      throw new Error(`HOOK VIOLATION: overwrite.AbsolutePath expected ${expectedShadowNormalized}, got ${redirectParsed.overwrite?.AbsolutePath}`);
+    if (!redirectParsed.reason || !redirectParsed.reason.includes('scratch/context')) {
+      throw new Error(`HOOK VIOLATION: raw file denial reason must direct to scratch/context: ${redirectParsed.reason}`);
+    }
+    if (redirectParsed.overwrite !== undefined) {
+      throw new Error('HOOK VIOLATION: hook output must not contain unverified overwrite property');
     }
 
-    // Verify guard-events.jsonl was created and contains the redirect
+    // Verify guard-events.jsonl was created and contains the denial
     const eventsPath = path.join(fixtureContextDir, 'guard-events.jsonl');
     if (!fs.existsSync(eventsPath)) {
       throw new Error('HOOK VIOLATION: guard-events.jsonl was not written');
     }
     const eventsContent = fs.readFileSync(eventsPath, 'utf8');
-    if (!eventsContent.includes('REDIRECT') || !eventsContent.includes('secrets.js')) {
+    if (!eventsContent.includes('DENIED_RAW') || !eventsContent.includes('secrets.js')) {
       throw new Error(`HOOK VIOLATION: guard-events.jsonl missing expected event: ${eventsContent}`);
     }
 
@@ -4816,7 +4818,153 @@ export default appName;`;
 
   console.log('✔ 111. P1 Invariant: Recorded Empirical Benchmark Protocol Envelope Integrity & Multi-Run Efficacy.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (111/111).');
+  // 112. P0 (v1.1.1): Fail-Closed Shadow Context Guard & Multi-Tool Matcher
+  const hookScriptPath112 = path.resolve('hooks/shadow-context-guard.mjs');
+  const hooksConfigPath112 = path.resolve('hooks.json');
+  const hookCfg112 = JSON.parse(fs.readFileSync(hooksConfigPath112, 'utf8'));
+  const matcherPattern112 = hookCfg112['shadow-context-guard']?.PreToolUse?.[0]?.matcher;
+  if (!matcherPattern112 || typeof matcherPattern112 !== 'string') {
+    throw new Error('HOOK-112 VIOLATION: hooks.json missing PreToolUse matcher');
+  }
+  // 112.1 Matcher must cover all 4 read tools: view_file, grep_search, list_dir, find_by_name
+  const matcherRegex112 = new RegExp(`^(?:${matcherPattern112})$`);
+  for (const requiredTool of ['view_file', 'grep_search', 'list_dir', 'find_by_name']) {
+    if (!matcherRegex112.test(requiredTool)) {
+      throw new Error(`HOOK-112 VIOLATION: hooks.json matcher '${matcherPattern112}' fails to cover tool '${requiredTool}'`);
+    }
+  }
+
+  const tempFixture112 = fs.mkdtempSync(path.join(os.tmpdir(), 'test-guard-112-'));
+  try {
+    const ctxDir112 = path.join(tempFixture112, 'scratch', 'context');
+    const srcDir112 = path.join(tempFixture112, 'src');
+    fs.mkdirSync(srcDir112, { recursive: true });
+    fs.mkdirSync(path.join(ctxDir112, 'src'), { recursive: true });
+
+    const rawFile112 = path.join(srcDir112, 'app.js');
+    const shadowFile112 = path.join(ctxDir112, 'src', 'app.js');
+    fs.writeFileSync(rawFile112, 'const token = "RAW_SECRET";\n', 'utf8');
+    fs.writeFileSync(shadowFile112, 'const token = "<SECRET:class=KEY:hash=123>";\n', 'utf8');
+
+    const manifestObj112 = {
+      schemaVersion: '1.0.0',
+      repoRoot: tempFixture112,
+      contextRoot: ctxDir112,
+      manifestDigest: 'mockdigest112'
+    };
+    fs.writeFileSync(path.join(ctxDir112, 'context-manifest.json'), JSON.stringify(manifestObj112), 'utf8');
+
+    function invokeHook(toolCall, workspacePaths = [tempFixture112]) {
+      const payload = JSON.stringify({
+        toolCall,
+        workspacePaths,
+        conversationId: 'conv-112-test',
+        stepIdx: 1,
+        modelName: 'gemini-3.8-flash'
+      });
+      const res = execFileSync(process.execPath, [hookScriptPath112], {
+        input: payload,
+        encoding: 'utf8',
+        timeout: 5000
+      });
+      return JSON.parse(res);
+    }
+
+    // 112.2 view_file on raw repository file: MUST deny, MUST direct to shadow copy, MUST NOT have overwrite
+    const vfRawRes = invokeHook({ name: 'view_file', args: { AbsolutePath: rawFile112 } });
+    if (vfRawRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: view_file on raw file did not deny: ${JSON.stringify(vfRawRes)}`);
+    }
+    if (!vfRawRes.reason || !vfRawRes.reason.includes('scratch/context')) {
+      throw new Error(`HOOK-112 VIOLATION: denial reason missing scratch/context direction: ${vfRawRes.reason}`);
+    }
+    if (vfRawRes.overwrite !== undefined) {
+      throw new Error('HOOK-112 VIOLATION: hook emitted unverified overwrite property');
+    }
+
+    // 112.3 view_file on shadow copy in scratch/context: MUST allow
+    const vfShadowRes = invokeHook({ name: 'view_file', args: { AbsolutePath: shadowFile112 } });
+    if (vfShadowRes.decision !== 'allow') {
+      throw new Error(`HOOK-112 VIOLATION: view_file on shadow copy did not allow: ${JSON.stringify(vfShadowRes)}`);
+    }
+
+    // 112.4 view_file on unshadowed raw file: MUST deny (Fail-Closed Default-Deny, not pass-through)
+    const unshadowedRaw = path.join(srcDir112, 'unshadowed.txt');
+    fs.writeFileSync(unshadowedRaw, 'unshadowed', 'utf8');
+    const vfUnshadowedRes = invokeHook({ name: 'view_file', args: { AbsolutePath: unshadowedRaw } });
+    if (vfUnshadowedRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: view_file on unshadowed file did not fail-closed deny: ${JSON.stringify(vfUnshadowedRes)}`);
+    }
+
+    // 112.5 view_file on escaping path: MUST deny (CWE-59 / traversal containment)
+    const vfEscapeRes = invokeHook({ name: 'view_file', args: { AbsolutePath: path.resolve(tempFixture112, '../outside.txt') } });
+    if (vfEscapeRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: view_file on escaping path did not deny: ${JSON.stringify(vfEscapeRes)}`);
+    }
+
+    // 112.6 grep_search: raw SearchPath must deny; shadow SearchPath must allow
+    const grepRawRes = invokeHook({ name: 'grep_search', args: { SearchPath: srcDir112, Query: 'token' } });
+    if (grepRawRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: grep_search on raw directory did not deny: ${JSON.stringify(grepRawRes)}`);
+    }
+    const grepShadowRes = invokeHook({ name: 'grep_search', args: { SearchPath: path.join(ctxDir112, 'src'), Query: 'token' } });
+    if (grepShadowRes.decision !== 'allow') {
+      throw new Error(`HOOK-112 VIOLATION: grep_search on shadow directory did not allow: ${JSON.stringify(grepShadowRes)}`);
+    }
+
+    // 112.7 list_dir: raw DirectoryPath must deny; shadow DirectoryPath must allow
+    const listRawRes = invokeHook({ name: 'list_dir', args: { DirectoryPath: srcDir112 } });
+    if (listRawRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: list_dir on raw directory did not deny: ${JSON.stringify(listRawRes)}`);
+    }
+    const listShadowRes = invokeHook({ name: 'list_dir', args: { DirectoryPath: path.join(ctxDir112, 'src') } });
+    if (listShadowRes.decision !== 'allow') {
+      throw new Error(`HOOK-112 VIOLATION: list_dir on shadow directory did not allow: ${JSON.stringify(listShadowRes)}`);
+    }
+
+    // 112.8 find_by_name: raw SearchDirectory must deny; shadow SearchDirectory must allow
+    const findRawRes = invokeHook({ name: 'find_by_name', args: { SearchDirectory: srcDir112, Pattern: '*.js' } });
+    if (findRawRes.decision !== 'deny') {
+      throw new Error(`HOOK-112 VIOLATION: find_by_name on raw directory did not deny: ${JSON.stringify(findRawRes)}`);
+    }
+    const findShadowRes = invokeHook({ name: 'find_by_name', args: { SearchDirectory: path.join(ctxDir112, 'src'), Pattern: '*.js' } });
+    if (findShadowRes.decision !== 'allow') {
+      throw new Error(`HOOK-112 VIOLATION: find_by_name on shadow directory did not allow: ${JSON.stringify(findShadowRes)}`);
+    }
+
+    // 112.9 Empty stdin & contract compliance (Rule 1 non-blocking allow, Rule 2 no CRLF, Rule 3 valid keys)
+    const empty112 = execFileSync(process.execPath, [hookScriptPath112], { input: '', encoding: 'utf8', timeout: 5000 });
+    if (empty112.includes('\r')) {
+      throw new Error('HOOK-112 VIOLATION: hook stdout contains CRLF');
+    }
+    const empty112Parsed = JSON.parse(empty112);
+    if (empty112Parsed.decision !== 'allow') {
+      throw new Error('HOOK-112 VIOLATION: empty stdin failed to return allow');
+    }
+    const allowedKeys112 = new Set(['decision', 'reason', 'permissionOverrides']);
+    for (const k of Object.keys(empty112Parsed)) {
+      if (!allowedKeys112.has(k)) {
+        throw new Error(`HOOK-112 VIOLATION: extraneous key '${k}' in hook output`);
+      }
+    }
+
+    // 112.10 Pass-through when workspace has no active shadow context manifest
+    const noCtxWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'no-ctx-ws-'));
+    try {
+      const noCtxRes = invokeHook({ name: 'view_file', args: { AbsolutePath: path.join(noCtxWorkspace, 'file.js') } }, [noCtxWorkspace]);
+      if (noCtxRes.decision !== 'allow') {
+        throw new Error('HOOK-112 VIOLATION: normal workspace with no active shadow context did not allow');
+      }
+    } finally {
+      fs.rmSync(noCtxWorkspace, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(tempFixture112, { recursive: true, force: true });
+  }
+
+  console.log('✔ 112. P0 Invariant: Fail-Closed Shadow Context Guard, Multi-Tool Matcher & Default-Deny Enforcement.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (112/112).');
 
   } finally {
     gitFixture.cleanup();

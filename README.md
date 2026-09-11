@@ -103,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 111 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 112 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection
