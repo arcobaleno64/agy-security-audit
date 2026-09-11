@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/empirical-benchmark-run.schema.json",
+  "title": "Empirical Benchmark Run Schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runId",
+    "recordedAt",
+    "benchmarkMode",
+    "target",
+    "environment",
+    "findings",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1", "1.0.0"]
+    },
+    "runId": {
+      "type": "string"
+    },
+    "recordedAt": {
+      "type": "string"
+    },
+    "benchmarkMode": {
+      "type": "string",
+      "enum": ["DISCOVERY", "AUDIT", "VALIDATE", "STABILITY"]
+    },
+    "target": {
+      "type": "object",
+      "required": ["repositoryName", "repositoryUri", "commitSha"],
+      "properties": {
+        "repositoryName": { "type": "string" },
+        "repositoryUri": { "type": "string" },
+        "commitSha": { "type": "string" },
+        "corpus": { "type": ["string", "null"] }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["agyVersion", "modelId", "modelProvider", "os", "nodeVersion"],
+      "properties": {
+        "agyVersion": { "type": "string" },
+        "modelId": { "type": "string" },
+        "modelProvider": { "type": "string" },
+        "os": { "type": "string" },
+        "nodeVersion": { "type": "string" },
+        "skillRevision": { "type": ["string", "null"] },
+        "toolVersion": { "type": ["string", "null"] },
+        "toolRevision": { "type": ["string", "null"] },
+        "toolIntegrityDigest": { "type": ["string", "null"] },
+        "toolDirty": { "type": ["boolean", "null"] }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "required": ["candidates"],
+      "properties": {
+        "candidates": {
+          "type": "array"
+        },
+        "verifiedFindings": {
+          "type": ["array", "null"]
+        },
+        "unresolvedCandidates": {
+          "type": ["array", "null"]
+        },
+        "suppressedCandidates": {
+          "type": ["array", "null"]
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["candidateCount"],
+      "properties": {
+        "candidateCount": { "type": "integer", "minimum": 0 },
+        "verifiedCount": { "type": ["integer", "null"], "minimum": 0 },
+        "deferredCount": { "type": ["integer", "null"], "minimum": 0 },
+        "suppressedCount": { "type": ["integer", "null"], "minimum": 0 },
+        "executionDurationMs": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

@@ -150,7 +150,7 @@ export function generateSimulatedCandidates(groundTruth = [], profile = 'clean')
  * Runs discovery evaluation.
  */
 export function runDiscoveryEval(repoRoot = process.cwd(), options = {}) {
-  const isRecorded = Boolean(options.candidatesFile);
+  const isRecorded = Boolean(options.candidatesFile || options.runFile);
   const evaluationMode = isRecorded ? 'RECORDED_AGENT_RUN' : 'SIMULATED_CI';
   const modelDependent = isRecorded;
 
@@ -161,19 +161,27 @@ export function runDiscoveryEval(repoRoot = process.cwd(), options = {}) {
     console.log('  [Notice] Harness verification using synthetic candidates; not an empirical LLM measurement.\n');
   }
 
-  const gtPath = path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
-  if (!fs.existsSync(gtPath)) {
-    throw new Error(`Ground truth file missing: ${gtPath}`);
+  let groundTruth = options.groundTruth || null;
+  if (!groundTruth) {
+    const gtPath = options.groundTruthPath || path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
+    if (!fs.existsSync(gtPath)) {
+      throw new Error(`Ground truth file missing: ${gtPath}`);
+    }
+    groundTruth = JSON.parse(fs.readFileSync(gtPath, 'utf8'));
   }
-  const groundTruth = JSON.parse(fs.readFileSync(gtPath, 'utf8'));
 
   let candidates = [];
   if (isRecorded) {
-    const candPath = path.resolve(repoRoot, options.candidatesFile);
+    const candPath = path.resolve(repoRoot, options.candidatesFile || options.runFile);
     if (!fs.existsSync(candPath)) {
-      throw new Error(`Candidates file missing: ${candPath}`);
+      throw new Error(`Candidates/Run file missing: ${candPath}`);
     }
-    candidates = JSON.parse(fs.readFileSync(candPath, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(candPath, 'utf8'));
+    if (Array.isArray(parsed)) {
+      candidates = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      candidates = parsed.findings?.candidates || parsed.candidates || [];
+    }
   } else {
     // Default to simulated mode for CI invariant check
     candidates = generateSimulatedCandidates(groundTruth, options.profile || 'clean');
@@ -207,7 +215,8 @@ const isDirectExecution = process.argv[1] && process.argv[1].endsWith('run-disco
 if (isDirectExecution) {
   const args = process.argv.slice(2);
   const candIdx = args.indexOf('--candidates');
-  const candidatesFile = candIdx !== -1 ? args[candIdx + 1] : null;
+  const runIdx = args.indexOf('--run-file');
+  const candidatesFile = candIdx !== -1 ? args[candIdx + 1] : (runIdx !== -1 ? args[runIdx + 1] : null);
   const noisy = args.includes('--noisy');
 
   const res = runDiscoveryEval(process.cwd(), {

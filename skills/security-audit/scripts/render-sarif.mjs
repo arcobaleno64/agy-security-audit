@@ -103,6 +103,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope } from './record-benchmark-run.mjs';
 
 
 
@@ -4640,7 +4641,182 @@ export default appName;`;
 
   console.log('✔ 110. P0/P1 Invariant: Unified Path Containment, Symlink Boundary Consolidation & TOCTOU-Resistant Atomic Read.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (110/110).');
+  // 111. P1 Invariant: Recorded Empirical Benchmark Protocol Envelope Integrity & Multi-Run Efficacy
+  const testRoot111 = fs.mkdtempSync(path.join(os.tmpdir(), 'empirical-benchmark-test-'));
+  try {
+    const mockCandidatesRun1 = [
+      {
+        id: 'CAND-01',
+        ruleId: 'CWE-862',
+        title: 'Missing Authorization on Critical State Mutation',
+        location: { uri: 'evals/semantic-benchmark/01-authz-bypass.js', startLine: 18 },
+        component: 'auth',
+        family: 'authz-bypass'
+      },
+      {
+        id: 'CAND-02',
+        ruleId: 'CWE-639',
+        title: 'Cross-Tenant Data Leakage via Unscoped Identifier',
+        location: { uri: 'evals/semantic-benchmark/02-cross-tenant-access.js', startLine: 18 },
+        component: 'multitenant',
+        family: 'cross-tenant-access'
+      }
+    ];
+
+    const mockCandidatesRun2 = [
+      {
+        id: 'CAND-01-R2',
+        ruleId: 'CWE-862',
+        title: 'Missing Authorization on Critical State Mutation',
+        location: { uri: 'evals/semantic-benchmark/01-authz-bypass.js', startLine: 18 },
+        component: 'auth',
+        family: 'authz-bypass'
+      },
+      {
+        id: 'CAND-03',
+        ruleId: 'CWE-78',
+        title: 'OS Command Injection',
+        location: { uri: 'evals/semantic-benchmark/03-confused-deputy.js', startLine: 20 },
+        component: 'cmd',
+        family: 'injection'
+      }
+    ];
+
+    const mockVerifiedRun1 = [
+      {
+        id: 'SEC-001',
+        ruleId: 'CWE-862',
+        title: 'Missing Authorization on Critical State Mutation',
+        location: { uri: 'evals/semantic-benchmark/01-authz-bypass.js', startLine: 18 },
+        disposition: 'CONFIRMED'
+      },
+      {
+        id: 'SEC-002',
+        ruleId: 'CWE-639',
+        title: 'Cross-Tenant Data Leakage',
+        location: { uri: 'evals/semantic-benchmark/02-cross-tenant-access.js', startLine: 18 },
+        disposition: 'DEFERRED'
+      }
+    ];
+
+    // 111.1 Envelope generation & schema conformance
+    const envelope1 = createBenchmarkRunEnvelope({
+      repoRoot: testRoot111,
+      benchmarkMode: 'DISCOVERY',
+      candidates: mockCandidatesRun1,
+      verifiedFindings: mockVerifiedRun1,
+      environment: {
+        modelId: 'gemini-3.8-flash',
+        modelProvider: 'google',
+        agyVersion: '1.2.0'
+      }
+    });
+
+    const envelope2 = createBenchmarkRunEnvelope({
+      repoRoot: testRoot111,
+      benchmarkMode: 'DISCOVERY',
+      candidates: mockCandidatesRun2,
+      environment: {
+        modelId: 'gemini-3.8-flash',
+        modelProvider: 'google',
+        agyVersion: '1.2.0'
+      }
+    });
+
+    const schemaPath = path.resolve('schemas/empirical-benchmark-run.schema.json');
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error('BENCHMARK VIOLATION: schemas/empirical-benchmark-run.schema.json is missing');
+    }
+    const schemaDef = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    for (const req of schemaDef.required) {
+      if (!(req in envelope1)) {
+        throw new Error(`BENCHMARK VIOLATION: envelope missing required schema property '${req}'`);
+      }
+    }
+
+    const valRes1 = validateBenchmarkRunEnvelope(envelope1);
+    if (!valRes1.valid || valRes1.errors.length > 0) {
+      throw new Error(`BENCHMARK VIOLATION: envelope1 failed validation: ${valRes1.errors.join(', ')}`);
+    }
+
+    // Fail-closed checks on envelope tampering
+    const badEnvelopeMode = validateBenchmarkRunEnvelope({ ...envelope1, benchmarkMode: 'INVALID_MODE' });
+    if (badEnvelopeMode.valid) {
+      throw new Error('BENCHMARK VIOLATION: invalid benchmarkMode was accepted');
+    }
+    const badEnvelopeVer = validateBenchmarkRunEnvelope({ ...envelope1, schemaVersion: '9.9.9' });
+    if (badEnvelopeVer.valid) {
+      throw new Error('BENCHMARK VIOLATION: invalid schemaVersion was accepted');
+    }
+
+    // 111.2 Multi-run stability & efficacy evaluation over envelopes
+    const stabilityRes = evaluateStability([envelope1, envelope2], testRoot111);
+    if (stabilityRes.totalRuns !== 2) {
+      throw new Error(`BENCHMARK VIOLATION: expected totalRuns === 2, got ${stabilityRes.totalRuns}`);
+    }
+    if (stabilityRes.pairwiseComparisons !== 1) {
+      throw new Error(`BENCHMARK VIOLATION: expected pairwiseComparisons === 1, got ${stabilityRes.pairwiseComparisons}`);
+    }
+    if (stabilityRes.meanJaccardSimilarity !== 0.3333) {
+      throw new Error(`BENCHMARK VIOLATION: expected Jaccard 0.3333, got ${stabilityRes.meanJaccardSimilarity}`);
+    }
+    if (stabilityRes.perfectRecurrenceCount !== 1) {
+      throw new Error(`BENCHMARK VIOLATION: expected perfectRecurrenceCount === 1, got ${stabilityRes.perfectRecurrenceCount}`);
+    }
+    if (!stabilityRes.environmentConsistency || stabilityRes.environmentConsistency.distinctModels[0] !== 'gemini-3.8-flash') {
+      throw new Error('BENCHMARK VIOLATION: environmentConsistency was not extracted from envelopes');
+    }
+
+    // 111.3 Efficacy derivation against ground truth
+    const mockGroundTruth = [
+      {
+        id: 'SEM-01',
+        cwe: 'CWE-862',
+        file: 'evals/semantic-benchmark/01-authz-bypass.js',
+        targetLine: 18,
+        expectedVerdict: 'VULNERABLE'
+      },
+      {
+        id: 'SEM-02',
+        cwe: 'CWE-639',
+        file: 'evals/semantic-benchmark/02-cross-tenant-access.js',
+        targetLine: 18,
+        expectedVerdict: 'VULNERABLE'
+      }
+    ];
+
+    const efficacyRes = evaluateStability([envelope1, envelope2], testRoot111, { groundTruth: mockGroundTruth });
+    if (!efficacyRes.empiricalEfficacy) {
+      throw new Error('BENCHMARK VIOLATION: empiricalEfficacy was null when groundTruth was provided');
+    }
+    if (efficacyRes.empiricalEfficacy.meanCandidateRecall !== 0.75) {
+      throw new Error(`BENCHMARK VIOLATION: expected meanCandidateRecall 0.75, got ${efficacyRes.empiricalEfficacy.meanCandidateRecall}`);
+    }
+
+    // 111.4 Backward compatibility: bare candidate arrays and mixed inputs
+    const bareRes = evaluateStability([mockCandidatesRun1, mockCandidatesRun2], testRoot111);
+    if (bareRes.meanJaccardSimilarity !== 0.3333) {
+      throw new Error(`BENCHMARK VIOLATION: bare candidate arrays failed stability evaluation: ${bareRes.meanJaccardSimilarity}`);
+    }
+    const mixedRes = evaluateStability([envelope1, mockCandidatesRun2], testRoot111);
+    if (mixedRes.meanJaccardSimilarity !== 0.3333) {
+      throw new Error(`BENCHMARK VIOLATION: mixed envelope/bare array evaluation failed: ${mixedRes.meanJaccardSimilarity}`);
+    }
+
+    // 111.5 Single-envelope discovery eval integration
+    const tempEnvFile = path.join(testRoot111, 'run-test.json');
+    fs.writeFileSync(tempEnvFile, JSON.stringify(envelope1, null, 2), 'utf8');
+    const discEnvRes = runDiscoveryEval(testRoot111, { runFile: tempEnvFile, groundTruth: mockGroundTruth });
+    if (discEnvRes.candidateTP !== 2 || discEnvRes.recall !== 1.0) {
+      throw new Error(`BENCHMARK VIOLATION: runDiscoveryEval failed on envelope file: ${JSON.stringify(discEnvRes)}`);
+    }
+  } finally {
+    fs.rmSync(testRoot111, { recursive: true, force: true });
+  }
+
+  console.log('✔ 111. P1 Invariant: Recorded Empirical Benchmark Protocol Envelope Integrity & Multi-Run Efficacy.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (111/111).');
 
   } finally {
     gitFixture.cleanup();

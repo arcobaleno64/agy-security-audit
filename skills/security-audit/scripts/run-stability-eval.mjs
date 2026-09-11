@@ -19,6 +19,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { unionCandidates, computeLineageFingerprint } from './finalize-scan.mjs';
+import { evaluateDiscovery } from './run-discovery-eval.mjs';
+
+/**
+ * Extracts candidate findings from either a bare candidate array or an empirical benchmark envelope.
+ */
+export function extractRunCandidates(runEntry) {
+  if (Array.isArray(runEntry)) return runEntry;
+  if (runEntry && typeof runEntry === 'object') {
+    if (Array.isArray(runEntry.findings?.candidates)) return runEntry.findings.candidates;
+    if (Array.isArray(runEntry.candidates)) return runEntry.candidates;
+  }
+  return [];
+}
+
+/**
+ * Extracts verified findings from an empirical benchmark envelope (if present).
+ */
+export function extractRunVerifiedFindings(runEntry) {
+  if (runEntry && typeof runEntry === 'object') {
+    if (Array.isArray(runEntry.findings?.verifiedFindings)) return runEntry.findings.verifiedFindings;
+    if (Array.isArray(runEntry.verifiedFindings)) return runEntry.verifiedFindings;
+  }
+  return null;
+}
+
+/**
+ * Extracts environment metadata from an empirical benchmark envelope (if present).
+ */
+export function extractRunEnvironment(runEntry) {
+  if (runEntry && typeof runEntry === 'object' && runEntry.environment && typeof runEntry.environment === 'object') {
+    return runEntry.environment;
+  }
+  return null;
+}
 
 /**
  * Computes Jaccard similarity between two sets of finding identifiers (e.g. lineageIds).
@@ -36,15 +70,18 @@ export function computeJaccardSimilarity(setA, setB) {
 }
 
 /**
- * Evaluates multi-run stability across candidate finding runs.
+ * Evaluates multi-run stability across candidate finding runs or empirical envelopes.
  */
-export function evaluateStability(runs = [], repoRoot = process.cwd()) {
+export function evaluateStability(runs = [], repoRoot = process.cwd(), options = {}) {
   if (!Array.isArray(runs) || runs.length < 2) {
     throw new Error('Stability evaluation requires at least 2 runs');
   }
 
+  // Normalize candidate arrays from either envelopes or bare arrays
+  const normalizedRuns = runs.map(extractRunCandidates);
+
   // Extract set of lineageIds for each run
-  const runKeySets = runs.map(runCandidates => {
+  const runKeySets = normalizedRuns.map(runCandidates => {
     return runCandidates.map(c => {
       const uri = c.location?.uri || c.location?.path || '';
       const rule = c.ruleId || 'SEC-VULN';
@@ -73,7 +110,7 @@ export function evaluateStability(runs = [], repoRoot = process.cwd()) {
     : 1.0;
 
   // Use unionCandidates to analyze recurrence across all runs
-  const unioned = unionCandidates(runs, repoRoot, { dedupeBy: 'lineage' });
+  const unioned = unionCandidates(normalizedRuns, repoRoot, { dedupeBy: 'lineage' });
   const totalRuns = runs.length;
   const recurrenceSummary = unioned.map(u => ({
     id: u.id,
@@ -87,6 +124,67 @@ export function evaluateStability(runs = [], repoRoot = process.cwd()) {
 
   const perfectRecurrenceCount = recurrenceSummary.filter(r => r.recurrenceCount === totalRuns).length;
 
+  // Track environment consistency if envelopes were supplied
+  const environments = runs.map(extractRunEnvironment).filter(Boolean);
+  const environmentConsistency = environments.length > 0 ? {
+    totalEnvelopes: environments.length,
+    distinctModels: [...new Set(environments.map(e => e.modelId).filter(Boolean))],
+    distinctAgyVersions: [...new Set(environments.map(e => e.agyVersion).filter(Boolean))],
+    distinctCommits: [...new Set(environments.map(e => e.skillRevision).filter(Boolean))]
+  } : null;
+
+  // Optional ground truth evaluation (empirical discovery & verification efficacy)
+  let empiricalEfficacy = null;
+  const gt = options.groundTruth || (options.groundTruthPath && fs.existsSync(options.groundTruthPath)
+    ? JSON.parse(fs.readFileSync(options.groundTruthPath, 'utf8'))
+    : null);
+
+  if (gt && Array.isArray(gt)) {
+    const runEfficacies = normalizedRuns.map((cands, idx) => {
+      const disc = evaluateDiscovery(cands, gt, options);
+      const verified = extractRunVerifiedFindings(runs[idx]);
+      let verifiedRecall = null;
+      let deferredRate = null;
+      if (verified && Array.isArray(verified)) {
+        const verifiedDisc = evaluateDiscovery(verified, gt, options);
+        verifiedRecall = verifiedDisc.recall;
+        const totalV = verified.length;
+        const deferredCount = verified.filter(f => f.disposition === 'DEFERRED').length;
+        deferredRate = totalV > 0 ? Number((deferredCount / totalV).toFixed(4)) : 0;
+      }
+      return {
+        runIndex: idx + 1,
+        candidateCount: cands.length,
+        candidateRecall: disc.recall,
+        precision: disc.precision,
+        f1: disc.f1,
+        candidateTP: disc.candidateTP,
+        candidateFP: disc.candidateFP,
+        verifiedRecall,
+        deferredRate
+      };
+    });
+
+    const meanCandRecall = runEfficacies.length > 0
+      ? Number((runEfficacies.reduce((acc, r) => acc + r.candidateRecall, 0) / runEfficacies.length).toFixed(4))
+      : 0;
+    const meanPrecision = runEfficacies.length > 0
+      ? Number((runEfficacies.reduce((acc, r) => acc + r.precision, 0) / runEfficacies.length).toFixed(4))
+      : 0;
+    const verifiedRuns = runEfficacies.filter(r => r.verifiedRecall !== null);
+    const meanVerifiedRecall = verifiedRuns.length > 0
+      ? Number((verifiedRuns.reduce((acc, r) => acc + r.verifiedRecall, 0) / verifiedRuns.length).toFixed(4))
+      : null;
+
+    empiricalEfficacy = {
+      groundTruthCount: gt.length,
+      meanCandidateRecall: meanCandRecall,
+      meanVerifiedRecall,
+      meanPrecision,
+      runEfficacies
+    };
+  }
+
   return {
     totalRuns,
     totalUniqueLineages: unioned.length,
@@ -94,7 +192,9 @@ export function evaluateStability(runs = [], repoRoot = process.cwd()) {
     pairwiseJaccard,
     meanJaccardSimilarity: meanJaccard,
     perfectRecurrenceCount,
-    findingsRecurrence: recurrenceSummary
+    findingsRecurrence: recurrenceSummary,
+    environmentConsistency,
+    empiricalEfficacy
   };
 }
 
@@ -223,17 +323,42 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
       };
     }
 
+    const gtPath = options.groundTruthPath || path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
+    let groundTruth = null;
+    if (fs.existsSync(gtPath)) {
+      try {
+        groundTruth = JSON.parse(fs.readFileSync(gtPath, 'utf8'));
+      } catch {
+        groundTruth = null;
+      }
+    }
+
     const runs = files.map(f => JSON.parse(fs.readFileSync(path.join(runsDirPath, f), 'utf8')));
-    const result = evaluateStability(runs, repoRoot);
+    const result = evaluateStability(runs, repoRoot, { groundTruth });
 
     console.log('================================================================');
     console.log('Empirical Discovery Stability Metrics (Recorded Runs):');
     console.log(`  Evaluation Mode:                 ${evaluationMode}`);
     console.log(`  Model-Dependent Run:             YES (Observed Multi-Pass)`);
     console.log(`  Total Recorded Runs:             ${result.totalRuns}`);
+    if (result.environmentConsistency) {
+      if (result.environmentConsistency.distinctModels.length > 0) {
+        console.log(`  Evaluated Model(s):              ${result.environmentConsistency.distinctModels.join(', ')}`);
+      }
+      if (result.environmentConsistency.distinctAgyVersions.length > 0) {
+        console.log(`  AGY CLI Version(s):              ${result.environmentConsistency.distinctAgyVersions.join(', ')}`);
+      }
+    }
     console.log(`  Unique Semantic Lineages:        ${result.totalUniqueLineages}`);
     console.log(`  Mean Finding-Set Jaccard:        ${(result.meanJaccardSimilarity * 100).toFixed(1)}%`);
     console.log(`  100% Reliable Lineages:          ${result.perfectRecurrenceCount}/${result.totalUniqueLineages}`);
+    if (result.empiricalEfficacy) {
+      console.log(`  Mean Candidate Recall:           ${(result.empiricalEfficacy.meanCandidateRecall * 100).toFixed(1)}%`);
+      if (result.empiricalEfficacy.meanVerifiedRecall !== null) {
+        console.log(`  Mean Verified Recall:            ${(result.empiricalEfficacy.meanVerifiedRecall * 100).toFixed(1)}%`);
+      }
+      console.log(`  Mean Precision:                  ${(result.empiricalEfficacy.meanPrecision * 100).toFixed(1)}%`);
+    }
     console.log('================================================================\n');
 
     return {

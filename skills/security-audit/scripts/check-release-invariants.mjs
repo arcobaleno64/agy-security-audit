@@ -77,6 +77,7 @@ import { buildThreatModel, detectRepositoryInventory, generateDiscoveryMatrix } 
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope } from './record-benchmark-run.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -103,6 +104,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/run-semantic-eval.mjs',
   'skills/security-audit/scripts/run-discovery-eval.mjs',
   'skills/security-audit/scripts/run-stability-eval.mjs',
+  'skills/security-audit/scripts/record-benchmark-run.mjs',
   'skills/security-audit/scripts/check-release-invariants.mjs',
   'skills/security-audit/standards/standards-map.json',
   'skills/security-audit/standards/applicability-profiles.json',
@@ -127,6 +129,7 @@ const REQUIRED_FILES = [
   'schemas/canonical-finding.schema.json',
   'schemas/execution-attestation.schema.json',
   'schemas/audit-baseline.schema.json',
+  'schemas/empirical-benchmark-run.schema.json',
   'agents/threat-modeler.md',
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',

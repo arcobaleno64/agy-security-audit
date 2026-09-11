@@ -72,7 +72,9 @@ security-audit/
 │   ├── candidate.schema.json             # Candidate-finding schema (Security Property & Lineage)
 │   ├── verifier-ballot.schema.json       # Verifier-ballot schema (3-Lens evidence binding)
 │   ├── canonical-finding.schema.json     # Canonical authoritative-finding schema (Taxonomy & Reason Code)
-│   └── execution-attestation.schema.json # Execution-attestation schema (stage-coverage completeness)
+│   ├── execution-attestation.schema.json # Execution-attestation schema (stage-coverage completeness)
+│   ├── audit-baseline.schema.json        # Audit-baseline schema (historical state baseline)
+│   └── empirical-benchmark-run.schema.json # Empirical benchmark run envelope schema
 ├── rules/
 │   └── AGENTS.md                         # Global zero-trust and data-review boundary rules
 └── skills/
@@ -101,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 110 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 111 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection
@@ -109,8 +111,9 @@ security-audit/
             ├── run-evals.mjs             # 50-case deterministic security-invariant and adversarial-regression suite
             ├── run-semantic-eval.mjs     # L1.5 disposition ground-truth benchmark suite
             ├── run-discovery-eval.mjs    # Agent discovery-evaluation suite (Simulated CI / Recorded Agent Run)
-            ├── run-stability-eval.mjs    # Discovery-stability benchmark (Synthetic Harness / Recorded Run)
-            └── check-release-invariants.mjs # Section 24 release-invariant gate (spec and invariant verification)
+            ├── run-stability-eval.mjs    # Discovery-stability and multi-pass empirical benchmark
+            ├── record-benchmark-run.mjs  # Recorded empirical benchmark protocol envelope recorder
+            └── check-release-invariants.mjs # Section 24 release-invariant gate (55 files, 38 invariants)
 ```
 
 ---

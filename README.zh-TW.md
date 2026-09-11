@@ -71,8 +71,10 @@ security-audit/
 │   ├── threat-model.schema.json          # 威脅模型綱要
 │   ├── candidate.schema.json             # 候選弱點綱要 (Security Property & Lineage)
 │   ├── verifier-ballot.schema.json       # 檢驗選票綱要 (3-Lens 證據綁定)
-│   ├── canonical-finding.schema.json     # 權威標準發現綱要 (Taxonomy & Reason Code)
-│   └── execution-attestation.schema.json # 執行證明綱要 (階段覆蓋完整性)
+│   ├── canonical-finding.schema.json     # 權威規範弱點綱要 (分類法與原因碼)
+│   ├── execution-attestation.schema.json # 執行證明綱要 (階段覆蓋完整性)
+│   ├── audit-baseline.schema.json        # 審查基準狀態綱要 (歷史狀態基準)
+│   └── empirical-benchmark-run.schema.json # 實證基準執行封套綱要
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
 └── skills/
@@ -101,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 110 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 111 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
@@ -109,8 +111,9 @@ security-audit/
             ├── run-evals.mjs             # 50 題確定性安全不變量與對抗迴歸套件
             ├── run-semantic-eval.mjs     # L1.5 決策地面真值基準測試 (Disposition Ground-Truth)
             ├── run-discovery-eval.mjs    # 代理發現評測套件 (Simulated CI / Recorded Agent Run)
-            ├── run-stability-eval.mjs    # 發現穩定度基準 (Synthetic Harness / Recorded Run)
-            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (規格與不變量驗證)
+            ├── run-stability-eval.mjs    # 發現穩定度與多輪實證基準評測引擎
+            ├── record-benchmark-run.mjs  # 真實模型實證基準封套記錄工具
+            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (55 項檔案，38 項安全不變量)
 ```
 
 ---
