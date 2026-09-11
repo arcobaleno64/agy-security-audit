@@ -86,5 +86,6 @@ Only the current MINOR line is supported. Update this table with every MINOR bum
 
 | Version | Supported |
 |---|---|
-| 1.0.x | :white_check_mark: |
+| 1.1.x | :white_check_mark: |
+| 1.0.x | :x: |
 | < 1.0.0 | :x: |
