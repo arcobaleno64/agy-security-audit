@@ -49,6 +49,17 @@
         "tokenizedFilesCount": { "type": "number" },
         "totalSecretsTokenized": { "type": "number" }
       }
+    },
+    "toolProvenance": {
+      "type": "object",
+      "properties": {
+        "toolName": { "type": "string" },
+        "toolVersion": { "type": "string" },
+        "toolRevision": { "type": "string" },
+        "toolBranch": { "type": "string" },
+        "toolDirty": { "type": "boolean" },
+        "toolIntegrityDigest": { "type": ["string", "null"] }
+      }
     }
   }
 }

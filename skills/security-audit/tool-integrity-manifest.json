@@ -1,15 +1,15 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.0.1",
-  "generatedAt": "2026-09-11T04:15:53.217Z",
-  "manifestDigest": "6fd89a5e6790fc777dfaf6ba117ce41d10e6724986df8b8617f8520afbe3e5da",
+  "generatedAt": "2026-09-11T05:00:38.337Z",
+  "manifestDigest": "6bcd7c00527dace431ca94489b5a5803e7ddf38b0e3d19c8115308e83e18e131",
   "criticalScripts": {
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
     "scripts/build-threat-model.mjs": "2ca2b6207947c7bea10f2d28468387562dc9f9df47db34a6d7da47d4dbfc8265",
-    "scripts/finalize-scan.mjs": "78eb12b79b5309989b4318727286f84634879e76ddc1c3f202b2c5875332416e",
+    "scripts/finalize-scan.mjs": "d517a70c69e8327f1b8f661deb14d079f389d7a1b0a4198423f83a9cbf9c79df",
     "scripts/prepare-review-context.mjs": "b11f88a82cef34162b0522de963530a75d19a1e096170fbef4a37a6cb08c915a",
     "scripts/project-context.mjs": "472de5a9a8dfa08137978f1b28cad21487a4292832a1172f67db58d24c8e34ab",
-    "scripts/render-sarif.mjs": "c4e4f547f6bc1394bbc68f974ae408b9b9151f7723648f3cd7011cf4f168cc64",
+    "scripts/render-sarif.mjs": "1cf0d3512c322df8526701362f31801aa8b3cb5e71b70c356b0d8b6011a1256e",
     "scripts/safe-git.mjs": "4136727311736b5d388fa6250cf30a91dc6675c6abe87909e572b692acdbb5c0",
     "scripts/validate-attack-path.mjs": "df1335244c1c24e0cfd1ee2f5501d7bdc90b08211c1586ec87f40fc4a5dc52ed",
     "scripts/validate-patch.mjs": "aa8aab1b7854225047b003cc395061a2d21a28ecb61c7d2a63a94e9bb2d9b156"

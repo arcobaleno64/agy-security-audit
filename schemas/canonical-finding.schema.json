@@ -92,6 +92,8 @@
         "modelIdentifier": { "type": "string" },
         "executionDate": { "type": "string" },
         "toolVersion": { "type": "string" },
+        "toolRevision": { "type": "string" },
+        "toolIntegrityDigest": { "type": ["string", "null"] },
         "promptContractVersion": { "type": "string" },
         "systemPromptIntegrity": { "type": "string", "enum": ["VERIFIED", "UNKNOWN"] }
       }

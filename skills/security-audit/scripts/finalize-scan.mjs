@@ -511,6 +511,47 @@ export function computeExecutionEquivalenceKey({
 }
 
 /**
+ * Producer Provenance (v1.1.0 P0)
+ * Resolves tool release version, repository commit SHA, TCB integrity digest, and dirty state.
+ */
+export function getToolProvenance(toolRoot = null) {
+  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
+
+  // 1. Git provenance of the tool repository
+  const gitProv = getHardenedGitProvenance(resolvedTool);
+  const isRealSha = Boolean(gitProv?.revisionId
+    && /^[0-9a-f]{40}$/i.test(gitProv.revisionId)
+    && gitProv.revisionId !== '0000000000000000000000000000000000000000');
+  const toolRevision = isRealSha ? gitProv.revisionId : 'UNCHECKED_REVISION';
+  const toolBranch = (gitProv?.branch && gitProv.branch !== 'unknown') ? gitProv.branch : 'unknown';
+  const toolDirty = Boolean(gitProv?.properties?.isDirty);
+
+  // 2. Authoritative TCB manifest digest
+  const manifestPath = path.resolve(resolvedTool, 'tool-integrity-manifest.json');
+  let toolIntegrityDigest = null;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (manifest && typeof manifest.manifestDigest === 'string') {
+        toolIntegrityDigest = manifest.manifestDigest;
+      }
+    } catch {
+      toolIntegrityDigest = null;
+    }
+  }
+
+  return {
+    toolName: '@arcobaleno64/agy-security-audit',
+    toolVersion: TOOL_VERSION,
+    toolRevision,
+    toolBranch,
+    toolDirty,
+    toolIntegrityDigest
+  };
+}
+
+/**
  * Builds an audit baseline artifact for tracking finding lineage and regression convergence (R2-P2-05 / R4-P1-03).
  */
 export function buildAuditBaseline({
@@ -524,8 +565,16 @@ export function buildAuditBaseline({
   promptContractVersion = '1.0.0',
   modelProvider = 'deterministic-local',
   modelIdentifier = 'unspecified',
-  modelSnapshotImmutable = false
+  modelSnapshotImmutable = false,
+  toolRevision = null,
+  toolIntegrityDigest = null,
+  toolProvenance = null
 } = {}) {
+  const effectiveToolProv = toolProvenance || getToolProvenance();
+  const effectiveToolRev = toolRevision || effectiveToolProv.toolRevision;
+  const effectiveDigest = toolIntegrityDigest !== undefined && toolIntegrityDigest !== null
+    ? toolIntegrityDigest
+    : effectiveToolProv.toolIntegrityDigest;
   const safeRepoRoot = path.resolve(repoRoot);
   const rev = targetRevision || provenance?.commitSha || 'HEAD';
 
@@ -612,6 +661,8 @@ export function buildAuditBaseline({
   return {
     schemaVersion: '1.0.0',
     toolVersion: TOOL_VERSION,
+    toolRevision: effectiveToolRev,
+    toolIntegrityDigest: effectiveDigest,
     targetRevision: rev,
     modelProvider,
     modelIdentifier,
@@ -2380,7 +2431,8 @@ export function buildExecutionAttestation({
   zeroCandidates = false,
   canonicalFindingsCount = null,
   capabilities = null,
-  contextIsolation = null
+  contextIsolation = null,
+  toolProvenance = null
 } = {}) {
   const isZeroCandidates = Boolean(zeroCandidates || canonicalFindingsCount === 0);
   const allPossibleStages = ['INVENTORY', 'THREAT_MODELING', 'DISCOVERY_MATRIX', 'VERIFICATION_PANEL', 'FINALIZATION'];
@@ -2469,6 +2521,7 @@ export function buildExecutionAttestation({
     schemaVersion: '1.0.0',
     attestationId: `ATT-${crypto.randomBytes(6).toString('hex')}`,
     timestamp: new Date().toISOString(),
+    toolProvenance: toolProvenance || getToolProvenance(),
     target: target || {
       repositoryUri: repoRoot,
       revision: 'HEAD'
@@ -2513,8 +2566,10 @@ export function finalizeScan({
   capabilities = null,
   executedStages = null,
   allowSelfAudit = false,
-  toolRoot = null
+  toolRoot = null,
+  toolProvenance = null
 } = {}) {
+  const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
@@ -2527,6 +2582,8 @@ export function finalizeScan({
     modelIdentifier: modelProvenance?.modelIdentifier || 'unknown',
     executionDate: new Date().toISOString(),
     toolVersion: TOOL_VERSION,
+    toolRevision: effectiveToolProvenance.toolRevision,
+    toolIntegrityDigest: effectiveToolProvenance.toolIntegrityDigest,
     promptContractVersion: '1.0.0',
     systemPromptIntegrity: modelProvenance?.systemPromptIntegrity || 'UNKNOWN'
   };
@@ -2865,6 +2922,7 @@ export function finalizeScan({
     delegationObserved: Boolean(safeVotes.length > 0),
     zeroCandidates: canonicalFindings.length === 0,
     canonicalFindingsCount: canonicalFindings.length,
+    toolProvenance: effectiveToolProvenance,
     capabilities: capabilities || {
       required: ['repository.read'],
       observed: [],
@@ -3014,7 +3072,8 @@ export function finalizeScan({
     provenance,
     modelProvider: safeModelProvenance.modelProvider,
     modelIdentifier: safeModelProvenance.modelIdentifier,
-    modelSnapshotImmutable: Boolean(modelProvenance?.modelSnapshotImmutable)
+    modelSnapshotImmutable: Boolean(modelProvenance?.modelSnapshotImmutable),
+    toolProvenance: effectiveToolProvenance
   });
 
   const summary = {
@@ -3070,6 +3129,7 @@ export function finalizeScan({
     dependencyBoundary,
     baseline,
     modelProvenance: safeModelProvenance,
+    toolProvenance: effectiveToolProvenance,
     toolIntegrity,
     contextPreparation: contextPrep.manifest
   };
@@ -3106,6 +3166,7 @@ export function finalizeScan({
     discoveryMatrix: safeMatrix,
     baseline,
     modelProvenance: safeModelProvenance,
+    toolProvenance: effectiveToolProvenance,
     toolIntegrity,
     contextPreparation: contextPrep.manifest
   };
@@ -3573,8 +3634,10 @@ export function renderSarifFromCanonical({
   assuranceLevel = null,
   findingCounts = null,
   scanRunId = null,
-  projectId = null
+  projectId = null,
+  toolProvenance = null
 } = {}) {
+  const effectiveToolProv = toolProvenance || getToolProvenance();
   const safeFindings = validateCanonicalFindings(canonicalFindings, repoRoot);
   const rulesMap = new Map();
   const results = [];
@@ -3660,9 +3723,14 @@ export function renderSarifFromCanonical({
     tool: {
       driver: {
         name: 'AGY Security Audit',
-        version: '1.0.0',
+        version: effectiveToolProv.toolVersion || TOOL_VERSION,
+        semanticVersion: effectiveToolProv.toolVersion || TOOL_VERSION,
         informationUri: 'https://antigravity.google/docs/security',
-
+        properties: {
+          toolRevision: effectiveToolProv.toolRevision,
+          toolIntegrityDigest: effectiveToolProv.toolIntegrityDigest,
+          toolDirty: effectiveToolProv.toolDirty
+        },
         rules: Array.from(rulesMap.values())
       }
     },
@@ -3692,6 +3760,7 @@ export function renderSarifFromCanonical({
         auditIntent: auditIntent || 'DISCOVERY',
         coverageComplete: coverageStatus === 'COMPLETE',
         delegationObserved: safeFindings.some(f => f.consensus && f.consensus.total > 0),
+        toolProvenance: effectiveToolProv,
         capabilities: {
           required: ['repository.read'],
           observed: [],
@@ -3727,8 +3796,18 @@ export function renderMarkdownFromCanonical({
   assuranceLevel = null,
   scanRunId = null,
   projectId = null,
-  findingCounts = null
+  findingCounts = null,
+  toolProvenance = null
 }) {
+  const effectiveToolProv = toolProvenance || getToolProvenance();
+  const toolVer = effectiveToolProv.toolVersion || TOOL_VERSION;
+  const toolRevShort = effectiveToolProv.toolRevision
+    ? (effectiveToolProv.toolRevision === 'UNCHECKED_REVISION' ? 'UNCHECKED_REVISION' : effectiveToolProv.toolRevision.slice(0, 12))
+    : 'unknown';
+  const toolDigestShort = effectiveToolProv.toolIntegrityDigest
+    ? (effectiveToolProv.toolIntegrityDigest.slice(0, 12) + '...')
+    : 'none';
+
   const timestamp = new Date().toISOString();
   const sha12 = (provenance?.properties?.sha12) || 'unknown';
   const branch = provenance?.branch || 'unknown';
@@ -3737,6 +3816,7 @@ export function renderMarkdownFromCanonical({
   let md = '# Security Audit Report\n\n';
   md += `- **Generated At (UTC)**: \`${timestamp}\`\n`;
   md += `- **Target Revision**: \`${sha12}\` on branch \`${branch}\`${isDirty}\n`;
+  md += `- **Tool Producer**: \`@arcobaleno64/agy-security-audit\` v\`${toolVer}\` (rev: \`${toolRevShort}\`, TCB digest: \`${toolDigestShort}\`)\n`;
   if (provenance?.properties?.dirtyDiffSha256) {
     md += `- **Dirty Diff SHA-256**: \`${provenance.properties.dirtyDiffSha256}\`\n`;
   }
@@ -4462,6 +4542,7 @@ if (isDirectExecution) {
     }
   } else if (inputPath) {
     try {
+      const repoRoot = path.resolve(repoRootArg);
       const rawData = fs.readFileSync(inputPath, 'utf8');
       const candidates = JSON.parse(rawData);
 
@@ -4492,8 +4573,6 @@ if (isDirectExecution) {
       if (candidates.length > 0 && votes.length === 0) {
         console.warn('[DEFAULT-DENY] No verifier votes provided via --votes. All candidates will be derived as DEFERRED under Default-Deny.');
       }
-
-      const repoRoot = path.resolve(repoRootArg);
 
       // R10-P0-01: Load and validate threat model from CLI arg or canonical scratch path
       let threatModel = null;
@@ -4562,7 +4641,8 @@ if (isDirectExecution) {
           findingCounts: finalization.summary.findingCounts,
           scanRunId: finalization.manifest?.scanRunId,
           projectId: finalization.manifest?.projectId,
-          executionAttestation: finalization.summary.execution
+          executionAttestation: finalization.summary.execution,
+          toolProvenance: finalization.summary.toolProvenance
         });
         fs.mkdirSync(path.dirname(outputSarifPath), { recursive: true });
         fs.writeFileSync(outputSarifPath, JSON.stringify(sarif, null, 2), 'utf8');
@@ -4582,7 +4662,8 @@ if (isDirectExecution) {
           assuranceLevel: finalization.summary.assuranceLabel,
           scanRunId: finalization.manifest?.scanRunId,
           projectId: finalization.manifest?.projectId,
-          findingCounts: finalization.summary.findingCounts
+          findingCounts: finalization.summary.findingCounts,
+          toolProvenance: finalization.summary.toolProvenance
         });
         fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
         fs.writeFileSync(outputMdPath, md, 'utf8');

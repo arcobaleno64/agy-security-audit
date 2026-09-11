@@ -92,7 +92,9 @@ import {
   loadBaselineContext,
   persistBaselineContext,
   evaluateSecondOpinion,
-  validateThreatModel
+  validateThreatModel,
+  TOOL_VERSION,
+  getToolProvenance
 } from './finalize-scan.mjs';
 
 import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs';
@@ -4337,7 +4339,85 @@ export default appName;`;
     fs.rmSync(evidenceSymlinkRoot, { recursive: true, force: true });
   }
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (107/107).');
+  // 108. P0 (v1.1.0): Tool Producer Provenance (toolVersion, toolRevision, toolIntegrityDigest, toolDirty)
+  const prov108 = getToolProvenance();
+  if (!prov108 || typeof prov108 !== 'object') {
+    throw new Error('P0-PROVENANCE VIOLATION: getToolProvenance() returned non-object');
+  }
+  if (prov108.toolName !== '@arcobaleno64/agy-security-audit') {
+    throw new Error(`P0-PROVENANCE VIOLATION: toolName mismatch: expected @arcobaleno64/agy-security-audit, got ${prov108.toolName}`);
+  }
+  if (prov108.toolVersion !== TOOL_VERSION) {
+    throw new Error(`P0-PROVENANCE VIOLATION: toolVersion mismatch: expected ${TOOL_VERSION}, got ${prov108.toolVersion}`);
+  }
+  if (typeof prov108.toolRevision !== 'string' || prov108.toolRevision.length === 0) {
+    throw new Error('P0-PROVENANCE VIOLATION: toolRevision must be a non-empty string');
+  }
+  if (prov108.toolRevision !== 'UNCHECKED_REVISION' && !/^[0-9a-f]{40}$/i.test(prov108.toolRevision)) {
+    throw new Error(`P0-PROVENANCE VIOLATION: toolRevision '${prov108.toolRevision}' is neither a 40-char SHA nor UNCHECKED_REVISION`);
+  }
+  if (typeof prov108.toolDirty !== 'boolean') {
+    throw new Error('P0-PROVENANCE VIOLATION: toolDirty must be a boolean');
+  }
+  if (prov108.toolIntegrityDigest !== null && (!/^[0-9a-f]{64}$/i.test(prov108.toolIntegrityDigest))) {
+    throw new Error(`P0-PROVENANCE VIOLATION: toolIntegrityDigest '${prov108.toolIntegrityDigest}' is neither null nor a 64-char hex digest`);
+  }
+
+  // 108.2: Verify execution attestation stamps toolProvenance
+  const attestation108 = buildExecutionAttestation({ repoRoot: process.cwd() });
+  if (!attestation108.toolProvenance || attestation108.toolProvenance.toolVersion !== TOOL_VERSION) {
+    throw new Error('P0-PROVENANCE VIOLATION: buildExecutionAttestation failed to stamp toolProvenance');
+  }
+
+  // 108.3: Verify SARIF driver properties stamp toolRevision and toolIntegrityDigest
+  const sarif108 = renderSarifFromCanonical({
+    canonicalFindings: [],
+    repoRoot: process.cwd()
+  });
+  const driver108 = sarif108.runs[0].tool.driver;
+  if (driver108.version !== TOOL_VERSION || driver108.semanticVersion !== TOOL_VERSION) {
+    throw new Error(`P0-PROVENANCE VIOLATION: SARIF driver version '${driver108.version}' does not match TOOL_VERSION '${TOOL_VERSION}'`);
+  }
+  if (!driver108.properties || typeof driver108.properties.toolRevision !== 'string') {
+    throw new Error('P0-PROVENANCE VIOLATION: SARIF driver.properties missing toolRevision');
+  }
+  if (!('toolIntegrityDigest' in driver108.properties) || !('toolDirty' in driver108.properties)) {
+    throw new Error('P0-PROVENANCE VIOLATION: SARIF driver.properties missing toolIntegrityDigest or toolDirty');
+  }
+
+  // 108.4: Verify Markdown report header stamps Tool Producer metadata
+  const md108 = renderMarkdownFromCanonical({
+    canonicalFindings: [],
+    repoRoot: process.cwd()
+  });
+  if (!md108.includes('- **Tool Producer**: `@arcobaleno64/agy-security-audit` v')) {
+    throw new Error('P0-PROVENANCE VIOLATION: Markdown report missing Tool Producer header line');
+  }
+
+  // 108.5: Verify finalizeScan stamps modelProvenance.toolRevision and baseline
+  const finalization108 = finalizeScan({
+    candidates: [{
+      id: 'SEC-108-01',
+      ruleId: 'SEC-TEST',
+      severity: 'HIGH',
+      location: { uri: 'test.js', startLine: 1 }
+    }],
+    repoRoot: process.cwd()
+  });
+  const finding108 = finalization108.canonicalFindings[0];
+  if (!finding108.modelProvenance?.toolRevision) {
+    throw new Error('P0-PROVENANCE VIOLATION: finalizeScan canonical finding missing modelProvenance.toolRevision');
+  }
+  if (!('toolIntegrityDigest' in finding108.modelProvenance)) {
+    throw new Error('P0-PROVENANCE VIOLATION: finalizeScan canonical finding missing modelProvenance.toolIntegrityDigest');
+  }
+  if (!finalization108.baseline?.toolRevision) {
+    throw new Error('P0-PROVENANCE VIOLATION: finalizeScan baseline missing toolRevision');
+  }
+
+  console.log('✔ 108. P0 Invariant: Tool Producer Provenance deterministically stamps revision, digest, and dirty state across all artifacts.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (108/108).');
 
   } finally {
     gitFixture.cleanup();
