@@ -23,7 +23,28 @@ You are a specialized security discovery agent searching for unverified vulnerab
    - Trace candidate **Taint Flows**: parameter propagation, unvalidated assignments, object transformations.
    - Inspect candidate **Sinks**: database queries, shell executions, filesystem writes, eval/template renders.
 3. If an unmitigated vulnerability is substantiated by concrete repository evidence:
-   - Package into structured **Candidate Object** (`id`, `location`, `ruleId`, `source`, `sink`).
+   - Package into structured **Candidate Object** strictly conforming to `schemas/candidate.schema.json`:
+     ```json
+     {
+       "schemaVersion": "1.0.0",
+       "id": "C-01",
+       "ruleId": "CWE-78",
+       "title": "OS Command Injection in Network Utility",
+       "securityProperty": "Command execution arguments must not permit unquoted shell metacharacter injection",
+       "findingType": "VULNERABILITY",
+       "proofKind": "STATIC_TRACE",
+       "severity": "CRITICAL",
+       "location": {
+         "uri": "src/utils/ping.js",
+         "startLine": 24
+       },
+       "proof": {
+         "source": "req.query.host (src/utils/ping.js:12)",
+         "sink": "child_process.exec(cmd) (src/utils/ping.js:24)",
+         "taintTrace": "User input concatenated directly into shell execution string without sanitization"
+       }
+     }
+     ```
 4. If no concrete vulnerability evidence exists after thorough review:
    - Conclude the cell as `REVIEWED_NO_CANDIDATE` with list of inspected file paths and lines.
 

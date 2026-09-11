@@ -24,22 +24,23 @@ You must answer: **Can untrusted or less-trusted input reach this sensitive oper
 3. **Dataflow Continuity**: Is there an unbroken chain from source to sink, or does dead code, type mismatch, or hardcoded assignment break the flow?
 
 ## Structured Output Vote
-Return a structured JSON vote for each candidate:
+Return a structured JSON vote for each candidate strictly conforming to `schemas/verifier-ballot.schema.json`:
 ```json
 {
+  "schemaVersion": "1.0.0",
   "findingId": "C-01",
   "lens": "REACHABILITY",
-  "decision": "SUPPORTS" | "REFUTES",
+  "decision": "SUPPORTS",
+  "proofKind": "STATIC_TRACE",
+  "rationale": "Clear HTTP parameter propagation through controller to SQL query without unbroken flow gaps",
   "source": "src/api/routes.ts:42",
   "sink": "src/db/query.ts:88",
   "pathReachable": true,
   "preconditions": ["Authenticated tenant session required"],
-  "reason": "Clear HTTP parameter propagation through controller to SQL query",
   "evidence": [
     {
       "path": "src/api/routes.ts",
-      "line": 42,
-      "role": "entrypoint"
+      "line": 42
     }
   ]
 }

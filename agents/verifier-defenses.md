@@ -24,21 +24,22 @@ You must answer: **Do existing sanitizers, input validators, type assertions, or
 3. **Decisive Counterevidence**: If a solid defensive barrier exists that neutralizes the threat, identify the exact file and line number.
 
 ## Structured Output Vote
-Return a structured JSON vote for each candidate:
+Return a structured JSON vote for each candidate strictly conforming to `schemas/verifier-ballot.schema.json`:
 ```json
 {
+  "schemaVersion": "1.0.0",
   "findingId": "C-01",
   "lens": "DEFENSES",
-  "decision": "SUPPORTS" | "REFUTES",
+  "decision": "REFUTES",
+  "proofKind": "STATIC_TRACE",
+  "rationale": "Defense invariant neutralizes attack vector via strict parameter schema validation",
   "defensesFound": ["Zod schema validation at route entry"],
   "mitigationProofLine": "src/api/routes.ts:18",
   "mitigationReason": "Request body parsed with strict zod schema disallowing special characters",
-  "reason": "Defense invariant neutralizes attack vector",
   "evidence": [
     {
       "path": "src/api/routes.ts",
-      "line": 18,
-      "role": "guard"
+      "line": 18
     }
   ]
 }

@@ -7,6 +7,15 @@ The `security-audit` plugin is architected strictly around **declarative, verifi
 2. Verification decisions, evidence binding, consensus calculations, CVSS derivation, and SARIF/Markdown rendering are executed by **deterministic, model-independent JavaScript code** in `finalize-scan.mjs`, `validate-patch.mjs`, and `standards-mapping.mjs`.
 3. The plugin supports **Triad-Flow Multi-Provider Orchestration**, allowing discovery subagents, verification subagents, and coordinator processes to run on completely separate models or providers without breaking task correlation.
 
+### 1.1 Control Plane Authority Hierarchy
+To prevent contract drift between documentation, subagent prompts, and deterministic runtime validators, the following unambiguous authority order is enforced:
+1. **Level 1 (Ground Truth Authority)**: Canonical JSON Schemas (`schemas/*.schema.json`) and deterministic runtime validators (`scripts/finalize-scan.mjs`).
+2. **Level 2**: Main workflow specifications in `SKILL.md` and job contracts in `skills/security-audit/jobs/*.md`.
+3. **Level 3**: Subagent prompt contracts in `agents/*.md`.
+4. **Level 4**: Architectural references, protocols, and examples in `skills/security-audit/references/*.md`.
+
+Any ambiguity or conflicting representation between documentation examples and canonical schemas is strictly resolved in favor of Level 1.
+
 ---
 
 ## 2. Standardized Role & Capability Contracts
@@ -29,17 +38,22 @@ Every subagent contract in `agents/*.md` and `skills/security-audit/jobs/*.md` c
 - **Capability Requirements**: Least-privilege read-only inspection. No filesystem write or command execution capabilities.
 - **Input Contract**: Candidate finding tuple + task correlation nonce.
 - **Output Contract**: Conforms to `schemas/verifier-ballot.schema.json`:
-  ```xml
-  <audit_verdict nonce="NONCE_UUID">
-    <findingId>SEC-001</findingId>
-    <lens>REACHABILITY | DEFENSES | IMPACT</lens>
-    <decision>SUPPORTS | REFUTES</decision>
-    <proofKind>STATIC_TRACE | UNIT_TEST | ...</proofKind>
-    <rationale>Detailed analysis</rationale>
-    <evidence>
-      <location path="src/file.js" line="42" />
-    </evidence>
-  </audit_verdict>
+  ```json
+  {
+    "schemaVersion": "1.0.0",
+    "findingId": "SEC-001",
+    "lens": "REACHABILITY",
+    "decision": "SUPPORTS",
+    "proofKind": "STATIC_TRACE",
+    "rationale": "Entrypoint route parameter flows directly into unsanitized command execution.",
+    "nonce": "X-NONCE-88f2a1b9",
+    "evidence": [
+      {
+        "path": "src/controllers/auth.ts",
+        "line": 42
+      }
+    ]
+  }
   ```
   - Double-blind structured return directly to Coordinator.
   - Verifiers are prohibited from writing files or self-certifying findings.

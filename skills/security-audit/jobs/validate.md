@@ -27,5 +27,5 @@ Dispatch 3 orthogonal verifiers concurrently:
 - **Proof-Gap Tracking**: If dataflow cannot be proven at any intermediate hop, record explicit `proofGaps` and defer to `NEEDS_MANUAL_REVIEW`.
 
 ### 4. Output Generation
-Outputs canonical SARIF 2.1.0 and Markdown validation report certifying the target candidate.
+Outputs canonical SARIF 2.1.0 and Markdown validation report rendering the deterministic disposition (`CONFIRMED`, `DEFERRED`, or `SUPPRESSED`) for the target candidate under Default-Deny.
 

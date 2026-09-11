@@ -97,21 +97,26 @@ When reading or inspecting files, code must always be encapsulated inside distin
 ```
 
 ### Task-Correlation Nonce Token & Coordinator Verification
-When subagents return structured verdicts to the Coordinator, they enclose the assigned task-correlation token to ensure anti-confusion and strict finding identity binding:
+When subagents return structured verdicts to the Coordinator, they return a JSON ballot enclosing the assigned task-correlation token (`nonce`) to ensure anti-confusion and strict finding identity binding:
 
-```xml
-<audit_verdict nonce="X-NONCE-88f2a1b9">
-  <finding_id>SEC-001</finding_id>
-  <lens>REACHABILITY</lens>
-  <decision>SUPPORTS</decision>
-  <evidence>
-    <path>src/controllers/auth.ts</path>
-    <line>42</line>
-    <role>entrypoint</role>
-  </evidence>
-</audit_verdict>
+```json
+{
+  "schemaVersion": "1.0.0",
+  "findingId": "SEC-001",
+  "lens": "REACHABILITY",
+  "decision": "SUPPORTS",
+  "proofKind": "STATIC_TRACE",
+  "rationale": "Entrypoint route parameter flows directly into unsanitized command execution.",
+  "nonce": "X-NONCE-88f2a1b9",
+  "evidence": [
+    {
+      "path": "src/controllers/auth.ts",
+      "line": 42
+    }
+  ]
+}
 ```
-The Coordinator strictly verifies `expected_nonce === returned_nonce` and `finding_id`. Any ballot with a missing or mismatched nonce is rejected fail-closed under Default-Deny.
+The Coordinator strictly verifies `expected_nonce === returned_nonce` and `findingId`. Any ballot with a missing or mismatched nonce is rejected fail-closed under Default-Deny.
 
 
 ---

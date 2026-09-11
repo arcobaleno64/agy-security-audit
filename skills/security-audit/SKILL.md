@@ -111,7 +111,7 @@ When executing security review, the skill operates under one of three distinct i
    - **REACHABILITY Lens** (`agents/verifier-reachability.md`): Confirms entrypoint controllability and unbroken data/control flow to sink.
    - **DEFENSES Lens** (`agents/verifier-defenses.md`): Audits existing sanitizers, validation barriers, and defense invariants.
    - **IMPACT Lens** (`agents/verifier-impact.md`): Calibrates authentic blast radius, privilege boundaries, and CVSS v4 vector.
-3. Enforce **Double-Blind Structured Ballot Return**: Verifier subagents operate strictly in least-privilege read-only mode (`commandExecutionPolicy: off`, no filesystem write tools) and return private structured verdicts (`<audit_verdict nonce="...">`) directly to the Coordinator. The Coordinator validates finding identity, lens, and task-correlation nonces, and writes validated ballots to `scratch/votes/{finding_id}/ballot_{uuid}.json`.
+3. Enforce **Double-Blind Structured Ballot Return**: Verifier subagents operate strictly in least-privilege read-only mode (`commandExecutionPolicy: off`, no filesystem write tools) and return private structured JSON ballots (with task-correlation nonce) directly to the Coordinator. The Coordinator validates finding identity, lens, and task-correlation nonces, and writes validated ballots to `scratch/votes/{finding_id}/ballot_{uuid}.json`.
 4. Apply **3-Lens Conjunctive Verification Rules (Default-Deny)**:
    - `CONFIRMED`: Unanimous 3-Lens support (`supports === 3`) + non-empty verified taint path.
    - `FALSE_POSITIVE`: Decisive refutation by any lens backed by verified in-repo evidence (REACHABILITY proves unreachable, DEFENSES proves affirmative mitigation barrier, or IMPACT proves zero demonstrable harm).
