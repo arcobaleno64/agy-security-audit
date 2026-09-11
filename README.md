@@ -161,5 +161,5 @@ This tool strictly follows an honest-disclosure principle and makes no exaggerat
 
 ## Licensing & Governance (Defensive Use — R2-P2-07)
 
-- This project is licensed under the **MIT License**.
-- **Restricted to defensive security use**: usable only against codebases, local fixtures, or security R&D environments you are legitimately authorized to review. Unauthorized penetration, destructive command execution, credential reuse, or external threat probing is prohibited.
+- This project is licensed under the **MIT License** (see [LICENSE](LICENSE)).
+- **Project Scope & Defensive Use**: Intended and supported exclusively for authorized defensive security audits, vulnerability verification, and defensive R&D against codebases, local fixtures, or environments you are legitimately authorized to review. Not designed, intended, or supported for unauthorized penetration testing, exploitation, destructive actions, credential reuse, or non-consensual threat probing.
