@@ -19,7 +19,7 @@ import {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint
 } from './project-context.mjs';
-import { isPathContained } from './prepare-review-context.mjs';
+import { isPathContained } from './path-containment.mjs';
 
 /**
  * Stage A: Scans repository for deterministic facts: languages, manifests, frameworks, entrypoints, and profiles (R2-P0-09).

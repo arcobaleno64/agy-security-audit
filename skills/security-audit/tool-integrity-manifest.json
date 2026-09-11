@@ -1,17 +1,18 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.0.1",
-  "generatedAt": "2026-09-11T05:41:21.156Z",
-  "manifestDigest": "2e2a569a9b60bb789b42e1c3046b2728a7c6ef43c257e161f5a62ca6586f2a4a",
+  "generatedAt": "2026-09-11T06:16:10.981Z",
+  "manifestDigest": "e2eadd642afa1092953b11d770cfcef90edee82ef5b4938ee1aa0cf3760bdaf3",
   "criticalScripts": {
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
-    "scripts/build-threat-model.mjs": "2ca2b6207947c7bea10f2d28468387562dc9f9df47db34a6d7da47d4dbfc8265",
-    "scripts/finalize-scan.mjs": "b1612947bb1e15f4926e7bb0b75677dbb5ceecf128cbf551a0f5713d0fca84e2",
-    "scripts/prepare-review-context.mjs": "b11f88a82cef34162b0522de963530a75d19a1e096170fbef4a37a6cb08c915a",
-    "scripts/project-context.mjs": "472de5a9a8dfa08137978f1b28cad21487a4292832a1172f67db58d24c8e34ab",
-    "scripts/render-sarif.mjs": "e06ebb9b7828b9da3ee6698fa23d61701f1cb1236f49a31ec0136e84bcc5dfc3",
+    "scripts/build-threat-model.mjs": "c6ad391e269f9838013444a9d0df64f4145a7c46457803faf954a2bf52d3bfcd",
+    "scripts/finalize-scan.mjs": "a0033b6a9bd08080f195db82788acec8fb21be77c75bd7901b07743818550db5",
+    "scripts/path-containment.mjs": "8044a629e15bc113998417823359e5fdf1286e228ae1c384220c006559ffcbf8",
+    "scripts/prepare-review-context.mjs": "ce81af718fa36d28771fc6a25e2ffa33af245d95cc6e9665b563096c174368c2",
+    "scripts/project-context.mjs": "6d07b49938a5d0e8bbd02baeb96b56e40fb82bf6dc8646ac397d28ef96ec9cce",
+    "scripts/render-sarif.mjs": "d85887b6f8ac8c2371d4800a847e329bcf5bd8bcdba7deb97342ae10c33bf3aa",
     "scripts/safe-git.mjs": "4136727311736b5d388fa6250cf30a91dc6675c6abe87909e572b692acdbb5c0",
-    "scripts/validate-attack-path.mjs": "df1335244c1c24e0cfd1ee2f5501d7bdc90b08211c1586ec87f40fc4a5dc52ed",
+    "scripts/validate-attack-path.mjs": "b7a1c3ae4be60e386ade21c578958da6467aafbc2cd3c2c561cbafb5e5e64e87",
     "scripts/validate-patch.mjs": "aa8aab1b7854225047b003cc395061a2d21a28ecb61c7d2a63a94e9bb2d9b156"
   }
 }

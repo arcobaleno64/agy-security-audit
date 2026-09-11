@@ -35,42 +35,19 @@ export function sanitizeSourceText(sourceText) {
     .replace(CONTROL_CHARS_REGEX, '');
 }
 
-/**
- * Robust filesystem path containment validator (R7-P0-01).
- * Replaces weak string-prefix checks to prevent directory traversal and sibling-prefix attacks.
- */
-export function isPathContained(rootDir, candidatePath) {
-  if (!rootDir || !candidatePath) return false;
-  const resolvedRoot = path.resolve(rootDir);
-  const resolvedCandidate = path.resolve(candidatePath);
-  const rel = path.relative(resolvedRoot, resolvedCandidate);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
+import {
+  isPathContained,
+  isRealPathContained,
+  assertContainedPath,
+  safeReadFileContained
+} from './path-containment.mjs';
 
-/**
- * Symlink-aware containment check (issue #2): isPathContained above is purely
- * lexical (path.resolve/path.relative on the *declared* path) and says nothing
- * about where a symlink actually resolves. A repository can contain a tracked
- * symlink whose own path is safely inside repoRoot while its target is not --
- * confirmed exploitable via the explicit targetFiles branch below, which reads
- * through fs.statSync().isFile() (follows symlinks) rather than lstat. Mirrors
- * the realpath check validate-attack-path.mjs already applies for evidence
- * citations (fs.realpathSync + relative-to-root), applied here at the point a
- * file's content is actually read into the LLM-facing context.
- */
-export function isRealPathContained(rootDir, candidatePath) {
-  if (!rootDir || !candidatePath) return false;
-  try {
-    const rootReal = fs.realpathSync(path.resolve(rootDir));
-    const candidateReal = fs.realpathSync(path.resolve(candidatePath));
-    const rel = path.relative(rootReal, candidateReal);
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-  } catch {
-    // A path that cannot be resolved (dangling symlink, permission error) is
-    // not affirmatively proven safe -- default-deny.
-    return false;
-  }
-}
+export {
+  isPathContained,
+  isRealPathContained,
+  assertContainedPath,
+  safeReadFileContained
+};
 
 /**
  * Prepares review context for a repository, producing a sanitized shadow bundle under scratch/context/.
@@ -162,27 +139,18 @@ export function prepareReviewContext(repoRoot = process.cwd(), options = {}) {
       continue;
     }
 
-    // Issue #2: a symlink's own declared path can pass the lexical check above
-    // while its target resolves outside repoRoot. lstat, not stat, so this
-    // rejects the symlink itself rather than following it -- a symlink is
-    // exactly the case that must not silently read through.
-    let entryStat;
-    try {
-      entryStat = fs.lstatSync(originalFullPath);
-    } catch {
-      continue;
-    }
-    if (entryStat.isSymbolicLink()) {
-      console.warn(`[PREPARE-CONTEXT] Warning: skipped ${relPath} -- symlinks are not followed into the review context.`);
-      continue;
-    }
-    if (!isRealPathContained(resolvedRepoRoot, originalFullPath)) {
-      console.warn(`[PREPARE-CONTEXT] Warning: skipped ${relPath} -- resolved path escapes repository root.`);
+    const readResult = safeReadFileContained(resolvedRepoRoot, originalFullPath, { allowSymlinks: false });
+    if (!readResult.ok) {
+      if (readResult.error && readResult.error.includes('symbolic link')) {
+        console.warn(`[PREPARE-CONTEXT] Warning: skipped ${relPath} -- symlinks are not followed into the review context.`);
+      } else if (readResult.error && (readResult.error.includes('escapes') || readResult.error.includes('realpath'))) {
+        console.warn(`[PREPARE-CONTEXT] Warning: skipped ${relPath} -- resolved path escapes repository root.`);
+      }
       continue;
     }
 
     try {
-      const rawContent = fs.readFileSync(originalFullPath, 'utf8');
+      const rawContent = readResult.content;
       const sanitizedContent = sanitizeSourceText(rawContent);
       const tokenResult = tokenizeSecretsForContext(sanitizedContent);
 

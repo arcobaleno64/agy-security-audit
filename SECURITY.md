@@ -54,14 +54,16 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 - Code inspected by LLM agents is enclosed in XML data delimiters (`<untrusted_code_data>`).
 - While this mitigates simple instruction confusion, prompt boundaries are a policy guidance mechanism rather than a cryptographic guarantee. For hostile repositories, containerized sandboxing is essential.
 
-### 2.6 Strict Path Containment & Sibling Prefix Enclosure (R7-P0-01)
-- Context preparation (`prepare-review-context.mjs`), snapshot binding (`finalize-scan.mjs`), and attack path verification (`validate-attack-path.mjs`) enforce strict containment via `isPathContained()`.
+### 2.6 Strict Path Containment & Sibling Prefix Enclosure (R7-P0-01, v1.1.0 P0/P1)
+- All boundary enforcement logic is centralized in the authoritative TCB module [`skills/security-audit/scripts/path-containment.mjs`](file:///skills/security-audit/scripts/path-containment.mjs).
+- Context preparation (`prepare-review-context.mjs`), evidence snapshotting (`finalize-scan.mjs`), PreToolUse interception (`hooks/shadow-context-guard.mjs`), and attack path verification (`validate-attack-path.mjs`) consume `isPathContained()` and `isRealPathContained()`.
 - Containment relies on `path.relative()` containment algebra (`relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))`) rather than string-prefix matching (`startsWith`), strictly preventing parent directory traversals (`../outside`) and sibling directory confusion (e.g. `scratch/context` vs `scratch/context-evil`).
+- Canonical target validation asserts realpath containment via `fs.realpathSync()`, failing closed under Default-Deny on unresolvable or escaping symbolic links (CWE-59 defense).
 
-### 2.7 Deterministic SAST Ingestion & Funnel Corroboration (R7-P0-02, R7-P1-02)
+### 2.7 Deterministic SAST Ingestion, Funnel Corroboration & Filesystem Race Defense (R7-P0-02, R7-P1-02, v1.1.0 P0/P1)
 - **Multi-Tool Corroboration**: The plugin ingests external deterministic SAST reports (Gitleaks -> Semgrep CE -> CodeQL) via `ingestExternalEvidence()`, normalizing cross-platform URI representations (Windows `\`, POSIX `/`, percent-encoded segments, `file://` schemes).
 - **Granular Evidence Binding**: External findings are classified into authoritative binding states: `BOUND` (source line and hash verified), `UNBOUND_PATH` (line beyond EOF or syntax issue), `UNBOUND_MISSING_FILE` (target file missing), `GENERATED_DUPLICATE` (findings from generated shadow contexts such as `scratch/context/`), and `OUTSIDE_SCOPE` (paths outside repository root).
-- **Filesystem Race (TOCTOU) Analysis**: Static analysis flags like CodeQL `js/file-system-race` regarding sequential `fs.existsSync` and `fs.readFileSync` checks in CLI scripts are tracked as non-blocking evidence-consistency hardening. In single-threaded CLI batch execution, these checks are safe; future iterations will adopt atomic file descriptor reads for concurrent agent sandboxes.
+- **Filesystem Race (TOCTOU) Defense**: Hardened via `safeReadFileContained()` in `path-containment.mjs`. Instead of sequential `fs.existsSync` -> `fs.readFileSync` windows (flagged by CodeQL `js/file-system-race`), the implementation opens a dedicated file descriptor (`fs.openSync`), inspects the handle directly (`fs.fstatSync`), asserts canonical realpath containment, reads content directly from the descriptor (`fs.readSync`), and guarantees descriptor closure via `finally`.
 
 ---
 

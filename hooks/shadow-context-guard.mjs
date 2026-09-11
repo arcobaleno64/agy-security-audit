@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { isRealPathContained, isPathContained } from '../skills/security-audit/scripts/path-containment.mjs';
 
 // Emits result with strict LF line ending, avoiding CRLF conversion issues on Windows
 function emit(obj) {
@@ -45,19 +46,6 @@ function readStdinWithTimeout(timeoutMs = 1500) {
     });
     process.stdin.resume();
   });
-}
-
-// Symlink-safe path containment verification (CWE-59 defense)
-function isRealPathContained(rootDir, candidatePath) {
-  if (!rootDir || !candidatePath) return false;
-  try {
-    const rootReal = fs.realpathSync(path.resolve(rootDir));
-    const candidateReal = fs.realpathSync(path.resolve(candidatePath));
-    const rel = path.relative(rootReal, candidateReal);
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-  } catch {
-    return false;
-  }
 }
 
 // Discovers active scratch/context/context-manifest.json

@@ -18,6 +18,8 @@ import { resolveStandardsMapping, detectDependencyBoundary } from './standards-m
 export { categorizeDirectory, classifyFile, resolveStandardsMapping, detectDependencyBoundary };
 import { prepareReviewContext, getPreparedContextFilePath, readPreparedFile } from './prepare-review-context.mjs';
 export { prepareReviewContext, getPreparedContextFilePath, readPreparedFile };
+import { isPathContained, isRealPathContained, assertContainedPath, safeReadFileContained } from './path-containment.mjs';
+export { isPathContained, isRealPathContained, assertContainedPath, safeReadFileContained };
 
 // Single source of truth for the tool release version stamped into attestations,
 // baselines, and the TCB manifest. `scripts/bump-version.mjs` rewrites this line
@@ -353,26 +355,19 @@ export function computeEvidenceSnapshot(repoRoot, relativePath, line = 1) {
   if (!isPathContained(rootResolved, resolved)) {
     return { blobHash: null, lineHash: null, exists: false, error: 'Path traversal outside repository root' };
   }
-  // Issue #3: lstat, not stat, so a symlink is rejected rather than followed
-  // -- isPathContained above only validates the *declared* path lexically and
-  // says nothing about where a symlink target actually resolves.
-  let entryStat;
-  try {
-    entryStat = fs.lstatSync(resolved);
-  } catch {
+  const readResult = safeReadFileContained(rootResolved, resolved, { allowSymlinks: false });
+  if (!readResult.ok) {
+    if (readResult.error && readResult.error.includes('symbolic link')) {
+      return { blobHash: null, lineHash: null, exists: false, error: 'Evidence path is a symlink; symlinks are not followed for evidence snapshots' };
+    }
+    if (readResult.error && (readResult.error.includes('escapes') || readResult.error.includes('realpath'))) {
+      return { blobHash: null, lineHash: null, exists: false, error: 'Resolved evidence path escapes repository root' };
+    }
     return { blobHash: null, lineHash: null, exists: false };
   }
-  if (entryStat.isSymbolicLink()) {
-    return { blobHash: null, lineHash: null, exists: false, error: 'Evidence path is a symlink; symlinks are not followed for evidence snapshots' };
-  }
-  if (!entryStat.isFile()) {
-    return { blobHash: null, lineHash: null, exists: false };
-  }
-  if (!isRealPathContained(rootResolved, resolved)) {
-    return { blobHash: null, lineHash: null, exists: false, error: 'Resolved evidence path escapes repository root' };
-  }
+
   try {
-    const content = fs.readFileSync(resolved, 'utf8');
+    const content = readResult.content;
     const blobHash = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
     const lines = content.split(/\r?\n/);
     const lineNum = Number(line);
@@ -1062,44 +1057,7 @@ export function reconcileCoverage(manifest, repoRoot = null) {
 
 
 
-/**
- * Validates that a path does not escape the repository boundary via path traversal.
- */
-export function isPathContained(repoRoot, filePath) {
-  if (!filePath || typeof filePath !== 'string') return false;
-  // Deny explicit traversal sequences
-  if (filePath.includes('..\\') || filePath.includes('../') || filePath === '..' || filePath.endsWith('/..') || filePath.endsWith('\\..')) {
-    return false;
-  }
-  const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath);
-  const rootResolved = path.resolve(repoRoot);
-  const relative = path.relative(rootResolved, resolved);
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
-}
 
-/**
- * Symlink-aware containment check (issue #3): isPathContained above is purely
- * lexical and says nothing about where a symlink actually resolves. A repo
- * can contain a tracked symlink whose own path is safely inside repoRoot
- * while its target is not -- confirmed exploitable via computeEvidenceSnapshot,
- * which reads through fs.readFileSync() (follows symlinks) to build the
- * evidence content embedded in audit baselines and SARIF output. Mirrors the
- * realpath check already applied in prepare-review-context.mjs (issue #2)
- * and validate-attack-path.mjs.
- */
-export function isRealPathContained(repoRoot, filePath) {
-  if (!repoRoot || !filePath) return false;
-  try {
-    const rootReal = fs.realpathSync(path.resolve(repoRoot));
-    const candidateReal = fs.realpathSync(path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath));
-    const rel = path.relative(rootReal, candidateReal);
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-  } catch {
-    // A path that cannot be resolved (dangling symlink, permission error) is
-    // not affirmatively proven safe -- default-deny.
-    return false;
-  }
-}
 
 /**
  * Validates a Component x Vulnerability-Family Discovery Matrix Cell.
@@ -4088,22 +4046,28 @@ export function renderMarkdownFromCanonical({
 }
 
 /**
+ * Canonical required critical scripts set (R6-P1-01 / v1.1.0 P0/P1).
+ */
+export const REQUIRED_CRITICAL_SCRIPTS = [
+  'scripts/safe-git.mjs',
+  'scripts/finalize-scan.mjs',
+  'scripts/build-inventory.mjs',
+  'scripts/build-threat-model.mjs',
+  'scripts/project-context.mjs',
+  'scripts/validate-attack-path.mjs',
+  'scripts/validate-patch.mjs',
+  'scripts/render-sarif.mjs',
+  'scripts/prepare-review-context.mjs',
+  'scripts/path-containment.mjs'
+].sort();
+
+/**
  * Generates an authoritative release manifest for tool integrity verification (R5-P1-01).
  */
 export function generateToolIntegrityManifest(toolRoot = null) {
   const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const resolvedTool = path.resolve(toolRoot || defaultToolRoot);
-  const criticalScripts = [
-    'scripts/safe-git.mjs',
-    'scripts/finalize-scan.mjs',
-    'scripts/build-inventory.mjs',
-    'scripts/build-threat-model.mjs',
-    'scripts/project-context.mjs',
-    'scripts/validate-attack-path.mjs',
-    'scripts/validate-patch.mjs',
-    'scripts/render-sarif.mjs',
-    'scripts/prepare-review-context.mjs'
-  ].sort();
+  const criticalScripts = REQUIRED_CRITICAL_SCRIPTS;
 
   const digests = {};
   for (const rel of criticalScripts) {
@@ -4168,19 +4132,7 @@ export function verifyToolSelfIntegrity(toolRoot = null, targetRoot = null, opti
     }
   }
 
-  // Canonical required critical scripts set (R6-P1-01)
-  const REQUIRED_CRITICAL_SCRIPTS = [
-    'scripts/safe-git.mjs',
-    'scripts/finalize-scan.mjs',
-    'scripts/build-inventory.mjs',
-    'scripts/build-threat-model.mjs',
-    'scripts/project-context.mjs',
-    'scripts/validate-attack-path.mjs',
-    'scripts/validate-patch.mjs',
-    'scripts/render-sarif.mjs',
-    'scripts/prepare-review-context.mjs'
-  ].sort();
-
+  // 2. Authoritative script integrity verification against release manifest
   const scriptHashes = {};
   for (const rel of REQUIRED_CRITICAL_SCRIPTS) {
     const fullPath = path.resolve(resolvedTool, rel);

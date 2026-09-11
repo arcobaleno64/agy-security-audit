@@ -44,8 +44,11 @@
 
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.0)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.1)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
+├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
+├── hooks/                                # 生命週期勾點實作
+│   └── shadow-context-guard.mjs          # PreToolUse 執行期透明路徑重導向至 scratch/context/
 ├── SECURITY.md                           # 誠實信任模型與沙箱邊界說明
 ├── agents/                               # 專責子代理定義 (位於外掛根目錄)
 │   ├── threat-modeler.md                 # 威脅建模專員
@@ -94,10 +97,11 @@ security-audit/
         │   ├── finding-lineage.md        # 弱點血統追蹤與指紋架構
         │   └── safe-proof-policy.md      # 安全防禦證明政策與禁止指令
         └── scripts/
+            ├── path-containment.mjs      # 權威 TCB 路徑包容與抗 TOCTOU 原子檔案讀取器
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 107 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 110 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測

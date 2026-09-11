@@ -97,6 +97,7 @@ const REQUIRED_FILES = [
   'skills/security-audit/scripts/validate-attack-path.mjs',
   'skills/security-audit/scripts/validate-patch.mjs',
   'skills/security-audit/scripts/prepare-review-context.mjs',
+  'skills/security-audit/scripts/path-containment.mjs',
   'skills/security-audit/scripts/standards-mapping.mjs',
   'skills/security-audit/scripts/run-evals.mjs',
   'skills/security-audit/scripts/run-semantic-eval.mjs',

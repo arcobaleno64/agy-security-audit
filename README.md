@@ -44,8 +44,11 @@ Uses conjunctive logic to prevent a 2-to-1 democratic vote from overriding a con
 
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.0)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.1)
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
+├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
+├── hooks/                                # Lifecycle hook implementations
+│   └── shadow-context-guard.mjs          # PreToolUse transparent path rewrite to scratch/context/
 ├── SECURITY.md                           # Honest trust model and sandbox boundary disclosure
 ├── agents/                               # Dedicated subagent definitions (at plugin root)
 │   ├── threat-modeler.md                 # Threat-modeling specialist
@@ -94,10 +97,11 @@ security-audit/
         │   ├── finding-lineage.md        # Finding lineage tracking and fingerprinting architecture
         │   └── safe-proof-policy.md      # Safe defensive-proof policy and prohibited commands
         └── scripts/
+            ├── path-containment.mjs      # Authoritative TCB path containment & TOCTOU-resistant atomic file reading
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 107 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 110 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection

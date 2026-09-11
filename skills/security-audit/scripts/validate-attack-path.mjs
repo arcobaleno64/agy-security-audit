@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { isPathContained, isRealPathContained } from './path-containment.mjs';
 
 /**
  * Validates a single location node (source, sink, step).
@@ -34,11 +35,9 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
 
   // Prevent directory traversal escaping repoRoot
   const rootResolved = path.resolve(repoRoot);
-  const rootReal = fs.existsSync(rootResolved) ? fs.realpathSync(rootResolved) : rootResolved;
   const resolved = path.resolve(repoRoot, uri);
-  const rel = path.relative(rootResolved, resolved);
 
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+  if (!isPathContained(rootResolved, resolved)) {
     return { valid: false, error: `${label} escapes repository root: ${uri}` };
   }
 
@@ -63,14 +62,8 @@ export function validatePathLocation(node, repoRoot = process.cwd(), label = 'no
     }
 
     // Verify symlink resolution does not escape repoRoot
-    try {
-      const real = fs.realpathSync(resolved);
-      const relReal = path.relative(rootReal, real);
-      if (relReal.startsWith('..') || path.isAbsolute(relReal)) {
-        return { valid: false, error: `${label} symlink target escapes repository root: '${uri}'` };
-      }
-    } catch (err) {
-      return { valid: false, error: `${label} failed resolving realpath: '${uri}' (${err.message})` };
+    if (!isRealPathContained(rootResolved, resolved)) {
+      return { valid: false, error: `${label} symlink target escapes repository root: '${uri}'` };
     }
 
     // Verify line <= actual file line count (empty file has lineCount 0)

@@ -102,6 +102,7 @@ import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './vali
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval } from './run-semantic-eval.mjs';
+import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
 
 
 
@@ -4548,7 +4549,98 @@ export default appName;`;
 
   console.log('✔ 109. P0 Invariant: Shadow Context PreToolUse Hook enforces Subprocess Contract, transparent redirection, and truthful OBSERVED attestation.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (109/109).');
+  // 110. P0/P1 Invariant: Unified Path Containment, Symlink Boundary Consolidation & TOCTOU-Resistant Atomic Read
+  const testRoot110 = fs.mkdtempSync(path.join(os.tmpdir(), 'tcb-containment-test-'));
+  const siblingEvil110 = fs.mkdtempSync(path.join(os.tmpdir(), 'tcb-containment-evil-'));
+  try {
+    const subDir = path.join(testRoot110, 'sub');
+    fs.mkdirSync(subDir, { recursive: true });
+
+    const goodFile = path.join(subDir, 'sample.txt');
+    const evilFile = path.join(siblingEvil110, 'evil.txt');
+    fs.writeFileSync(goodFile, 'AUTHORITATIVE_CONTENT_110\n', 'utf8');
+    fs.writeFileSync(evilFile, 'EVIL_CONTENT_110\n', 'utf8');
+
+    // 110.1 isPathContained lexical algebra
+    if (!isPathContained(testRoot110, goodFile)) {
+      throw new Error('TCB-110 VIOLATION: isPathContained rejected valid child path');
+    }
+    if (!isPathContained(testRoot110, testRoot110)) {
+      throw new Error('TCB-110 VIOLATION: isPathContained rejected exact root match');
+    }
+    if (isPathContained(testRoot110, path.join(testRoot110, '..', 'escaped.txt'))) {
+      throw new Error('TCB-110 VIOLATION: isPathContained accepted parent traversal');
+    }
+    if (isPathContained(testRoot110, evilFile)) {
+      throw new Error('TCB-110 VIOLATION: isPathContained accepted sibling prefix directory');
+    }
+    if (isPathContained(testRoot110, '../outside.txt')) {
+      throw new Error('TCB-110 VIOLATION: isPathContained accepted raw relative traversal marker');
+    }
+
+    // 110.2 isRealPathContained symlink and canonical checks
+    if (!isRealPathContained(testRoot110, goodFile)) {
+      throw new Error('TCB-110 VIOLATION: isRealPathContained rejected normal file');
+    }
+    if (isRealPathContained(testRoot110, path.join(testRoot110, 'nonexistent-dangling-path.txt'))) {
+      throw new Error('TCB-110 VIOLATION: isRealPathContained accepted non-existent path (default-deny)');
+    }
+
+    // 110.3 safeReadFileContained atomic read & TOCTOU resistance
+    const goodRead = safeReadFileContained(testRoot110, goodFile);
+    if (!goodRead.ok || goodRead.content !== 'AUTHORITATIVE_CONTENT_110\n' || goodRead.size !== 26) {
+      throw new Error(`TCB-110 VIOLATION: safeReadFileContained failed reading valid file: ${JSON.stringify(goodRead)}`);
+    }
+
+    // Sibling / traversal read rejected
+    const evilRead = safeReadFileContained(testRoot110, evilFile);
+    if (evilRead.ok || evilRead.content !== null) {
+      throw new Error('TCB-110 VIOLATION: safeReadFileContained read file in sibling directory');
+    }
+
+    // Non-existent read fails cleanly without crash
+    const missingRead = safeReadFileContained(testRoot110, path.join(subDir, 'missing.txt'));
+    if (missingRead.ok || missingRead.content !== null) {
+      throw new Error('TCB-110 VIOLATION: safeReadFileContained succeeded on missing file');
+    }
+
+    // Directory target rejected (isFile assertion on fd)
+    const dirRead = safeReadFileContained(testRoot110, subDir);
+    if (dirRead.ok || dirRead.content !== null) {
+      throw new Error('TCB-110 VIOLATION: safeReadFileContained succeeded on directory handle');
+    }
+
+    // Symlink containment test (if supported by environment)
+    const outsideSecret = path.join(testRoot110, 'outside-secret.txt');
+    fs.writeFileSync(outsideSecret, 'SECRET_OUTSIDE');
+    const isolatedInnerRoot = path.join(testRoot110, 'inner-root');
+    fs.mkdirSync(isolatedInnerRoot, { recursive: true });
+    const symlinkTarget = path.join(isolatedInnerRoot, 'leak-link.txt');
+
+    let symlinkWorks = true;
+    try {
+      fs.symlinkSync(outsideSecret, symlinkTarget, 'file');
+    } catch {
+      symlinkWorks = false;
+    }
+
+    if (symlinkWorks) {
+      if (isRealPathContained(isolatedInnerRoot, symlinkTarget)) {
+        throw new Error('TCB-110 VIOLATION: isRealPathContained accepted escaping symlink');
+      }
+      const symlinkRead = safeReadFileContained(isolatedInnerRoot, symlinkTarget, { allowSymlinks: false });
+      if (symlinkRead.ok) {
+        throw new Error('TCB-110 VIOLATION: safeReadFileContained read symlink when allowSymlinks was false');
+      }
+    }
+  } finally {
+    fs.rmSync(testRoot110, { recursive: true, force: true });
+    fs.rmSync(siblingEvil110, { recursive: true, force: true });
+  }
+
+  console.log('✔ 110. P0/P1 Invariant: Unified Path Containment, Symlink Boundary Consolidation & TOCTOU-Resistant Atomic Read.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (110/110).');
 
   } finally {
     gitFixture.cleanup();
