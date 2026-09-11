@@ -83,6 +83,8 @@ const REQUIRED_FILES = [
   'README.md',
   'SECURITY.md',
   'plugin.json',
+  'hooks.json',
+  'hooks/shadow-context-guard.mjs',
   'rules/AGENTS.md',
   'skills/security-audit/SKILL.md',
   'skills/security-audit/tool-integrity-manifest.json',

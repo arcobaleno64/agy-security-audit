@@ -2567,7 +2567,8 @@ export function finalizeScan({
   executedStages = null,
   allowSelfAudit = false,
   toolRoot = null,
-  toolProvenance = null
+  toolProvenance = null,
+  contextIsolation = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -2908,6 +2909,26 @@ export function finalizeScan({
     { allowSelfAudit: Boolean(allowSelfAudit) }
   );
 
+  const shadowRoot = contextPrep?.contextRoot || path.resolve(safeRepoRoot || process.cwd(), 'scratch/context');
+  const guardEventsFile = path.resolve(shadowRoot, 'guard-events.jsonl');
+  let hasRuntimeGuardTelemetry = false;
+  if (fs.existsSync(guardEventsFile)) {
+    try {
+      const lines = fs.readFileSync(guardEventsFile, 'utf8').split('\n').filter(l => l.trim().length > 0);
+      if (lines.length > 0) {
+        hasRuntimeGuardTelemetry = true;
+      }
+    } catch {}
+  }
+
+  const effectiveContextIsolation = contextIsolation || {
+    status: hasRuntimeGuardTelemetry ? 'OBSERVED' : 'MANDATED',
+    pipeline: hasRuntimeGuardTelemetry ? 'OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD' : 'MANDATED_SHADOW_CONTEXT_PIPELINE',
+    shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
+    tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
+    totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0
+  };
+
   // R6-P1-03 & R11-P1-02: Truthful Execution & Capabilities Attestation (no fake delegationObserved on zero candidates)
   const execution = buildExecutionAttestation({
     repoRoot: safeRepoRoot || process.cwd(),
@@ -2931,13 +2952,7 @@ export function finalizeScan({
       attestationConfidence: 'DECLARED',
       observationSource: 'agent-manifest-declaration'
     },
-    contextIsolation: {
-      status: 'MANDATED',
-      pipeline: 'MANDATED_SHADOW_CONTEXT_PIPELINE',
-      shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
-      tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
-      totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0
-    }
+    contextIsolation: effectiveContextIsolation
   });
 
   // R11-P0-02: Context Drift baseline check and fail-closed enforcement (no silent swallow, no const reassignment)

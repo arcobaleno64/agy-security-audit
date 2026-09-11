@@ -1528,7 +1528,7 @@ export function runTests() {
     const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
     try {
       // Copy project files (excluding .git) to simulate freshly extracted zip archive
-      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit'];
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'hooks.json', 'hooks', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit'];
       for (const item of copyItems) {
         const srcPath = path.resolve(process.cwd(), item);
         if (fs.existsSync(srcPath)) {
@@ -4417,7 +4417,138 @@ export default appName;`;
 
   console.log('✔ 108. P0 Invariant: Tool Producer Provenance deterministically stamps revision, digest, and dirty state across all artifacts.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (108/108).');
+  // 109. P0 (v1.1.0): Shadow Context PreToolUse Hook & Telemetry
+  const hookScriptPath = path.resolve('hooks/shadow-context-guard.mjs');
+  if (!fs.existsSync(hookScriptPath)) {
+    throw new Error('HOOK VIOLATION: hooks/shadow-context-guard.mjs does not exist');
+  }
+  const hooksConfigPath = path.resolve('hooks.json');
+  if (!fs.existsSync(hooksConfigPath)) {
+    throw new Error('HOOK VIOLATION: hooks.json does not exist');
+  }
+
+  // 109.1 Empty stdin non-blocking verification (Contract Rule 1)
+  const emptyRes = execFileSync(process.execPath, [hookScriptPath], {
+    input: '',
+    encoding: 'utf8',
+    timeout: 5000
+  });
+  const emptyParsed = JSON.parse(emptyRes);
+  if (emptyParsed.decision !== 'allow') {
+    throw new Error(`HOOK VIOLATION: empty stdin did not allow tool execution: ${emptyRes}`);
+  }
+  if (emptyRes.includes('\r')) {
+    throw new Error('HOOK VIOLATION: hook output contains CRLF (Contract Rule 2)');
+  }
+  const allowedKeys = new Set(['decision', 'reason', 'overwrite', 'permissionOverrides']);
+  for (const k of Object.keys(emptyParsed)) {
+    if (!allowedKeys.has(k)) {
+      throw new Error(`HOOK VIOLATION: extraneous key '${k}' in output (Contract Rule 3)`);
+    }
+  }
+
+  // 109.2 Non-targeted tool pass-through
+  const nonTargetRes = execFileSync(process.execPath, [hookScriptPath], {
+    input: JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } }),
+    encoding: 'utf8',
+    timeout: 5000
+  });
+  if (JSON.parse(nonTargetRes).decision !== 'allow') {
+    throw new Error('HOOK VIOLATION: non-targeted tool was not allowed');
+  }
+
+  // 109.3 Redirection of raw file when shadow context is active
+  const tempHookFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'test-hook-fixture-'));
+  try {
+    const fixtureContextDir = path.join(tempHookFixture, 'scratch', 'context');
+    const fixtureSrcDir = path.join(tempHookFixture, 'src');
+    fs.mkdirSync(fixtureSrcDir, { recursive: true });
+    fs.mkdirSync(path.join(fixtureContextDir, 'src'), { recursive: true });
+
+    const rawFilePath = path.join(fixtureSrcDir, 'secrets.js');
+    const shadowFilePath = path.join(fixtureContextDir, 'src', 'secrets.js');
+    fs.writeFileSync(rawFilePath, 'const key = "RAW_SECRET";\n', 'utf8');
+    fs.writeFileSync(shadowFilePath, 'const key = "<SECRET:class=KEY:hash=abc>";\n', 'utf8');
+
+    const manifestObj = {
+      schemaVersion: '1.0.0',
+      repoRoot: tempHookFixture,
+      contextRoot: fixtureContextDir
+    };
+    fs.writeFileSync(path.join(fixtureContextDir, 'context-manifest.json'), JSON.stringify(manifestObj), 'utf8');
+
+    const rawCallPayload = JSON.stringify({
+      toolCall: {
+        name: 'view_file',
+        args: {
+          AbsolutePath: rawFilePath
+        }
+      },
+      workspacePaths: [tempHookFixture]
+    });
+
+    const redirectRes = execFileSync(process.execPath, [hookScriptPath], {
+      input: rawCallPayload,
+      encoding: 'utf8',
+      timeout: 5000
+    });
+    const redirectParsed = JSON.parse(redirectRes);
+    if (redirectParsed.decision !== 'allow') {
+      throw new Error(`HOOK VIOLATION: redirected call did not allow: ${redirectRes}`);
+    }
+    const expectedShadowNormalized = shadowFilePath.replace(/\\/g, '/');
+    if (redirectParsed.overwrite?.AbsolutePath !== expectedShadowNormalized) {
+      throw new Error(`HOOK VIOLATION: overwrite.AbsolutePath expected ${expectedShadowNormalized}, got ${redirectParsed.overwrite?.AbsolutePath}`);
+    }
+
+    // Verify guard-events.jsonl was created and contains the redirect
+    const eventsPath = path.join(fixtureContextDir, 'guard-events.jsonl');
+    if (!fs.existsSync(eventsPath)) {
+      throw new Error('HOOK VIOLATION: guard-events.jsonl was not written');
+    }
+    const eventsContent = fs.readFileSync(eventsPath, 'utf8');
+    if (!eventsContent.includes('REDIRECT') || !eventsContent.includes('secrets.js')) {
+      throw new Error(`HOOK VIOLATION: guard-events.jsonl missing expected event: ${eventsContent}`);
+    }
+
+    // 109.4 Already-shadowed file pass-through
+    const shadowCallPayload = JSON.stringify({
+      toolCall: {
+        name: 'view_file',
+        args: {
+          AbsolutePath: shadowFilePath
+        }
+      },
+      workspacePaths: [tempHookFixture]
+    });
+    const shadowPassRes = execFileSync(process.execPath, [hookScriptPath], {
+      input: shadowCallPayload,
+      encoding: 'utf8',
+      timeout: 5000
+    });
+    const shadowPassParsed = JSON.parse(shadowPassRes);
+    if (shadowPassParsed.decision !== 'allow' || shadowPassParsed.overwrite) {
+      throw new Error('HOOK VIOLATION: reading shadow context directly should allow without overwrite');
+    }
+
+    // 109.5 Attestation upgrade: finalizeScan with guard-events upgrades contextIsolation to OBSERVED
+    const finalWithHook = finalizeScan({
+      candidates: [],
+      repoRoot: tempHookFixture
+    });
+    if (finalWithHook.summary.execution.contextIsolation.status !== 'OBSERVED') {
+      throw new Error(`HOOK VIOLATION: finalizeScan with guard telemetry expected OBSERVED, got ${finalWithHook.summary.execution.contextIsolation.status}`);
+    }
+    if (finalWithHook.summary.execution.contextIsolation.pipeline !== 'OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD') {
+      throw new Error(`HOOK VIOLATION: finalizeScan pipeline expected OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD, got ${finalWithHook.summary.execution.contextIsolation.pipeline}`);
+    }
+  } finally {
+    fs.rmSync(tempHookFixture, { recursive: true, force: true });
+  }
+
+  console.log('✔ 109. P0 Invariant: Shadow Context PreToolUse Hook enforces Subprocess Contract, transparent redirection, and truthful OBSERVED attestation.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (109/109).');
 
   } finally {
     gitFixture.cleanup();
