@@ -119,7 +119,9 @@ export function evaluateStability(runs = [], repoRoot = process.cwd(), options =
     lineageId: u.lineageId,
     recurrenceCount: u.recurrenceCount,
     reliabilityRate: Number((u.recurrenceCount / totalRuns).toFixed(4)),
-    runsObserved: u.runsObserved
+    runsObserved: u.runsObserved,
+    location: u.location || null,
+    symbol: u.symbol || null
   }));
 
   const perfectRecurrenceCount = recurrenceSummary.filter(r => r.recurrenceCount === totalRuns).length;

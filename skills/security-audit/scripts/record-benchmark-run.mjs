@@ -33,7 +33,7 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
   }
 
   // Authoritative tool provenance from the security-audit tool root
-  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const toolProv = getToolProvenance(defaultToolRoot);
 
   return {
@@ -141,7 +141,7 @@ export function createBenchmarkRunEnvelope(options = {}) {
   const cleanEnvOverrides = {};
   if (options.environment && typeof options.environment === 'object') {
     for (const [k, v] of Object.entries(options.environment)) {
-      if (v !== undefined && v !== null) cleanEnvOverrides[k] = v;
+      if (v !== undefined) cleanEnvOverrides[k] = v;
     }
   }
 

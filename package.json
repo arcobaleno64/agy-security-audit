@@ -23,7 +23,9 @@
     "bump-version": "node scripts/bump-version.mjs",
     "check-version": "node scripts/bump-version.mjs --check",
     "regen-integrity-manifest": "node scripts/regen-integrity-manifest.mjs",
-    "benchmark:live": "node scripts/run-live-model-benchmark.mjs"
+    "benchmark:live": "node scripts/run-live-model-benchmark.mjs",
+    "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
+    "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs"
   },
   "keywords": [
     "antigravity",
