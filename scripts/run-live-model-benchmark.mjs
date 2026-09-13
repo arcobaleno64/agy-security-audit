@@ -557,6 +557,12 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     fs.mkdirSync(outDir, { recursive: true });
   }
 
+  const envProv = probeEnvironment(repoRoot, {
+    modelId,
+    modelProvider,
+    ...(options.environment || {})
+  });
+
   const envelopes = [];
   const allPassResults = [];
 
@@ -584,12 +590,6 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     }
 
     const passDurationMs = Date.now() - passStartTime;
-    const envProv = probeEnvironment(repoRoot, {
-      modelId,
-      modelProvider,
-      ...(options.environment || {})
-    });
-
     const runId = passes > 1 ? `run-pass-${p}` : (options.runId || `run-pass-${p}`);
 
     const envelope = createBenchmarkRunEnvelope({

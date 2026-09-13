@@ -1,0 +1,259 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-pass-5",
+  "recordedAt": "2026-09-13T15:15:33.520Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "target": {
+    "repositoryName": "evals/semantic-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6",
+    "corpus": "semantic-benchmark"
+  },
+  "environment": {
+    "agyVersion": "1.2.2",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6",
+    "toolVersion": "1.2.1",
+    "toolRevision": "8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6",
+    "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
+    "toolDirty": false
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-862-18",
+        "ruleId": "CWE-862",
+        "title": "Missing Authorization check on administrative endpoint /admin/maintenance",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/01-authz-bypass.js",
+          "startLine": 18,
+          "endLine": 21
+        },
+        "symbol": "router.post",
+        "lineageId": "21d218bd963773d6db4499938aa0839e"
+      },
+      {
+        "id": "CAND-CWE-639-18",
+        "ruleId": "CWE-639",
+        "title": "Cross-tenant document access due to missing tenant isolation check",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/02-cross-tenant-access.js",
+          "startLine": 18,
+          "endLine": 20
+        },
+        "symbol": "doc",
+        "lineageId": "d67f8af486171ff12af969928073dd18"
+      },
+      {
+        "id": "CAND-CWE-441-12",
+        "ruleId": "CWE-441",
+        "title": "Confused deputy forwards sensitive vault credentials to arbitrary user-controlled URL",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/03-confused-deputy.js",
+          "startLine": 12,
+          "endLine": 19
+        },
+        "symbol": "fetch",
+        "lineageId": "4d41adb532866212e8d2df6d081b9251"
+      },
+      {
+        "id": "CAND-CWE-840-15",
+        "ruleId": "CWE-840",
+        "title": "Improper state transition allows transitioning order directly from CREATED to REFUNDED",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/04-state-transition.js",
+          "startLine": 15,
+          "endLine": 17
+        },
+        "symbol": "order.status",
+        "lineageId": "86fe7dd444d621fbcfafa8594cc539bf"
+      },
+      {
+        "id": "CAND-CWE-20-18",
+        "ruleId": "CWE-20",
+        "title": "Validated vs. Consumed Input Mismatch",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/05-validated-vs-consumed.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "symbol": "SEM-05",
+        "lineageId": "2f606c624818a9d4b56eff4c96942fe9"
+      },
+      {
+        "id": "CAND-CWE-79-15",
+        "ruleId": "CWE-79",
+        "title": "Reflected Cross-Site Scripting (XSS) due to improper contextual sanitization within script block",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/06-partial-mitigation.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "symbol": "page",
+        "lineageId": "b91a6b9c26dc03273c35186a33326add"
+      },
+      {
+        "id": "CAND-CWE-1188-10",
+        "ruleId": "CWE-1188",
+        "title": "Insecure default initialization of access control policy allows unauthorized execution",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/07-unsafe-default.js",
+          "startLine": 10,
+          "endLine": 10
+        },
+        "symbol": "accessControl",
+        "lineageId": "1c88c387abb9a75693a98493e3c040be"
+      },
+      {
+        "id": "CAND-CWE-94-18",
+        "ruleId": "CWE-94",
+        "title": "Code Injection via unvalidated asynchronous evaluation of queued payload in eval()",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/08-multistep-attack-path.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "symbol": "eval",
+        "lineageId": "18679dd1418258e64ce49d672adb1d84"
+      },
+      {
+        "id": "CAND-CWE-367-14",
+        "ruleId": "CWE-367",
+        "title": "Time-of-check to time-of-use (TOCTOU) race condition in wallet withdrawal",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/10-toctou-race-condition.js",
+          "startLine": 14,
+          "endLine": 18
+        },
+        "symbol": "account.balance",
+        "lineageId": "2d74783fae2040d0d85a30863944a4b7"
+      }
+    ],
+    "verifiedFindings": null,
+    "unresolvedCandidates": null,
+    "suppressedCandidates": null
+  },
+  "summary": {
+    "candidateCount": 9,
+    "verifiedCount": null,
+    "deferredCount": null,
+    "suppressedCount": null,
+    "executionDurationMs": 272393
+  },
+  "metadata": {
+    "passIndex": 5,
+    "totalPasses": 5,
+    "fixtureSplits": {
+      "developmentSet": {
+        "ids": [
+          "SEM-03"
+        ],
+        "role": "REGRESSION_BASELINE",
+        "rationale": "SEM-03 (Confused Deputy) was tuned with targeted CWE-441 prompt heuristics; classified as development/regression fixture."
+      },
+      "holdoutFixtures": {
+        "ids": [
+          "SEM-01",
+          "SEM-02",
+          "SEM-04",
+          "SEM-05",
+          "SEM-06",
+          "SEM-07",
+          "SEM-08",
+          "SEM-09",
+          "SEM-10"
+        ],
+        "role": "HOLDOUT_GENERALIZATION",
+        "rationale": "Fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
+      }
+    },
+    "includeSafe": false,
+    "fixtureResults": [
+      {
+        "fixtureId": "SEM-01",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 16489,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-02",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 25486,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-03",
+        "split": "DEVELOPMENT_SET",
+        "candidateCount": 1,
+        "durationMs": 44609,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-04",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 17643,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-05",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 70032,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-06",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 17080,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-07",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 19429,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-08",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 18451,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-09",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 15288,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-10",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 18811,
+        "error": null
+      }
+    ],
+    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization."
+  }
+}

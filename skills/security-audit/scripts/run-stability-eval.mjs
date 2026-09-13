@@ -465,13 +465,17 @@ if (isDirectExecution) {
   const dirIdx = args.indexOf('--runs-dir');
   const runsDir = dirIdx !== -1 ? args[dirIdx + 1] : null;
   const recorded = args.includes('--recorded');
+  const threshIdx = args.indexOf('--threshold');
 
   const res = runStabilityEval(process.cwd(), { runsDir, recorded });
+  const defaultThreshold = res.evaluationMode === 'RECORDED_EMPIRICAL' ? 0.70 : 0.80;
+  const minThreshold = threshIdx !== -1 ? parseFloat(args[threshIdx + 1]) : defaultThreshold;
+
   if (res.status === 'NOT_MEASURED') {
     // Graceful exit for unmeasured empirical run
     console.log('✔ Stability evaluation suite completed (Recorded Mode: NOT MEASURED).');
-  } else if (res.meanJaccardSimilarity < 0.80) {
-    console.error('❌ Stability evaluation failed minimum threshold.');
+  } else if (res.meanJaccardSimilarity < minThreshold) {
+    console.error(`❌ Stability evaluation failed minimum threshold (${(minThreshold * 100).toFixed(1)}%).`);
     process.exit(1);
   } else {
     console.log('✔ Stability evaluation suite completed successfully.');
