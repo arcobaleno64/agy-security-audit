@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.2.0
+# agy-security-audit (plugin ID: `security-audit`) v1.2.1
 
 Evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Google Antigravity (AGY)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
 
@@ -48,7 +48,7 @@ security-audit/
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
 ├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
 ├── hooks/                                # Lifecycle hook implementations
-│   └── shadow-context-guard.mjs          # PreToolUse transparent path rewrite to scratch/context/
+│   └── shadow-context-guard.mjs          # PreToolUse fail-closed deny with redirection to scratch/context/
 ├── SECURITY.md                           # Honest trust model and sandbox boundary disclosure
 ├── agents/                               # Dedicated subagent definitions (at plugin root)
 │   ├── threat-modeler.md                 # Threat-modeling specialist
@@ -65,7 +65,7 @@ security-audit/
 │   ├── coverage-gap/                     # 5 accounting-coverage boundary tests
 │   ├── git-config/                       # 5 malicious git-config isolation tests
 │   ├── patch-regression/                 # 5 malicious-patch and stale-baseline tests
-│   └── semantic-benchmark/               # L1.5 disposition ground-truth benchmark (12 decision-invariant cases)
+│   └── semantic-benchmark/               # L1.5 disposition ground-truth benchmark (20 paired cases: 10 vulnerable, 10 safe controls)
 ├── schemas/                              # R2-P1-08 versioned JSON Schemas (Draft-07)
 │   ├── scan-manifest.schema.json         # Directory-accounting manifest schema
 │   ├── threat-model.schema.json          # Threat-model schema
@@ -103,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 114 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 115 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection
@@ -128,7 +128,7 @@ npm test
 # Run the 50-case deterministic security-invariant and adversarial-regression suite:
 npm run test:evals
 
-# Run the L1.5 disposition ground-truth benchmark (12 cases):
+# Run the L1.5 disposition ground-truth benchmark (20 paired cases):
 npm run test:semantic
 
 # Run the agent discovery-evaluation benchmark (Simulated CI):
@@ -136,6 +136,9 @@ npm run test:discovery
 
 # Run the stability benchmark (Synthetic Harness):
 npm run test:stability
+
+# Run the recorded synthetic stability benchmark (recorded multi-pass mode):
+npm run test:stability-recorded
 
 # Run the Section 24 release gate (verifies required specs, security invariants, and zero external dependencies):
 npm run check:release
@@ -149,18 +152,17 @@ This tool strictly follows an honest-disclosure principle and makes no exaggerat
 - **No claim of "100% accuracy" or "provably free of vulnerabilities"**: a Clean review result means only that **defined coverage was completed within declared scope** and no reportable issue with verified evidence was found — not a universal security proof.
 - **Test-corpus and benchmark-measurement transparency disclosure**:
   - **Deterministic security-invariant and adversarial-regression suite**: 50 cases (covering 8 boundary-threat classes), verifying deterministic rules and defensive boundaries (Invariant Rate: 100%).
-  - **L1.5 disposition ground-truth benchmark**: 12 cases (8 vulnerable, 4 safe), evaluating the Finalizer's deterministic disposition logic — does not represent real-world LLM discovery rates.
-  - **Agent discovery-evaluation harness**: ships 8 vulnerable ground-truth cases, verifying the evaluation pipeline via SIMULATED_CI; actual model discovery precision/recall is computed only once recorded agent candidates are supplied (`--candidates`); this release ships with no empirical model benchmark attached, so the public result is marked NOT MEASURED.
-  - **Stability-evaluation harness**: synthetic mode verifies the lineage/Jaccard/convergence computation pipeline; empirical stability requires at least 2 sets of recorded model runs (`--runs-dir`); without recorded runs supplied, the public status is NOT MEASURED.
+  - **L1.5 disposition ground-truth benchmark**: 20 paired cases (10 vulnerable, 10 safe controls), evaluating the Finalizer's deterministic disposition logic (100% 20/20 PASS) — measures decision logic compliance, not LLM discovery rate.
+  - **Recorded synthetic stability benchmark**: 10 unique lineages across 3 simulated runs in `evals/recorded-runs/`, evaluating multi-run deterministic stability and line-shift invariance (100% 10/10 lineages, Mean Jaccard 100.0%).
+  - **Empirical model discovery benchmark**: authentic AGY live execution harness (`scripts/run-live-model-benchmark.mjs`) tracking development baseline (SEM-03 regression set) with holdout generalization fixtures under Default-Deny.
 
 | Benchmark | Corpus | Measurement Type | Public Status |
 | :--- | :--- | :--- | :--- |
 | Deterministic Invariants | 50 cases (8 boundary-threat classes) | Deterministic rule measurement (MEASURED) | 100% PASS |
-| Disposition Ground Truth | 12 cases (8 vulnerable / 4 safe) | Deterministic decision measurement (MEASURED) | 100% PASS |
-| Discovery Harness | 8 vulnerable ground-truth cases | Synthetic pipeline self-test (SYNTHETIC PIPELINE TEST) | PASS (SIMULATED_CI) |
-| Empirical Discovery | requires `--candidates` | Recorded model observation (RECORDED MODEL RUN) | NOT MEASURED (not attached) |
-| Stability Harness | 3-corpus synthetic pass | Synthetic pipeline self-test (SYNTHETIC PIPELINE TEST) | PASS (SYNTHETIC_HARNESS) |
-| Empirical Random Stability | requires `--runs-dir` | Recorded multi-run model observation (RECORDED MULTI-RUN) | NOT MEASURED (not attached) |
+| Disposition Ground Truth | 20 paired cases (10 vulnerable / 10 safe) | Deterministic decision measurement (MEASURED) | 100% PASS (20/20) |
+| Recorded Synthetic Stability | 10 unique lineages (3 simulated passes) | Synthetic stability self-test (RECORDED_SYNTHETIC) | 100% PASS (10/10 lineages) |
+| Synthetic Stability Harness | 3-corpus simulated pass | Synthetic pipeline self-test (SYNTHETIC_HARNESS) | PASS |
+| Empirical Model Discovery | 10 benchmark fixtures (SEM-03 dev baseline) | Authentic model observation (MODEL_OBSERVED) | BASELINE ESTABLISHED |
 
 - **Model-agnostic architecture**: every agent contract is strictly specified via data schemas and JSON Schema; the orchestrator and adjudication core do not depend on any specific LLM's proprietary hidden behavior.
 

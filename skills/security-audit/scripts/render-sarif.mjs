@@ -5119,7 +5119,127 @@ export default appName;`;
 
   console.log('✔ 114. P1 Invariant: Empirical Benchmark Recorder True Provenance & UNKNOWN Discovery.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (114/114).');
+  // 115. P0 Invariant: Evaluator enforces Default-Deny on evidenceOrigin & TCB Integrity
+  const testRoot115 = fs.mkdtempSync(path.join(os.tmpdir(), 'evaluator-default-deny-test-'));
+  try {
+    const mockCands = [
+      { id: 'C1', ruleId: 'CWE-862', location: { uri: 'test.js', startLine: 10 } }
+    ];
+
+    // 115.1 Self-asserted MODEL_OBSERVED with dirty tool (toolDirty: true) strictly downgrades to RECORDED_SYNTHETIC
+    const envDirty = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'MODEL_OBSERVED',
+      executionKind: 'LIVE_AGENT',
+      candidates: mockCands,
+      environment: {
+        modelId: 'gemini-2.5-flash',
+        modelProvider: 'google',
+        toolDirty: true,
+        toolIntegrityDigest: 'abcdef1234567890'
+      }
+    });
+    const resDirty = evaluateStability([envDirty, { ...envDirty, runId: 'run-dirty-2' }], testRoot115);
+    if (resDirty.evaluationMode !== 'RECORDED_SYNTHETIC') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_SYNTHETIC for dirty tool, got ${resDirty.evaluationMode}`);
+    }
+    if (resDirty.modelDependentRun !== 'NO (Deterministic Synthetic Generator)') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected NO (Deterministic Synthetic Generator) for dirty tool, got ${resDirty.modelDependentRun}`);
+    }
+
+    // 115.2 Self-asserted MODEL_OBSERVED with null toolIntegrityDigest strictly downgrades to RECORDED_SYNTHETIC
+    const envNullDigest = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'MODEL_OBSERVED',
+      executionKind: 'LIVE_AGENT',
+      candidates: mockCands,
+      environment: {
+        modelId: 'gemini-2.5-flash',
+        modelProvider: 'google',
+        toolDirty: false,
+        toolIntegrityDigest: null
+      }
+    });
+    const resNullDigest = evaluateStability([envNullDigest, { ...envNullDigest, runId: 'run-null-digest-2' }], testRoot115);
+    if (resNullDigest.evaluationMode !== 'RECORDED_SYNTHETIC') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_SYNTHETIC for null digest, got ${resNullDigest.evaluationMode}`);
+    }
+
+    // 115.3 Self-asserted MODEL_OBSERVED with UNKNOWN model strictly downgrades to RECORDED_SYNTHETIC
+    const envUnknownModel = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'MODEL_OBSERVED',
+      executionKind: 'LIVE_AGENT',
+      candidates: mockCands,
+      environment: {
+        modelId: 'UNKNOWN',
+        modelProvider: 'google',
+        toolDirty: false,
+        toolIntegrityDigest: 'abcdef1234567890'
+      }
+    });
+    const resUnknownModel = evaluateStability([envUnknownModel, { ...envUnknownModel, runId: 'run-unknown-2' }], testRoot115);
+    if (resUnknownModel.evaluationMode !== 'RECORDED_SYNTHETIC') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_SYNTHETIC for UNKNOWN model, got ${resUnknownModel.evaluationMode}`);
+    }
+
+    // 115.4 Explicit SYNTHETIC run envelope strictly evaluates to RECORDED_SYNTHETIC
+    const envSynthetic = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'SYNTHETIC',
+      executionKind: 'SIMULATED_HARNESS',
+      candidates: mockCands
+    });
+    const resSynthetic = evaluateStability([envSynthetic, { ...envSynthetic, runId: 'run-synth-2' }], testRoot115);
+    if (resSynthetic.evaluationMode !== 'RECORDED_SYNTHETIC' || resSynthetic.modelDependentRun !== 'NO (Deterministic Synthetic Generator)') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_SYNTHETIC for synthetic envelope`);
+    }
+
+    // 115.5 IMPORTED run envelope evaluates to RECORDED_IMPORTED
+    const envImported = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'IMPORTED',
+      executionKind: 'REPLAY_LOG',
+      candidates: mockCands
+    });
+    const resImported = evaluateStability([envImported, { ...envImported, runId: 'run-import-2' }], testRoot115);
+    if (resImported.evaluationMode !== 'RECORDED_IMPORTED' || resImported.modelDependentRun !== 'YES (External Provenance)') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_IMPORTED for imported envelope`);
+    }
+
+    // 115.6 Clean MODEL_OBSERVED with clean TCB evaluates to RECORDED_EMPIRICAL
+    const envCleanObserved = createBenchmarkRunEnvelope({
+      repoRoot: testRoot115,
+      evidenceOrigin: 'MODEL_OBSERVED',
+      executionKind: 'LIVE_AGENT',
+      candidates: mockCands,
+      environment: {
+        modelId: 'gemini-2.5-flash',
+        modelProvider: 'google',
+        toolDirty: false,
+        toolIntegrityDigest: 'a1b2c3d4e5f67890123456789abcdef012345678'
+      }
+    });
+    const resClean = evaluateStability([envCleanObserved, { ...envCleanObserved, runId: 'run-clean-2' }], testRoot115);
+    if (resClean.evaluationMode !== 'RECORDED_EMPIRICAL' || resClean.modelDependentRun !== 'YES (Observed Multi-Pass)') {
+      throw new Error(`INVARIANT 115 VIOLATION: expected RECORDED_EMPIRICAL for clean observed run`);
+    }
+
+    // 115.7 Missing or invalid evidenceOrigin fails schema validation fail-closed
+    const badOrigin = validateBenchmarkRunEnvelope({
+      ...envCleanObserved,
+      evidenceOrigin: 'FORGED_ORIGIN'
+    });
+    if (badOrigin.valid) {
+      throw new Error('INVARIANT 115 VIOLATION: invalid evidenceOrigin passed validation');
+    }
+  } finally {
+    fs.rmSync(testRoot115, { recursive: true, force: true });
+  }
+
+  console.log('✔ 115. P0 Invariant: Evaluator enforces Default-Deny on evidenceOrigin & TCB Integrity.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (115/115).');
 
   } finally {
     gitFixture.cleanup();

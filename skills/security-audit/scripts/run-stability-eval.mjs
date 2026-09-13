@@ -185,7 +185,56 @@ export function evaluateStability(runs = [], repoRoot = process.cwd(), options =
     };
   }
 
+  // Default-Deny Evaluation Mode & Model-Dependence determination
+  let evaluationMode = 'SYNTHETIC_HARNESS';
+  let modelDependentRun = 'NO (Deterministic Harness Self-Test)';
+
+  const hasEnvelopes = runs.some(r => r && typeof r === 'object' && !Array.isArray(r) && (r.evidenceOrigin || r.runId));
+
+  if (hasEnvelopes) {
+    const hasSynthetic = runs.some(r => {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+      return r.evidenceOrigin === 'SYNTHETIC' || r.executionKind === 'SIMULATED_HARNESS';
+    });
+
+    const hasImported = runs.some(r => {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+      return r.evidenceOrigin === 'IMPORTED';
+    });
+
+    if (hasSynthetic) {
+      evaluationMode = 'RECORDED_SYNTHETIC';
+      modelDependentRun = 'NO (Deterministic Synthetic Generator)';
+    } else if (hasImported) {
+      evaluationMode = 'RECORDED_IMPORTED';
+      modelDependentRun = 'YES (External Provenance)';
+    } else {
+      // Under Default-Deny, verify if ALL runs qualify as genuine MODEL_OBSERVED
+      const allObserved = runs.every(r => {
+        if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+        if (r.evidenceOrigin !== 'MODEL_OBSERVED') return false;
+        const env = r.environment;
+        if (!env || typeof env !== 'object') return false;
+        if (env.toolDirty !== false) return false;
+        if (!env.toolIntegrityDigest) return false;
+        if (!env.modelId || env.modelId === 'UNKNOWN') return false;
+        return true;
+      });
+
+      if (allObserved) {
+        evaluationMode = 'RECORDED_EMPIRICAL';
+        modelDependentRun = 'YES (Observed Multi-Pass)';
+      } else {
+        // Strict Default-Deny: unverified claims or dirty TCB downgrade to RECORDED_SYNTHETIC
+        evaluationMode = 'RECORDED_SYNTHETIC';
+        modelDependentRun = 'NO (Deterministic Synthetic Generator)';
+      }
+    }
+  }
+
   return {
+    evaluationMode,
+    modelDependentRun,
     totalRuns,
     totalUniqueLineages: unioned.length,
     pairwiseComparisons: pairwiseJaccard.length,
@@ -338,8 +387,8 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
 
     console.log('================================================================');
     console.log('Empirical Discovery Stability Metrics (Recorded Runs):');
-    console.log(`  Evaluation Mode:                 ${evaluationMode}`);
-    console.log(`  Model-Dependent Run:             YES (Observed Multi-Pass)`);
+    console.log(`  Evaluation Mode:                 ${result.evaluationMode}`);
+    console.log(`  Model-Dependent Run:             ${result.modelDependentRun}`);
     console.log(`  Total Recorded Runs:             ${result.totalRuns}`);
     if (result.environmentConsistency) {
       if (result.environmentConsistency.distinctModels.length > 0) {
@@ -362,7 +411,8 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
     console.log('================================================================\n');
 
     return {
-      evaluationMode,
+      evaluationMode: result.evaluationMode,
+      modelDependentRun: result.modelDependentRun,
       status: 'MEASURED',
       ...result
     };
@@ -384,8 +434,8 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
 
   console.log('================================================================');
   console.log('Synthetic Stability Harness Metrics (Deterministic CI Self-Test):');
-  console.log(`  Evaluation Mode:                 ${evaluationMode}`);
-  console.log(`  Model-Dependent Run:             NO (Deterministic Harness Self-Test)`);
+  console.log(`  Evaluation Mode:                 ${result.evaluationMode}`);
+  console.log(`  Model-Dependent Run:             ${result.modelDependentRun}`);
   console.log(`  Synthetic Discovery Runs:        ${result.totalRuns}`);
   console.log(`  Unique Semantic Lineages:        ${result.totalUniqueLineages}`);
   console.log(`  Mean Finding-Set Jaccard:        ${(result.meanJaccardSimilarity * 100).toFixed(1)}%`);
@@ -396,7 +446,8 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
   console.log('================================================================\n');
 
   return {
-    evaluationMode,
+    evaluationMode: result.evaluationMode,
+    modelDependentRun: result.modelDependentRun,
     status: 'HARNESS_VERIFIED',
     ...result,
     corpus: corpusResult

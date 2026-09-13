@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.2.0
+# agy-security-audit (plugin ID: `security-audit`) v1.2.1
 
 以證據為本、多階段的安全保證與弱點驗證外掛，專為 **Google Antigravity (AGY)** 打造，對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究等前沿代理安全框架的防禦性架構概念。
 
@@ -48,7 +48,7 @@ security-audit/
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
 ├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
 ├── hooks/                                # 生命週期勾點實作
-│   └── shadow-context-guard.mjs          # PreToolUse 執行期透明路徑重導向至 scratch/context/
+│   └── shadow-context-guard.mjs          # PreToolUse 拒絕未經審核之原庫存取並導向 scratch/context/
 ├── SECURITY.md                           # 誠實信任模型與沙箱邊界說明
 ├── agents/                               # 專責子代理定義 (位於外掛根目錄)
 │   ├── threat-modeler.md                 # 威脅建模專員
@@ -65,7 +65,7 @@ security-audit/
 │   ├── coverage-gap/                     # 5 大會計覆蓋邊界測試
 │   ├── git-config/                       # 5 大惡意 Git 配置隔離測試
 │   ├── patch-regression/                 # 5 大惡意補丁與陳舊基準測試
-│   └── semantic-benchmark/               # L1.5 配置地面真值基準 (12 決策不變量對照組)
+│   └── semantic-benchmark/               # L1.5 配置地面真值基準 (20 對照組：10 弱點 + 10 防禦對照組)
 ├── schemas/                              # R2-P1-08 版本化 JSON 綱要 (Draft-07)
 │   ├── scan-manifest.schema.json         # 目錄會計清單綱要
 │   ├── threat-model.schema.json          # 威脅模型綱要
@@ -103,7 +103,7 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 114 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 115 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
@@ -128,7 +128,7 @@ npm test
 # 執行 50 題確定性安全不變量與對抗迴歸套件：
 npm run test:evals
 
-# 執行 L1.5 處置決策地面真值基準測試 (12 案例)：
+# 執行 L1.5 處置決策地面真值基準測試 (20 對照組)：
 npm run test:semantic
 
 # 執行代理發現評測基準測試 (Simulated CI)：
@@ -136,6 +136,9 @@ npm run test:discovery
 
 # 執行穩定度基準測試 (Synthetic Harness)：
 npm run test:stability
+
+# 執行記錄合成穩定度基準測試 (多輪評測模式)：
+npm run test:stability-recorded
 
 # 執行 Section 24 發行閘門檢驗 (檢查必要規格、安全不變量與零外部依賴)：
 npm run check:release
@@ -149,18 +152,17 @@ npm run check:release
 - **不宣稱「100% 準確率」或「絕對無漏洞」**：Clean 審查結果僅代表在**宣告範圍內完成定義覆蓋**、未發現具備驗證證據之可報告問題，並非全域安全證明。
 - **測試集與基準測量透明度揭露**：
   - **確定性安全不變量與對抗迴歸套件**：50 案例（覆蓋 8 種邊界威脅），驗證確定性規則與防禦邊界（Invariant Rate: 100%）。
-  - **L1.5 處置決策地面真值基準**：12 案例（8 漏洞，4 安全防護），評測 Finalizer 確定性處置決策邏輯，不代表真實 LLM 隨機發現率。
-  - **代理發現評測 Harness**：內建 8 個 vulnerable ground-truth cases，以 SIMULATED_CI 驗證評測管線；實際模型 discovery precision/recall 僅在提供 recorded agent candidates (`--candidates`) 後計算；本 release 未附 empirical model benchmark 時，公開結果標示為 NOT MEASURED。
-  - **穩定度評測 Harness**：synthetic mode 驗證 lineage/Jaccard/convergence 計算管線；empirical stability 需至少 2 組 recorded model runs (`--runs-dir`)；若未提供 recorded runs，公開狀態為 NOT MEASURED。
+  - **L1.5 處置決策地面真值基準**：20 對照組（10 弱點，10 安全防護），評測 Finalizer 確定性處置決策邏輯 (100% 20/20 PASS)，度量決策合規性而非 LLM 發現率。
+  - **記錄合成穩定度評測**：在 `evals/recorded-runs/` 中跨 3 輪合成執行評測 10 個獨立語意血統之跨輪確定性與行號位移不變性 (100% 10/10 血統，Mean Jaccard 100.0%)。
+  - **實證模型發現評測**：真實 AGY CLI 執行 Harness (`scripts/run-live-model-benchmark.mjs`) 追蹤開發基準（SEM-03 迴歸組）與保留泛化測試組。
 
 | 基準測試項目 (Benchmark) | 語料規模 (Corpus) | 測量類型 (Measurement Type) | 公開狀態 (Status) |
 | :--- | :--- | :--- | :--- |
 | 確定性安全不變量 (Deterministic Invariants) | 50 案例 (8 類邊界威脅) | 確定性規則測量 (MEASURED) | 100% PASS |
-| 處置決策地面真值 (Disposition Ground Truth) | 12 案例 (8 弱點 / 4 防護) | 確定性決策測量 (MEASURED) | 100% PASS |
-| 代理發現評測 Harness (Discovery Harness) | 8 弱點真值案例 | 合成管線自檢 (SYNTHETIC PIPELINE TEST) | PASS (SIMULATED_CI) |
-| 實證代理發現 (Empirical Discovery) | 需提供 `--candidates` | 實體模型觀測 (RECORDED MODEL RUN) | NOT MEASURED (未附錄) |
-| 穩定度評測 Harness (Stability Harness) | 3 語料庫合成 pass | 合成管線自檢 (SYNTHETIC PIPELINE TEST) | PASS (SYNTHETIC_HARNESS) |
-| 實證隨機穩定度 (Empirical Stability) | 需提供 `--runs-dir` | 實體模型多輪觀測 (RECORDED MULTI-RUN) | NOT MEASURED (未附錄) |
+| 處置決策地面真值 (Disposition Ground Truth) | 20 對照組 (10 弱點 / 10 防護) | 確定性決策測量 (MEASURED) | 100% PASS (20/20) |
+| 記錄合成穩定度 (Recorded Synthetic Stability) | 10 獨立血統 (3 輪合成 pass) | 合成穩定度自檢 (RECORDED_SYNTHETIC) | 100% PASS (10/10 血統) |
+| 穩定度評測 Harness (Synthetic Stability) | 3 語料庫合成 pass | 合成管線自檢 (SYNTHETIC_HARNESS) | PASS |
+| 實證模型發現 (Empirical Model Discovery) | 10 基準測試案例 (SEM-03 開發基準) | 實體模型觀測 (MODEL_OBSERVED) | 基準已建立 (BASELINE ESTABLISHED) |
 
 - **模型無關架構**：所有代理契約均採用資料架構與 JSON Schema 進行嚴格規格化，協調器與裁決核心不依賴任何特定 LLM 之專有隱藏行為。
 

@@ -8,6 +8,7 @@
     "runId",
     "recordedAt",
     "benchmarkMode",
+    "evidenceOrigin",
     "target",
     "environment",
     "findings",
@@ -27,6 +28,14 @@
     "benchmarkMode": {
       "type": "string",
       "enum": ["DISCOVERY", "AUDIT", "VALIDATE", "STABILITY"]
+    },
+    "evidenceOrigin": {
+      "type": "string",
+      "enum": ["MODEL_OBSERVED", "SYNTHETIC", "IMPORTED"]
+    },
+    "executionKind": {
+      "type": "string",
+      "enum": ["LIVE_AGENT", "SIMULATED_HARNESS", "REPLAY_LOG"]
     },
     "target": {
       "type": "object",

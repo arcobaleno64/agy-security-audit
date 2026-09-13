@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * record-eval-pass.mjs
- * Empirical Benchmark Recording Protocol Runner (v1.2.0 Evidence-Driven Milestone).
- * Automates executing security audit passes against evals/semantic-benchmark/,
+ * Deterministic Synthetic Benchmark Generator (CI Stability Self-Test).
+ * Generates synthetic benchmark passes against evals/semantic-benchmark/,
  * validates 3-lens verifier consensus, derives canonical findings via finalizeScan(),
- * and serializes envelopes conforming to schemas/empirical-benchmark-run.schema.json.
+ * and serializes envelopes conforming to schemas/empirical-benchmark-run.schema.json
+ * with evidenceOrigin: 'SYNTHETIC' and executionKind: 'SIMULATED_HARNESS'.
  */
 
 import fs from 'node:fs';
@@ -308,7 +309,7 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     allowSelfAudit: true
   });
 
-  const durationMs = Date.now() - startTime + (passNumber * 120);
+  const durationMs = Date.now() - startTime;
 
   const varianceNote = !remedySem03 && passNumber === 2
     ? 'SEM-03 (Confused Deputy) missed (FN) during initial hypothesis generation (pre-remediation baseline)'
@@ -320,6 +321,8 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     repoRoot,
     runId: `run-pass-${passNumber}`,
     benchmarkMode: 'DISCOVERY',
+    evidenceOrigin: 'SYNTHETIC',
+    executionKind: 'SIMULATED_HARNESS',
     target: {
       repositoryName: 'evals/semantic-benchmark',
       repositoryUri: 'https://github.com/arcobaleno64/agy-security-audit.git',
@@ -334,6 +337,7 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     executionDurationMs: durationMs,
     metadata: {
       passNumber,
+      generatorType: 'DETERMINISTIC_SYNTHETIC_HARNESS',
       totalArchetypesAudited: 20,
       vulnerableArchetypesCount: 10,
       safeControlsCount: 10,
@@ -357,7 +361,7 @@ export function recordAllPasses(options = {}) {
   const runsDir = options.runsDir || path.resolve(repoRoot, 'evals/recorded-runs');
   fs.mkdirSync(runsDir, { recursive: true });
 
-  console.log(`Recording Empirical Benchmark Passes (N=3) into: ${runsDir}\n`);
+  console.log(`Recording Synthetic Benchmark Passes (N=3) into: ${runsDir}\n`);
 
   const recordedEnvelopes = [];
   for (let p = 1; p <= 3; p++) {
@@ -368,7 +372,7 @@ export function recordAllPasses(options = {}) {
     recordedEnvelopes.push(envelope);
   }
 
-  console.log('\n✔ All 3 empirical benchmark run envelopes serialized successfully.');
+  console.log('\n✔ All 3 synthetic benchmark run envelopes serialized successfully.');
   return recordedEnvelopes;
 }
 

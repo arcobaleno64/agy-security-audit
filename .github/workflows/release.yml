@@ -51,6 +51,7 @@ jobs:
       - run: npm run test:semantic
       - run: npm run test:discovery
       - run: npm run test:stability
+      - run: npm run test:stability-recorded
       - run: npm run check-version
       - run: npm run check:release
       # No equivalent of `claude plugin validate --strict` here: `agy plugin

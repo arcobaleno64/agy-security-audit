@@ -1,12 +1,14 @@
 {
   "schemaVersion": "1.0.0",
   "runId": "run-pass-2",
-  "recordedAt": "2026-09-13T08:57:22.387Z",
+  "recordedAt": "2026-09-13T13:26:51.207Z",
   "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "SYNTHETIC",
+  "executionKind": "SIMULATED_HARNESS",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+    "commitSha": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
     "corpus": "semantic-benchmark"
   },
   "environment": {
@@ -15,9 +17,9 @@
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-    "toolVersion": "1.1.1",
-    "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+    "skillRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+    "toolVersion": "1.2.1",
+    "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -243,10 +245,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -368,10 +370,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -493,10 +495,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -618,10 +620,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -743,10 +745,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -868,10 +870,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -993,10 +995,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1118,10 +1120,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1243,10 +1245,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1368,10 +1370,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:57:21.704Z",
-          "toolVersion": "1.1.1",
-          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
-          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "executionDate": "2026-09-13T13:26:50.564Z",
+          "toolVersion": "1.2.1",
+          "toolRevision": "b913bbb029c159b4725b96cdeb31eabf02f15b21",
+          "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1464,10 +1466,11 @@
     "verifiedCount": 10,
     "deferredCount": 0,
     "suppressedCount": 0,
-    "executionDurationMs": 947
+    "executionDurationMs": 662
   },
   "metadata": {
     "passNumber": 2,
+    "generatorType": "DETERMINISTIC_SYNTHETIC_HARNESS",
     "totalArchetypesAudited": 20,
     "vulnerableArchetypesCount": 10,
     "safeControlsCount": 10,

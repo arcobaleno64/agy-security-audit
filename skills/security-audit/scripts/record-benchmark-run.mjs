@@ -72,6 +72,14 @@ export function validateBenchmarkRunEnvelope(envelope) {
   if (!VALID_MODES.includes(envelope.benchmarkMode)) {
     errors.push(`Invalid benchmarkMode: expected one of ${VALID_MODES.join(', ')}, got '${envelope.benchmarkMode}'`);
   }
+  const VALID_EVIDENCE_ORIGINS = ['MODEL_OBSERVED', 'SYNTHETIC', 'IMPORTED'];
+  if (!VALID_EVIDENCE_ORIGINS.includes(envelope.evidenceOrigin)) {
+    errors.push(`Invalid or missing evidenceOrigin: expected one of ${VALID_EVIDENCE_ORIGINS.join(', ')}, got '${envelope.evidenceOrigin}'`);
+  }
+  const VALID_EXECUTION_KINDS = ['LIVE_AGENT', 'SIMULATED_HARNESS', 'REPLAY_LOG'];
+  if (envelope.executionKind !== undefined && !VALID_EXECUTION_KINDS.includes(envelope.executionKind)) {
+    errors.push(`Invalid executionKind: expected one of ${VALID_EXECUTION_KINDS.join(', ')}, got '${envelope.executionKind}'`);
+  }
   if (!envelope.target || typeof envelope.target !== 'object') {
     errors.push('Missing target object');
   } else {
@@ -166,11 +174,16 @@ export function createBenchmarkRunEnvelope(options = {}) {
     ...(options.summary || {})
   };
 
+  const evidenceOrigin = options.evidenceOrigin || 'MODEL_OBSERVED';
+  const executionKind = options.executionKind || (evidenceOrigin === 'SYNTHETIC' ? 'SIMULATED_HARNESS' : 'LIVE_AGENT');
+
   const envelope = {
     schemaVersion: '1.0.0',
     runId,
     recordedAt,
     benchmarkMode,
+    evidenceOrigin,
+    executionKind,
     target,
     environment,
     findings: {
@@ -210,6 +223,8 @@ if (isDirectExecution) {
   const model = getArg('--model');
   const provider = getArg('--provider');
   const corpus = getArg('--corpus');
+  const originArg = getArg('--evidence-origin') || getArg('--origin');
+  const executionKindArg = getArg('--execution-kind');
 
   let candidates = [];
   if (fs.existsSync(candPath)) {
@@ -235,6 +250,8 @@ if (isDirectExecution) {
     candidates,
     verifiedFindings,
     corpus,
+    evidenceOrigin: originArg || undefined,
+    executionKind: executionKindArg || undefined,
     environment: {
       modelId: model || undefined,
       modelProvider: provider || undefined
