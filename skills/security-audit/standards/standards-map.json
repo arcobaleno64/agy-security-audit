@@ -114,6 +114,20 @@
       "asvs": ["v5.0.0-5.2.2"],
       "owaspTop10": ["A03:2021-Injection"],
       "ssdf": ["PW.7.1", "PW.7.2"]
+    },
+    "CWE-1321": {
+      "name": "Improperly Controlled Modification of Dynamically-Determined Object Attributes ('Prototype Pollution')",
+      "securityProperty": "OBJECT_MUTATION_INTEGRITY",
+      "asvs": ["v5.0.0-5.3.6"],
+      "owaspTop10": ["A03:2021-Injection"],
+      "ssdf": ["PW.7.1", "PW.7.2"]
+    },
+    "CWE-367": {
+      "name": "Time-of-check Time-of-use (TOCTOU) Race Condition",
+      "securityProperty": "STATE_TRANSITION_CONSISTENCY",
+      "asvs": ["v5.0.0-11.1.2"],
+      "owaspTop10": ["A04:2021-Insecure Design"],
+      "ssdf": ["PW.7.1", "PW.7.2"]
     }
   }
 }

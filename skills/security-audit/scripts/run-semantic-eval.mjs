@@ -12,6 +12,8 @@
  * - Partial Mitigation (CWE-79)
  * - Insecure Default (CWE-1188)
  * - Multi-Step Taint Flow (CWE-94)
+ * - Prototype Pollution (CWE-1321)
+ * - Concurrency Race Condition (TOCTOU) (CWE-367)
  *
  * NOTE: This benchmark measures canonical decision invariants under fixed ballots,
  * NOT stochastic LLM discovery recall or agent hunting precision (R2-P0-08).
@@ -198,7 +200,9 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2) {
   console.log('\n================================================================');
   console.log('L1.5 Disposition Ground-Truth Benchmark Metrics:');
   console.log('  Notice: Measures finalizer decision logic compliance; not LLM discovery rate.');
-  console.log(`  Total Ground-Truth Pairs: ${total} (8 Vulnerable, 4 Safe/Guarded)`);
+  const vulnExpectedCount = results.filter(r => r.expected === 'VULNERABLE').length;
+  const safeExpectedCount = results.filter(r => r.expected === 'SAFE').length;
+  console.log(`  Total Ground-Truth Pairs: ${total} (${vulnExpectedCount} Vulnerable, ${safeExpectedCount} Safe/Guarded)`);
   console.log(`  True Positives (TP):      ${tp}`);
   console.log(`  True Negatives (TN):      ${tn}`);
   console.log(`  False Positives (FP):     ${fp}`);

@@ -121,6 +121,36 @@
     ]
   },
   {
+    "id": "SEM-09",
+    "name": "Prototype Pollution via Unsanitized Object Merge",
+    "category": "prototype-pollution",
+    "cwe": "CWE-1321",
+    "file": "evals/semantic-benchmark/09-prototype-pollution.js",
+    "targetLine": 12,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Recursive object merge utility dynamically copies properties from untrusted input without filtering __proto__ or constructor, enabling prototype pollution.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "SEM-10",
+    "name": "TOCTOU Race Condition in Financial State Mutation",
+    "category": "concurrency-toctou",
+    "cwe": "CWE-367",
+    "file": "evals/semantic-benchmark/10-toctou-race-condition.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Withdrawal endpoint performs balance check prior to an asynchronous I/O operation and deducts balance afterwards without mutex locking, enabling TOCTOU double-spend.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
     "id": "SEM-01-SAFE",
     "name": "Enforced Role Authorization Guard",
     "category": "authz-bypass",
@@ -153,6 +183,38 @@
     }
   },
   {
+    "id": "SEM-03-SAFE",
+    "name": "Allowlisted Destination Relay Guard",
+    "category": "confused-deputy",
+    "cwe": "CWE-441",
+    "file": "evals/semantic-benchmark/safe/03-confused-deputy.js",
+    "targetLine": 13,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Internal relay enforces strict URL allowlist and strips ambient credentials before forwarding.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/03-confused-deputy.js",
+      "line": 13,
+      "reason": "Enforces destination allowlist policy invariant"
+    }
+  },
+  {
+    "id": "SEM-04-SAFE",
+    "name": "State Machine Prerequisite Validation Guard",
+    "category": "state-transition",
+    "cwe": "CWE-840",
+    "file": "evals/semantic-benchmark/safe/04-state-transition.js",
+    "targetLine": 13,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Fulfillment endpoint verifies order is in PAID state before transitioning to FULFILLED.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/04-state-transition.js",
+      "line": 13,
+      "reason": "Enforces prerequisite state machine guard invariant"
+    }
+  },
+  {
     "id": "SEM-05-SAFE",
     "name": "Canonicalized Basename Guard",
     "category": "validated-vs-consumed",
@@ -169,6 +231,22 @@
     }
   },
   {
+    "id": "SEM-06-SAFE",
+    "name": "Context-Aware HTML Attribute Encoding Guard",
+    "category": "partial-mitigation",
+    "cwe": "CWE-79",
+    "file": "evals/semantic-benchmark/safe/06-partial-mitigation.js",
+    "targetLine": 18,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Input is properly encoded for HTML attribute context and rendered inside a quoted input element rather than executable script.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/06-partial-mitigation.js",
+      "line": 18,
+      "reason": "Enforces context-complete attribute encoding and HTML structure containment"
+    }
+  },
+  {
     "id": "SEM-07-SAFE",
     "name": "Secure Default-Deny Policy Guard",
     "category": "unsafe-default",
@@ -182,6 +260,54 @@
       "path": "evals/semantic-benchmark/safe/07-unsafe-default.js",
       "line": 8,
       "reason": "Enforces fail-closed default-deny invariant"
+    }
+  },
+  {
+    "id": "SEM-08-SAFE",
+    "name": "Allowlisted Command Dispatch Table Guard",
+    "category": "multistep-attack-path",
+    "cwe": "CWE-94",
+    "file": "evals/semantic-benchmark/safe/08-multistep-attack-path.js",
+    "targetLine": 13,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Dispatched queue tasks are resolved via static dictionary dispatch table without dynamic code evaluation.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/08-multistep-attack-path.js",
+      "line": 13,
+      "reason": "Enforces static task lookup table rejecting arbitrary code evaluation"
+    }
+  },
+  {
+    "id": "SEM-09-SAFE",
+    "name": "Key-Filtering Prototype Pollution Guard",
+    "category": "prototype-pollution",
+    "cwe": "CWE-1321",
+    "file": "evals/semantic-benchmark/safe/09-prototype-pollution.js",
+    "targetLine": 8,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Object merge recursively rejects __proto__, constructor, and prototype keys before property assignment.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/09-prototype-pollution.js",
+      "line": 8,
+      "reason": "Enforces prototype key rejection invariant (__proto__, constructor, prototype)"
+    }
+  },
+  {
+    "id": "SEM-10-SAFE",
+    "name": "Atomic Account Lock Concurrency Guard",
+    "category": "concurrency-toctou",
+    "cwe": "CWE-367",
+    "file": "evals/semantic-benchmark/safe/10-toctou-race-condition.js",
+    "targetLine": 26,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Withdrawal transaction executes within an exclusive mutex lock to prevent concurrent TOCTOU race conditions.",
+    "mitigationProof": {
+      "path": "evals/semantic-benchmark/safe/10-toctou-race-condition.js",
+      "line": 26,
+      "reason": "Enforces mutex serialization across check and state mutation"
     }
   }
 ]

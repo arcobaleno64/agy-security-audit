@@ -30,7 +30,7 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '..');
 
 /**
- * Base archetype definitions for the 8 vulnerable sites and 4 safe controls.
+ * Base archetype definitions for the 10 vulnerable sites and 10 safe controls.
  */
 const VULNERABLE_ARCHETYPES = [
   {
@@ -176,6 +176,42 @@ const VULNERABLE_ARCHETYPES = [
       { lens: 'DEFENSES', decision: 'SUPPORTS', evidenceRole: 'guard', line: 18 },
       { lens: 'IMPACT', decision: 'SUPPORTS', evidenceRole: 'sink', line: 18 }
     ]
+  },
+  {
+    id: 'SEM-09',
+    ruleId: 'CWE-1321',
+    name: 'Prototype Pollution via Unsanitized Object Merge',
+    file: 'evals/semantic-benchmark/09-prototype-pollution.js',
+    targetLine: 12,
+    severity: 'HIGH',
+    cvssV4: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N',
+      score: 8.7,
+      severity: 'HIGH'
+    },
+    ballots: [
+      { lens: 'REACHABILITY', decision: 'SUPPORTS', evidenceRole: 'entrypoint', line: 12 },
+      { lens: 'DEFENSES', decision: 'SUPPORTS', evidenceRole: 'guard', line: 12 },
+      { lens: 'IMPACT', decision: 'SUPPORTS', evidenceRole: 'sink', line: 12 }
+    ]
+  },
+  {
+    id: 'SEM-10',
+    ruleId: 'CWE-367',
+    name: 'TOCTOU Race Condition in Financial State Mutation',
+    file: 'evals/semantic-benchmark/10-toctou-race-condition.js',
+    targetLine: 18,
+    severity: 'HIGH',
+    cvssV4: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N',
+      score: 8.7,
+      severity: 'HIGH'
+    },
+    ballots: [
+      { lens: 'REACHABILITY', decision: 'SUPPORTS', evidenceRole: 'entrypoint', line: 18 },
+      { lens: 'DEFENSES', decision: 'SUPPORTS', evidenceRole: 'guard', line: 18 },
+      { lens: 'IMPACT', decision: 'SUPPORTS', evidenceRole: 'sink', line: 18 }
+    ]
   }
 ];
 
@@ -298,9 +334,9 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     executionDurationMs: durationMs,
     metadata: {
       passNumber,
-      totalArchetypesAudited: 12,
-      vulnerableArchetypesCount: 8,
-      safeControlsCount: 4,
+      totalArchetypesAudited: 20,
+      vulnerableArchetypesCount: 10,
+      safeControlsCount: 10,
       stochasticVarianceNote: varianceNote
     }
   });

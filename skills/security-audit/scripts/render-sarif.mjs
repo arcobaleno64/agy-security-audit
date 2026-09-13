@@ -2918,8 +2918,8 @@ export function runTests() {
 
   // 70.4 runSemanticEval outputs truthful disposition benchmark metrics
   const semResult = runSemanticEval(process.cwd(), 1);
-  if (semResult.failed > 0 || semResult.total !== 12) {
-    throw new Error('R2-P0-08 VIOLATION: runSemanticEval failed to pass 12 disposition ground-truth invariant cases');
+  if (semResult.failed > 0 || semResult.total !== 20) {
+    throw new Error('R2-P0-08 VIOLATION: runSemanticEval failed to pass 20 disposition ground-truth invariant cases');
   }
 
   console.log('✔ 70. R2-P0-08 Invariant: Benchmark Truthfulness, Real Discovery Evaluation, and Stochastic Stability.');

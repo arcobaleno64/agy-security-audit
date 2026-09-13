@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1.0.0",
   "runId": "run-pass-3",
-  "recordedAt": "2026-09-13T08:24:22.955Z",
+  "recordedAt": "2026-09-13T08:57:23.656Z",
   "benchmarkMode": "DISCOVERY",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "c0d419cd9049389c5fcce80b12f0993561390532",
+    "commitSha": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
     "corpus": "semantic-benchmark"
   },
   "environment": {
@@ -15,9 +15,9 @@
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
+    "skillRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
     "toolVersion": "1.1.1",
-    "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
+    "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -166,6 +166,42 @@
           "score": 9.3,
           "severity": "CRITICAL"
         }
+      },
+      {
+        "id": "CAND-SEM-09-P3",
+        "ruleId": "CWE-1321",
+        "title": "Prototype Pollution via Unsanitized Object Merge",
+        "severity": "HIGH",
+        "symbol": "SEM-09",
+        "lineageId": "d0f765869dacfce21852ec99d1c63459",
+        "location": {
+          "uri": "evals/semantic-benchmark/09-prototype-pollution.js",
+          "startLine": 12,
+          "endLine": 12
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-10-P3",
+        "ruleId": "CWE-367",
+        "title": "TOCTOU Race Condition in Financial State Mutation",
+        "severity": "HIGH",
+        "symbol": "SEM-10",
+        "lineageId": "92f411d282fa7636cf43d6201aec0b85",
+        "location": {
+          "uri": "evals/semantic-benchmark/10-toctou-race-condition.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
       }
     ],
     "verifiedFindings": [
@@ -207,10 +243,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -332,10 +368,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -457,10 +493,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -582,10 +618,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -707,10 +743,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -832,10 +868,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -957,10 +993,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1082,10 +1118,10 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-13T08:24:22.268Z",
+          "executionDate": "2026-09-13T08:57:22.888Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
-          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
         },
@@ -1168,23 +1204,273 @@
         "tags": [],
         "proofGaps": [],
         "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-09-P3",
+        "ruleId": "CWE-1321",
+        "title": "Prototype Pollution via Unsanitized Object Merge",
+        "description": "Prototype Pollution via Unsanitized Object Merge",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "OBJECT_MUTATION_INTEGRITY",
+        "taxonomy": {
+          "cwe": [
+            "CWE-1321"
+          ],
+          "securityProperty": "OBJECT_MUTATION_INTEGRITY",
+          "asvs": [
+            "v5.0.0-5.3.6"
+          ],
+          "owaspTop10": [
+            "A03:2021-Injection"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Prototype Pollution via Unsanitized Object Merge",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-13T08:57:22.888Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/09-prototype-pollution.js",
+          "startLine": 12,
+          "endLine": 12,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "249ec92e9f3b25db68707cfb0070311443ba12466ab652a936240782d0200ff3",
+        "blobHash": "713e3ff7c1dc1759ee3920853986288915a641ccbeabd404289604f77379666b",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "04cdf79416762829b2e65e9cd03c9790",
+        "locationFingerprint": "04cdf79416762829b2e65e9cd03c9790",
+        "lineageId": "d0f765869dacfce21852ec99d1c63459",
+        "lineage": {
+          "lineageId": "d0f765869dacfce21852ec99d1c63459",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-10-P3",
+        "ruleId": "CWE-367",
+        "title": "TOCTOU Race Condition in Financial State Mutation",
+        "description": "TOCTOU Race Condition in Financial State Mutation",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "STATE_TRANSITION_CONSISTENCY",
+        "taxonomy": {
+          "cwe": [
+            "CWE-367"
+          ],
+          "securityProperty": "STATE_TRANSITION_CONSISTENCY",
+          "asvs": [
+            "v5.0.0-11.1.2"
+          ],
+          "owaspTop10": [
+            "A04:2021-Insecure Design"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "TOCTOU Race Condition in Financial State Mutation",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-13T08:57:22.888Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "44ed5721b5bc6f2526ba6fb69340638432e09b5e",
+          "toolIntegrityDigest": "a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/10-toctou-race-condition.js",
+          "startLine": 18,
+          "endLine": 18,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "4fe4b495d196c486e9de42cfadf1fdb0ebfac183695935c1045da12975953601",
+        "blobHash": "bc518e858fb4db0e3fdcfa2af405db39fb7e255cf51e9aae2dd4082ff06fe90b",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "d36144eea879b97a60af9dbede94c7d9",
+        "locationFingerprint": "d36144eea879b97a60af9dbede94c7d9",
+        "lineageId": "92f411d282fa7636cf43d6201aec0b85",
+        "lineage": {
+          "lineageId": "92f411d282fa7636cf43d6201aec0b85",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
       }
     ],
     "unresolvedCandidates": null,
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 8,
-    "verifiedCount": 8,
+    "candidateCount": 10,
+    "verifiedCount": 10,
     "deferredCount": 0,
     "suppressedCount": 0,
-    "executionDurationMs": 1060
+    "executionDurationMs": 1151
   },
   "metadata": {
     "passNumber": 3,
-    "totalArchetypesAudited": 12,
-    "vulnerableArchetypesCount": 8,
-    "safeControlsCount": 4,
+    "totalArchetypesAudited": 20,
+    "vulnerableArchetypesCount": 10,
+    "safeControlsCount": 10,
     "stochasticVarianceNote": "All authentic archetypes detected"
   }
 }
