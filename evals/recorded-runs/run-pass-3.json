@@ -1,0 +1,1190 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-pass-3",
+  "recordedAt": "2026-09-12T03:41:07.452Z",
+  "benchmarkMode": "DISCOVERY",
+  "target": {
+    "repositoryName": "evals/semantic-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "corpus": "semantic-benchmark"
+  },
+  "environment": {
+    "agyVersion": "1.2.1",
+    "modelId": "gemini-2.5-flash",
+    "modelProvider": "google",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "toolVersion": "1.1.1",
+    "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "toolIntegrityDigest": null,
+    "toolDirty": true
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-SEM-01-P3",
+        "ruleId": "CWE-862",
+        "title": "Missing Authorization on Critical State Mutation",
+        "severity": "HIGH",
+        "symbol": "SEM-01",
+        "lineageId": "a59b1337fbb909daa5ff50ccd6e41239",
+        "location": {
+          "uri": "evals/semantic-benchmark/01-authz-bypass.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-02-P3",
+        "ruleId": "CWE-639",
+        "title": "Cross-Tenant Data Leakage via Unscoped Identifier",
+        "severity": "HIGH",
+        "symbol": "SEM-02",
+        "lineageId": "fdfe8f4d52dee5dac98b2b1ec85ec620",
+        "location": {
+          "uri": "evals/semantic-benchmark/02-cross-tenant-access.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "score": 7.1,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-03-P3",
+        "ruleId": "CWE-441",
+        "title": "Confused Deputy via Credential-Forwarding Proxy",
+        "severity": "HIGH",
+        "symbol": "SEM-03",
+        "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+        "location": {
+          "uri": "evals/semantic-benchmark/03-confused-deputy.js",
+          "startLine": 13,
+          "endLine": 13
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-04-P3",
+        "ruleId": "CWE-840",
+        "title": "Broken State Machine Transition in Payment Workflow",
+        "severity": "CRITICAL",
+        "symbol": "SEM-04",
+        "lineageId": "cf184c67c2fe5777c69d09cdd8d26bb8",
+        "location": {
+          "uri": "evals/semantic-benchmark/04-state-transition.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-05-P3",
+        "ruleId": "CWE-20",
+        "title": "Validated vs. Consumed Input Mismatch",
+        "severity": "HIGH",
+        "symbol": "SEM-05",
+        "lineageId": "2f606c624818a9d4b56eff4c96942fe9",
+        "location": {
+          "uri": "evals/semantic-benchmark/05-validated-vs-consumed.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-06-P3",
+        "ruleId": "CWE-79",
+        "title": "Partial Mitigation in Context-Dependent Sanitizer",
+        "severity": "MEDIUM",
+        "symbol": "SEM-06",
+        "lineageId": "6fa07af2a90d551dec0f1bd9fe506458",
+        "location": {
+          "uri": "evals/semantic-benchmark/06-partial-mitigation.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:A/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+          "score": 5.1,
+          "severity": "MEDIUM"
+        }
+      },
+      {
+        "id": "CAND-SEM-07-P3",
+        "ruleId": "CWE-1188",
+        "title": "Insecure Default Privilege Fallback",
+        "severity": "HIGH",
+        "symbol": "SEM-07",
+        "lineageId": "892af1718281f784bb4e28294f1637b5",
+        "location": {
+          "uri": "evals/semantic-benchmark/07-unsafe-default.js",
+          "startLine": 11,
+          "endLine": 11
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-08-P3",
+        "ruleId": "CWE-94",
+        "title": "Multi-Step Taint Flow Across Asynchronous Job Boundary",
+        "severity": "CRITICAL",
+        "symbol": "SEM-08",
+        "lineageId": "6790b19f78e77aa9c431b89c7f0a9537",
+        "location": {
+          "uri": "evals/semantic-benchmark/08-multistep-attack-path.js",
+          "startLine": 20,
+          "endLine": 22
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+          "score": 9.3,
+          "severity": "CRITICAL"
+        }
+      }
+    ],
+    "verifiedFindings": [
+      {
+        "id": "CAND-SEM-01-P3",
+        "ruleId": "CWE-862",
+        "title": "Missing Authorization on Critical State Mutation",
+        "description": "Missing Authorization on Critical State Mutation",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "AUTHORIZATION_CONFINEMENT",
+        "taxonomy": {
+          "cwe": [
+            "CWE-862"
+          ],
+          "securityProperty": "AUTHORIZATION_CONFINEMENT",
+          "asvs": [
+            "v5.0.0-4.1.1"
+          ],
+          "owaspTop10": [
+            "A01:2021-Broken Access Control"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "BROKEN_AUTHORIZATION_BARRIER",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Missing Authorization on Critical State Mutation",
+          "preventiveAction": "Enforce affirmative, policy-based authorization barriers at every service and handler boundary."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/01-authz-bypass.js",
+          "startLine": 18,
+          "endLine": 18,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "c3c5e1a5e4b6f7a5fc1d24b8d46eb96ee069f95d22db4e1c26e5d69f87f8be73",
+        "blobHash": "806b85ed9eceda54b0896d7ec65f8e10305a17f1881e5766ca55a4c7a23e5ded",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "11133c530a0681236f15a281fa80be20",
+        "locationFingerprint": "11133c530a0681236f15a281fa80be20",
+        "lineageId": "a59b1337fbb909daa5ff50ccd6e41239",
+        "lineage": {
+          "lineageId": "a59b1337fbb909daa5ff50ccd6e41239",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-02-P3",
+        "ruleId": "CWE-639",
+        "title": "Cross-Tenant Data Leakage via Unscoped Identifier",
+        "description": "Cross-Tenant Data Leakage via Unscoped Identifier",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "TENANT_OBJECT_ISOLATION",
+        "taxonomy": {
+          "cwe": [
+            "CWE-639"
+          ],
+          "securityProperty": "TENANT_OBJECT_ISOLATION",
+          "asvs": [
+            "v5.0.0-4.1.2"
+          ],
+          "owaspTop10": [
+            "A01:2021-Broken Access Control"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "BROKEN_AUTHORIZATION_BARRIER",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Cross-Tenant Data Leakage via Unscoped Identifier",
+          "preventiveAction": "Enforce affirmative, policy-based authorization barriers at every service and handler boundary."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/02-cross-tenant-access.js",
+          "startLine": 18,
+          "endLine": 18,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "1acd2e116358d66245a04ed8050edd0373ab2b246e932fb6464dbdd2fa37484a",
+        "blobHash": "44838757b234dee38bdb2323077ab3716f4ca8b92106e9cd22950fe2ad48c010",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "score": 7.1,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "40e0e49e5f34a596a0c22513cf4102b6",
+        "locationFingerprint": "40e0e49e5f34a596a0c22513cf4102b6",
+        "lineageId": "fdfe8f4d52dee5dac98b2b1ec85ec620",
+        "lineage": {
+          "lineageId": "fdfe8f4d52dee5dac98b2b1ec85ec620",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-03-P3",
+        "ruleId": "CWE-441",
+        "title": "Confused Deputy via Credential-Forwarding Proxy",
+        "description": "Confused Deputy via Credential-Forwarding Proxy",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "DELEGATED_AUTHORITY_CONFINEMENT",
+        "taxonomy": {
+          "cwe": [
+            "CWE-441"
+          ],
+          "securityProperty": "DELEGATED_AUTHORITY_CONFINEMENT",
+          "asvs": [
+            "v5.0.0-4.1.5"
+          ],
+          "owaspTop10": [
+            "A01:2021-Broken Access Control"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "BROKEN_AUTHORIZATION_BARRIER",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Confused Deputy via Credential-Forwarding Proxy",
+          "preventiveAction": "Enforce affirmative, policy-based authorization barriers at every service and handler boundary."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/03-confused-deputy.js",
+          "startLine": 13,
+          "endLine": 13,
+          "lineSnippet": "[Line snippet suppressed for credential finding]",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "364f61ef8129d1e3b53dff0eca07cc9b28e902100b862bab4b5b67cf1eaca28d",
+        "blobHash": "7b42ff01051a86ed163c08c4de2cbafd0e2fd1d00e004caf1f64de535cf5c96b",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "62d84790d99f65471297a2543b0a3155",
+        "locationFingerprint": "62d84790d99f65471297a2543b0a3155",
+        "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+        "lineage": {
+          "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-04-P3",
+        "ruleId": "CWE-840",
+        "title": "Broken State Machine Transition in Payment Workflow",
+        "description": "Broken State Machine Transition in Payment Workflow",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "STATE_TRANSITION_CONSISTENCY",
+        "taxonomy": {
+          "cwe": [
+            "CWE-840"
+          ],
+          "securityProperty": "STATE_TRANSITION_CONSISTENCY",
+          "asvs": [
+            "v5.0.0-11.1.1"
+          ],
+          "owaspTop10": [
+            "A04:2021-Insecure Design"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.2.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Broken State Machine Transition in Payment Workflow",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/04-state-transition.js",
+          "startLine": 15,
+          "endLine": 15,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "dd57b988e621120b064027e1cf0c53ad9202b0c1ac9380181ba645ba76299dfc",
+        "blobHash": "f3f8577a8acdf62938bc6c44cbf7a794ab7b4f17e2ee80b8d349195f7c1db6bf",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "2c489bbc44b798299f1349301f30e421",
+        "locationFingerprint": "2c489bbc44b798299f1349301f30e421",
+        "lineageId": "cf184c67c2fe5777c69d09cdd8d26bb8",
+        "lineage": {
+          "lineageId": "cf184c67c2fe5777c69d09cdd8d26bb8",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-05-P3",
+        "ruleId": "CWE-20",
+        "title": "Validated vs. Consumed Input Mismatch",
+        "description": "Validated vs. Consumed Input Mismatch",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "BOUNDARY_DATA_VALIDATION",
+        "taxonomy": {
+          "cwe": [
+            "CWE-20"
+          ],
+          "securityProperty": "BOUNDARY_DATA_VALIDATION",
+          "asvs": [
+            "v5.0.0-5.1.1"
+          ],
+          "owaspTop10": [
+            "A03:2021-Injection"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Validated vs. Consumed Input Mismatch",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/05-validated-vs-consumed.js",
+          "startLine": 18,
+          "endLine": 18,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "f3a8c80b78835b0a789e7b3f034ffd49c45bf1c75c315764ba595283f8e9a672",
+        "blobHash": "03bdbf2f2a157d684a3d109a3fcee213da18578a8632be5009bbbb3220ff71d2",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "52742b3bb1a28162e5f452dec0d6b870",
+        "locationFingerprint": "52742b3bb1a28162e5f452dec0d6b870",
+        "lineageId": "2f606c624818a9d4b56eff4c96942fe9",
+        "lineage": {
+          "lineageId": "2f606c624818a9d4b56eff4c96942fe9",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-06-P3",
+        "ruleId": "CWE-79",
+        "title": "Partial Mitigation in Context-Dependent Sanitizer",
+        "description": "Partial Mitigation in Context-Dependent Sanitizer",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "MEDIUM",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "CLIENT_CONTEXT_ISOLATION",
+        "taxonomy": {
+          "cwe": [
+            "CWE-79"
+          ],
+          "securityProperty": "CLIENT_CONTEXT_ISOLATION",
+          "asvs": [
+            "v5.0.0-5.3.1"
+          ],
+          "owaspTop10": [
+            "A03:2021-Injection"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Partial Mitigation in Context-Dependent Sanitizer",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/06-partial-mitigation.js",
+          "startLine": 15,
+          "endLine": 15,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "9e292f0319d8c2cf7d219debe5c42d0677d19e422c6230698fbc1eac8b7ffce2",
+        "blobHash": "9cb310b405950b0533a0fdba74fbe5948818734cbdd3021a96fde2ac337ffbbf",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:A/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+          "score": 5.1,
+          "severity": "MEDIUM"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "ba7434f8cc5fadba486d09eddd29b923",
+        "locationFingerprint": "ba7434f8cc5fadba486d09eddd29b923",
+        "lineageId": "6fa07af2a90d551dec0f1bd9fe506458",
+        "lineage": {
+          "lineageId": "6fa07af2a90d551dec0f1bd9fe506458",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-07-P3",
+        "ruleId": "CWE-1188",
+        "title": "Insecure Default Privilege Fallback",
+        "description": "Insecure Default Privilege Fallback",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "SECURE_DEFAULT_CONFIGURATION",
+        "taxonomy": {
+          "cwe": [
+            "CWE-1188"
+          ],
+          "securityProperty": "SECURE_DEFAULT_CONFIGURATION",
+          "asvs": [
+            "v5.0.0-14.2.1"
+          ],
+          "owaspTop10": [
+            "A05:2021-Security Misconfiguration"
+          ],
+          "ssdf": [
+            "PO.4.1",
+            "PO.4.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "INSUFFICIENT_CONTROL_DEFENSE",
+          "missingControl": "NIST-SSDF-PO.4.1",
+          "affectedPattern": "Insecure Default Privilege Fallback",
+          "preventiveAction": "Establish automated architectural validation and defensive assertions."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/07-unsafe-default.js",
+          "startLine": 11,
+          "endLine": 11,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "10093467023f28f9698fe3e76169d0938a0ff60d372fafda5bf7ac2e01af9632",
+        "blobHash": "8ed925708b0bec0ab7ecd86587540d5a4926d236b465a5883adbf28bdb0d58de",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "df6ffa07d8e1f4c6caf8ed6c4774df45",
+        "locationFingerprint": "df6ffa07d8e1f4c6caf8ed6c4774df45",
+        "lineageId": "892af1718281f784bb4e28294f1637b5",
+        "lineage": {
+          "lineageId": "892af1718281f784bb4e28294f1637b5",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
+        "id": "CAND-SEM-08-P3",
+        "ruleId": "CWE-94",
+        "title": "Multi-Step Taint Flow Across Asynchronous Job Boundary",
+        "description": "Multi-Step Taint Flow Across Asynchronous Job Boundary",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "CRITICAL",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "EXECUTION_ENVIRONMENT_ISOLATION",
+        "taxonomy": {
+          "cwe": [
+            "CWE-94"
+          ],
+          "securityProperty": "EXECUTION_ENVIRONMENT_ISOLATION",
+          "asvs": [
+            "v5.0.0-5.2.2"
+          ],
+          "owaspTop10": [
+            "A03:2021-Injection"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "UNSAFE_PROCESS_EXECUTION",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Multi-Step Taint Flow Across Asynchronous Job Boundary",
+          "preventiveAction": "Eliminate shell interpolation; invoke process execution APIs using strict argument vectors."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-12T03:41:06.733Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/08-multistep-attack-path.js",
+          "startLine": 20,
+          "endLine": 22,
+          "lineSnippet": "",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "d10b36aa74a59bcf4a88185837f658afaf3646eff2bb16c3928d0e9335e945d2",
+        "blobHash": "c0ce3f9f8ae1538818de52dc8c026862038c457482f36fc7ab1ae560a02e096a",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+          "score": 9.3,
+          "severity": "CRITICAL"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "be89bd472223acd66718a65b80cbb26a",
+        "locationFingerprint": "be89bd472223acd66718a65b80cbb26a",
+        "lineageId": "6790b19f78e77aa9c431b89c7f0a9537",
+        "lineage": {
+          "lineageId": "6790b19f78e77aa9c431b89c7f0a9537",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      }
+    ],
+    "unresolvedCandidates": null,
+    "suppressedCandidates": null
+  },
+  "summary": {
+    "candidateCount": 8,
+    "verifiedCount": 8,
+    "deferredCount": 0,
+    "suppressedCount": 0,
+    "executionDurationMs": 1086
+  },
+  "metadata": {
+    "passNumber": 3,
+    "totalArchetypesAudited": 12,
+    "vulnerableArchetypesCount": 8,
+    "safeControlsCount": 4,
+    "stochasticVarianceNote": "All authentic archetypes detected"
+  }
+}
