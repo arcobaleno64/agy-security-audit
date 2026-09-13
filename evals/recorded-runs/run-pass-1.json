@@ -1,23 +1,23 @@
 {
   "schemaVersion": "1.0.0",
   "runId": "run-pass-1",
-  "recordedAt": "2026-09-12T03:41:05.249Z",
+  "recordedAt": "2026-09-13T08:24:16.668Z",
   "benchmarkMode": "DISCOVERY",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "commitSha": "c0d419cd9049389c5fcce80b12f0993561390532",
     "corpus": "semantic-benchmark"
   },
   "environment": {
-    "agyVersion": "1.2.1",
+    "agyVersion": "1.2.2",
     "modelId": "gemini-2.5-flash",
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "skillRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
     "toolVersion": "1.1.1",
-    "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -207,9 +207,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -332,9 +332,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -457,9 +457,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -582,9 +582,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -707,9 +707,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -832,9 +832,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -957,9 +957,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -1082,9 +1082,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:04.499Z",
+          "executionDate": "2026-09-13T08:24:16.066Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -1178,7 +1178,7 @@
     "verifiedCount": 8,
     "deferredCount": 0,
     "suppressedCount": 0,
-    "executionDurationMs": 887
+    "executionDurationMs": 735
   },
   "metadata": {
     "passNumber": 1,

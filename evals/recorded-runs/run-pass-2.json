@@ -1,23 +1,23 @@
 {
   "schemaVersion": "1.0.0",
   "runId": "run-pass-2",
-  "recordedAt": "2026-09-12T03:41:06.311Z",
+  "recordedAt": "2026-09-13T08:24:19.670Z",
   "benchmarkMode": "DISCOVERY",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "commitSha": "c0d419cd9049389c5fcce80b12f0993561390532",
     "corpus": "semantic-benchmark"
   },
   "environment": {
-    "agyVersion": "1.2.1",
+    "agyVersion": "1.2.2",
     "modelId": "gemini-2.5-flash",
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "skillRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
     "toolVersion": "1.1.1",
-    "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+    "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -56,6 +56,24 @@
         "cvssV4": {
           "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
           "score": 7.1,
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "CAND-SEM-03-P2",
+        "ruleId": "CWE-441",
+        "title": "Confused Deputy via Credential-Forwarding Proxy",
+        "severity": "HIGH",
+        "symbol": "SEM-03",
+        "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+        "location": {
+          "uri": "evals/semantic-benchmark/03-confused-deputy.js",
+          "startLine": 13,
+          "endLine": 13
+        },
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
           "severity": "HIGH"
         }
       },
@@ -189,9 +207,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -314,9 +332,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -402,6 +420,131 @@
         "attackPath": null
       },
       {
+        "id": "CAND-SEM-03-P2",
+        "ruleId": "CWE-441",
+        "title": "Confused Deputy via Credential-Forwarding Proxy",
+        "description": "Confused Deputy via Credential-Forwarding Proxy",
+        "disposition": "REPORTABLE",
+        "verdict": "CONFIRMED",
+        "dispositionReason": "Confirmed by unanimous 3-Lens panel with verified source-control-sink evidence",
+        "reasonCode": "AFFIRMATIVELY_VERIFIED",
+        "severity": "HIGH",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "securityProperty": "DELEGATED_AUTHORITY_CONFINEMENT",
+        "taxonomy": {
+          "cwe": [
+            "CWE-441"
+          ],
+          "securityProperty": "DELEGATED_AUTHORITY_CONFINEMENT",
+          "asvs": [
+            "v5.0.0-4.1.5"
+          ],
+          "owaspTop10": [
+            "A01:2021-Broken Access Control"
+          ],
+          "ssdf": [
+            "PW.7.1",
+            "PW.7.2"
+          ]
+        },
+        "defectManagement": {
+          "rootCause": "BROKEN_AUTHORIZATION_BARRIER",
+          "missingControl": "NIST-SSDF-PW.7.1",
+          "affectedPattern": "Confused Deputy via Credential-Forwarding Proxy",
+          "preventiveAction": "Enforce affirmative, policy-based authorization barriers at every service and handler boundary."
+        },
+        "modelProvenance": {
+          "modelProvider": "antigravity-orchestrator",
+          "modelIdentifier": "unknown",
+          "executionDate": "2026-09-13T08:24:19.006Z",
+          "toolVersion": "1.1.1",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
+          "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
+          "promptContractVersion": "1.0.0",
+          "systemPromptIntegrity": "UNKNOWN"
+        },
+        "confidenceScore": 0.85,
+        "confidenceLevel": "high",
+        "location": {
+          "uri": "evals/semantic-benchmark/03-confused-deputy.js",
+          "startLine": 13,
+          "endLine": 13,
+          "lineSnippet": "[Line snippet suppressed for credential finding]",
+          "lineHash": "0000000000000000"
+        },
+        "evidenceHash": "364f61ef8129d1e3b53dff0eca07cc9b28e902100b862bab4b5b67cf1eaca28d",
+        "blobHash": "7b42ff01051a86ed163c08c4de2cbafd0e2fd1d00e004caf1f64de535cf5c96b",
+        "cvssV4": {
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "score": 8.7,
+          "severity": "HIGH"
+        },
+        "evidenceSufficiency": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "rigor": {
+          "score": 0.85,
+          "sufficiencyLevel": "HIGH",
+          "assuranceLevel": "HIGH_RIGOR",
+          "sourceVerified": true,
+          "sinkVerified": true,
+          "flowVerified": true,
+          "defensesInspected": true,
+          "impactVerified": false,
+          "proofGaps": 0,
+          "disclaimer": "Internal heuristic for evidence completeness gating; not formal mathematical proof or CVSS.",
+          "metrics": {
+            "sinkVerified": true,
+            "sourceVerified": true,
+            "dataflowTotalSteps": 1,
+            "dataflowVerifiedSteps": 1,
+            "mitigationInspected": true
+          }
+        },
+        "consensus": {
+          "total": 3,
+          "supports": 3,
+          "refutes": 0,
+          "unanimous": true,
+          "isThreeLens": true,
+          "lenses": [
+            "REACHABILITY",
+            "DEFENSES",
+            "IMPACT"
+          ]
+        },
+        "fingerprint": "62d84790d99f65471297a2543b0a3155",
+        "locationFingerprint": "62d84790d99f65471297a2543b0a3155",
+        "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+        "lineage": {
+          "lineageId": "fa0023b053ea1dfd15a9b9bcb3a21c03",
+          "novelty": "NEW_SURFACE",
+          "whyNow": null,
+          "predecessorId": null,
+          "stabilityImpact": false
+        },
+        "tags": [],
+        "proofGaps": [],
+        "attackPath": null
+      },
+      {
         "id": "CAND-SEM-04-P2",
         "ruleId": "CWE-840",
         "title": "Broken State Machine Transition in Payment Workflow",
@@ -439,9 +582,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -564,9 +707,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -689,9 +832,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -814,9 +957,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -939,9 +1082,9 @@
         "modelProvenance": {
           "modelProvider": "antigravity-orchestrator",
           "modelIdentifier": "unknown",
-          "executionDate": "2026-09-12T03:41:05.640Z",
+          "executionDate": "2026-09-13T08:24:19.006Z",
           "toolVersion": "1.1.1",
-          "toolRevision": "3ca0e3bd570596e75bf7e85d85e492e12b7d0cff",
+          "toolRevision": "c0d419cd9049389c5fcce80b12f0993561390532",
           "toolIntegrityDigest": "dbbaa6a0bf151e228b80a2243aae624dddbef9a8295e85096f3214fab7a0f520",
           "promptContractVersion": "1.0.0",
           "systemPromptIntegrity": "UNKNOWN"
@@ -1031,17 +1174,17 @@
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 7,
-    "verifiedCount": 7,
+    "candidateCount": 8,
+    "verifiedCount": 8,
     "deferredCount": 0,
     "suppressedCount": 0,
-    "executionDurationMs": 923
+    "executionDurationMs": 930
   },
   "metadata": {
     "passNumber": 2,
     "totalArchetypesAudited": 12,
     "vulnerableArchetypesCount": 8,
     "safeControlsCount": 4,
-    "stochasticVarianceNote": "SEM-03 (Confused Deputy) missed (FN) during initial hypothesis generation"
+    "stochasticVarianceNote": "Post-remediation: SEM-03 (Confused Deputy) successfully discovered across all passes"
   }
 }

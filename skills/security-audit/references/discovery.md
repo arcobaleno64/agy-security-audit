@@ -20,9 +20,9 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
 ---
 
 ## 3. Standard Vulnerability Families
-1. **`auth/authz/tenancy`**: Broken object-level auth (BOLA/IDOR), missing function level auth, tenant boundary cross-contamination.
+1. **`auth/authz/tenancy`**: Broken object-level auth (BOLA/IDOR), missing function level auth, tenant boundary cross-contamination, delegated authority confusion and credential forwarding to untrusted endpoints (CWE-441).
 2. **`injection/query/template/eval`**: SQL/NoSQL injection, OS command injection, server-side template injection (SSTI), code eval.
-3. **`network/SSRF`**: Server-side request forgery, DNS rebinding, internal network egress, webhook tampering.
+3. **`network/SSRF`**: Server-side request forgery, DNS rebinding, internal network egress, webhook tampering, outbound HTTP relay and ambient token forwarding (CWE-441 / CWE-918).
 4. **`filesystem/path/archive`**: Path traversal (`../`), zip slip, symlink poisoning, arbitrary file overwrite.
 5. **`parser/deserialization`**: Insecure object deserialization, prototype pollution, XML external entity (XXE), YAML unsafe loading.
 6. **`secrets/crypto`**: Hardcoded credentials, insecure PRNG, weak hashing (MD5/SHA1 for passwords), CBC padding oracles.
@@ -30,6 +30,37 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
 8. **`dangerous-defaults/config`**: Permissive CORS (`*`), exposed debug flags, insecure TLS options, default credentials.
 9. **`native-memory-safety`**: Buffer over-reads, use-after-free, unsafe C/C++ bindings (FFI / N-API).
 10. **`ai/agent-trust-boundaries`**: Instruction-integrity risk affecting tool invocation, untrusted workspace execution, unauthorized file modifications.
+
+### Outbound Dispatch & Confused Deputy Pattern (CWE-441 / CWE-918)
+- **Vulnerable Pattern**: A proxy or relay forwards client requests to arbitrary caller-controlled destinations while attaching ambient credentials (e.g., internal service mesh token, mutual TLS cert, internal bearer tokens) without allowlisting:
+  ```javascript
+  // VULNERABLE: Confused deputy forwarding internal vault token to caller URL
+  router.post('/proxy/forward', async (req, res) => {
+    const { targetUrl, payload } = req.body;
+    return await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'X-Service-Auth': INTERNAL_VAULT_TOKEN },
+      body: JSON.stringify(payload)
+    });
+  });
+  ```
+- **Secure Pattern**: Enforces strict destination allowlisting (`ALLOWED_HOSTS`), protocol restriction (`https:`), and credential stripping:
+  ```javascript
+  // SECURE: Destination strictly allowlisted; ambient credentials confined
+  const ALLOWED_DESTINATIONS = new Set(['https://api.internal.service.mesh/v1/event']);
+  router.post('/proxy/forward', async (req, res) => {
+    const { targetUrl, payload } = req.body;
+    const url = new URL(targetUrl);
+    if (!ALLOWED_DESTINATIONS.has(url.origin + url.pathname)) {
+      return res.status(403).json({ error: 'Destination not permitted' });
+    }
+    return await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, // ambient credentials stripped
+      body: JSON.stringify(payload)
+    });
+  });
+  ```
 
 ---
 
