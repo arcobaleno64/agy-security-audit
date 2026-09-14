@@ -62,6 +62,40 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
   });
   ```
 
+### Object Mutation & Prototype Pollution Pattern (CWE-1321)
+- **Vulnerable Pattern**: A utility recursively merges or copies properties from untrusted user input without sanitizing prototype keys (`__proto__`, `constructor`, `prototype`), allowing callers to pollute `Object.prototype`:
+  ```javascript
+  // VULNERABLE: Recursive merge without prototype property validation
+  function recursiveMerge(target, source) {
+    for (const key of Object.keys(source)) {
+      if (typeof source[key] === 'object' && source[key] !== null) {
+        if (!target[key]) target[key] = {};
+        recursiveMerge(target[key], source[key]);
+      } else {
+        target[key] = source[key];
+      }
+    }
+    return target;
+  }
+  ```
+- **Secure Pattern**: Blocks access to prototype keys or uses null-prototype objects / `Map`:
+  ```javascript
+  // SECURE: Strict key validation blocks prototype pollution vectors
+  const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  function safeRecursiveMerge(target, source) {
+    for (const key of Object.keys(source)) {
+      if (DANGEROUS_KEYS.has(key)) continue;
+      if (typeof source[key] === 'object' && source[key] !== null) {
+        if (!target[key]) target[key] = {};
+        safeRecursiveMerge(target[key], source[key]);
+      } else {
+        target[key] = source[key];
+      }
+    }
+    return target;
+  }
+  ```
+
 ---
 
 ## 4. Discovery Execution Matrix & Cell Outcomes

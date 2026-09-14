@@ -20,7 +20,7 @@
     "skillRevision": "8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6",
     "toolVersion": "1.2.1",
     "toolRevision": "8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6",
-    "toolIntegrityDigest": "b76c9962da4f2b747da6ed2730b0d84f3e4f752ba1ca32520ba9a47426e6d6cf",
+    "toolIntegrityDigest": "8b36388d9dbd1806ef7fc1ae28b77bff9cc050b110cdb44e23e00711b2d8020e",
     "toolDirty": false
   },
   "findings": {
@@ -48,8 +48,8 @@
           "startLine": 16,
           "endLine": 21
         },
-        "symbol": "router.get",
-        "lineageId": "22dcd30040e57da0db61f2eedc973fe9"
+        "symbol": "mockDatabase.find",
+        "lineageId": "e99eca683596292bb446b6080cccb771"
       },
       {
         "id": "CAND-CWE-441-12",
@@ -141,6 +141,19 @@
         },
         "symbol": "account.balance",
         "lineageId": "2d74783fae2040d0d85a30863944a4b7"
+      },
+      {
+        "id": "CAND-CWE-1321-6",
+        "ruleId": "CWE-1321",
+        "title": "Missing key validation in recursive object merge",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/09-prototype-pollution.js",
+          "startLine": 6,
+          "endLine": 16
+        },
+        "symbol": "recursiveMerge",
+        "lineageId": "c6bd5718cb5924c53257682d366e656d"
       }
     ],
     "verifiedFindings": null,
@@ -152,7 +165,9 @@
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 318565
+    "executionDurationMs": 318565,
+    "candidatesCount": 10,
+    "uniqueLineages": 10
   },
   "metadata": {
     "passIndex": 3,

@@ -55,6 +55,13 @@ When inspecting endpoints performing outbound HTTP or RPC calls:
 3. **Inspect Credential Propagation Boundary**: Check if ambient or internal credentials (`Authorization: Bearer ...`, `X-Service-Auth`, internal API keys, mutual TLS tokens) are forwarded to this destination.
 4. **Formulate Candidate**: If no strict destination allowlist (`ALLOWED_DOMAINS`) or credential stripping is enforced, formulate a candidate for `CWE-441` with security property `DELEGATED_AUTHORITY_CONFINEMENT`.
 
+## Object Mutation & Prototype Pollution Inspection (CWE-1321)
+When inspecting endpoints performing deep object cloning, recursive merging, or property assignment:
+1. **Identify Sinks**: Recursive merge functions (`merge`, `deepExtend`, `cloneDeep`, `recursiveMerge`), direct property assignment by key paths (`target[key] = ...`, `set(obj, path, val)`).
+2. **Trace Taint Flows**: Identify whether object keys or paths originate from user request payloads (`req.body`, JSON payloads).
+3. **Inspect Key Filtering Boundary**: Check if dangerous prototype keys (`__proto__`, `constructor`, `prototype`) are explicitly stripped, skipped, or rejected before assignment.
+4. **Formulate Candidate**: If untrusted keys can reach recursive object mutation without prototype key validation, formulate a candidate for `CWE-1321` with security property `OBJECT_MUTATION_INTEGRITY`.
+
 ## Strict Invariants: No Finding Quota & Zero-Candidate Outcome
 - **There is no finding quota.** A reviewed cell may legitimately produce zero candidates.
 - Do NOT formulate a vulnerability hypothesis unless concrete repository evidence supports a plausible violated security property.

@@ -24,6 +24,7 @@ You are an automated threat-modeling agent operating under the **Presumption of 
    - Controller -> data storage / persistence
    - Agent / plugin boundary -> host execution
    - Controller / Service Relay -> Outbound Network / Upstream Microservices (Egress & Delegated Authority Boundary)
+   - Controller / Parser -> Object Mutation & Recursive Merging (Prototype Pollution Boundary)
 4. Identify critical assets and high-risk vulnerability families relevant to this specific repository.
 
 ## Least Privilege & Constraints
