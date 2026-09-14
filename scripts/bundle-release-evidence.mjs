@@ -46,6 +46,11 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     description: 'Authoritative 20-Fixture Paired Dataset'
   },
   {
+    repoPath: 'evals/holdout-benchmark/ground-truth.json',
+    stagedName: 'holdout-ground-truth.json',
+    description: 'Authoritative 20-Fixture Paired Holdout Generalization Dataset'
+  },
+  {
     repoPath: 'skills/security-audit/tool-integrity-manifest.json',
     stagedName: 'tool-integrity-manifest.json',
     description: 'Signed Cryptographic TCB Manifest'

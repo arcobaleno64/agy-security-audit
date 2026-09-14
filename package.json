@@ -15,6 +15,7 @@
     "test:adversarial": "node skills/security-audit/scripts/run-evals.mjs",
     "test:semantic": "node skills/security-audit/scripts/run-semantic-eval.mjs",
     "test:disposition": "node skills/security-audit/scripts/run-semantic-eval.mjs",
+    "test:holdout-disposition": "node skills/security-audit/scripts/run-semantic-eval.mjs --holdout",
     "test:discovery": "node skills/security-audit/scripts/run-discovery-eval.mjs",
     "test:stability": "node skills/security-audit/scripts/run-stability-eval.mjs",
     "test:stability-harness": "node skills/security-audit/scripts/run-stability-eval.mjs",
@@ -26,6 +27,7 @@
     "check-version": "node scripts/bump-version.mjs --check",
     "regen-integrity-manifest": "node scripts/regen-integrity-manifest.mjs",
     "benchmark:live": "node scripts/run-live-model-benchmark.mjs",
+    "benchmark:live:holdout": "node scripts/run-live-model-benchmark.mjs --suite holdout",
     "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
     "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs"
   },

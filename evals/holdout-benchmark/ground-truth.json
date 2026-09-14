@@ -1,0 +1,312 @@
+[
+  {
+    "id": "HLD-01",
+    "name": "Server-Side Template Injection via Dynamic Template String Evaluation",
+    "category": "ssti-template-injection",
+    "cwe": "CWE-1336",
+    "file": "evals/holdout-benchmark/01-ssti-template-injection.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "CRITICAL",
+    "description": "User-supplied template string is evaluated dynamically without sandbox isolation, allowing remote code execution.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-02",
+    "name": "Insecure XML Entity Expansion (XXE) with External Entity Resolution",
+    "category": "xxe-entity-expansion",
+    "cwe": "CWE-611",
+    "file": "evals/holdout-benchmark/02-xxe-entity-expansion.js",
+    "targetLine": 19,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "XML parser configuration enables external entity expansion (noent: true), permitting local file retrieval and SSRF.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-03",
+    "name": "Mass Assignment / Sensitive Field Auto-Binding",
+    "category": "mass-assignment",
+    "cwe": "CWE-915",
+    "file": "evals/holdout-benchmark/03-mass-assignment.js",
+    "targetLine": 15,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "User profile update blindly assigns request body onto user record, permitting privilege escalation.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-04",
+    "name": "Regular Expression Denial of Service (ReDoS) via Catastrophic Backtracking",
+    "category": "redos-backtracking",
+    "cwe": "CWE-1333",
+    "file": "evals/holdout-benchmark/04-redos-backtracking.js",
+    "targetLine": 16,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "MEDIUM",
+    "description": "Vulnerable regex with nested quantifiers evaluated on unconstrained input causes catastrophic backtracking.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-05",
+    "name": "Cryptographic Nonce / Static IV Reuse in Symmetric Encryption",
+    "category": "crypto-iv-reuse",
+    "cwe": "CWE-329",
+    "file": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
+    "targetLine": 16,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Symmetric CBC encryption initializes cipher with fixed all-zero IV, enabling ciphertext replay and pattern analysis.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-06",
+    "name": "JWT Verification Bypass via Algorithm Confusion",
+    "category": "jwt-alg-confusion",
+    "cwe": "CWE-347",
+    "file": "evals/holdout-benchmark/06-jwt-alg-confusion.js",
+    "targetLine": 15,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "CRITICAL",
+    "description": "JWT signature verification omits explicit algorithm whitelist, allowing algorithm confusion or unsigned token acceptance.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-07",
+    "name": "Zip Slip / Path Traversal in File Archive Extraction",
+    "category": "zip-slip-traversal",
+    "cwe": "CWE-22",
+    "file": "evals/holdout-benchmark/07-zip-slip-traversal.js",
+    "targetLine": 15,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Archive extraction concatenates target directory with unvalidated entry path, allowing filesystem traversal.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-08",
+    "name": "Server-Side Request Forgery (SSRF) with DNS Rebinding",
+    "category": "ssrf-dns-rebinding",
+    "cwe": "CWE-918",
+    "file": "evals/holdout-benchmark/08-ssrf-dns-rebinding.js",
+    "targetLine": 12,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Webhook endpoint fetches arbitrary user-provided URL without DNS validation or private IP network confinement.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-09",
+    "name": "HTTP Response Splitting / CRLF Injection in Header Construction",
+    "category": "crlf-header-injection",
+    "cwe": "CWE-113",
+    "file": "evals/holdout-benchmark/09-crlf-header-injection.js",
+    "targetLine": 11,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "MEDIUM",
+    "description": "Set-Cookie header value constructed from unsanitized input without CRLF stripping, allowing HTTP response splitting.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-10",
+    "name": "Unprotected One-Time Token Reuse / Race Condition in Password Reset",
+    "category": "race-token-reuse",
+    "cwe": "CWE-362",
+    "file": "evals/holdout-benchmark/10-race-token-reuse.js",
+    "targetLine": 23,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Password reset token is checked and only marked used after asynchronous processing, allowing concurrent race-condition reuse.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  {
+    "id": "HLD-01-SAFE",
+    "name": "Static Template Map with Parameterized Context Binding Guard",
+    "category": "ssti-template-injection",
+    "cwe": "CWE-1336",
+    "file": "evals/holdout-benchmark/safe/01-ssti-template-injection.js",
+    "targetLine": 14,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Template renderer restricts execution strictly to pre-compiled static templates.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/01-ssti-template-injection.js",
+      "line": 14,
+      "reason": "Enforces pre-compiled static template map rejecting dynamic evaluation"
+    }
+  },
+  {
+    "id": "HLD-02-SAFE",
+    "name": "Safe XML Parser Configuration Guard",
+    "category": "xxe-entity-expansion",
+    "cwe": "CWE-611",
+    "file": "evals/holdout-benchmark/safe/02-xxe-entity-expansion.js",
+    "targetLine": 7,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "XML parser explicitly disables external entity resolution (noent: false) and DTD processing.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/02-xxe-entity-expansion.js",
+      "line": 7,
+      "reason": "Enforces safe XML parser configuration with noent=false and dtd=false"
+    }
+  },
+  {
+    "id": "HLD-03-SAFE",
+    "name": "Whitelist-Based Property Extraction Guard",
+    "category": "mass-assignment",
+    "cwe": "CWE-915",
+    "file": "evals/holdout-benchmark/safe/03-mass-assignment.js",
+    "targetLine": 17,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Profile mutation filters input through an explicit allowlist, preventing unintended field assignment.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/03-mass-assignment.js",
+      "line": 17,
+      "reason": "Enforces strict whitelist-based field extraction for object mutation"
+    }
+  },
+  {
+    "id": "HLD-04-SAFE",
+    "name": "Bounded Input Length and Linear Regex Guard",
+    "category": "redos-backtracking",
+    "cwe": "CWE-1333",
+    "file": "evals/holdout-benchmark/safe/04-redos-backtracking.js",
+    "targetLine": 12,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Email validation enforces strict 254-character maximum length and uses linear polynomial regex.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/04-redos-backtracking.js",
+      "line": 12,
+      "reason": "Enforces input length bound and linear regex complexity"
+    }
+  },
+  {
+    "id": "HLD-05-SAFE",
+    "name": "Fresh Cryptographic Nonce / Random IV Guard",
+    "category": "crypto-iv-reuse",
+    "cwe": "CWE-329",
+    "file": "evals/holdout-benchmark/safe/05-crypto-iv-reuse.js",
+    "targetLine": 13,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Symmetric encryption generates a fresh cryptographically random 16-byte IV for every message.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/05-crypto-iv-reuse.js",
+      "line": 13,
+      "reason": "Enforces fresh cryptographically random IV generation per encryption call"
+    }
+  },
+  {
+    "id": "HLD-06-SAFE",
+    "name": "Pinned Algorithm Whitelist JWT Verification Guard",
+    "category": "jwt-alg-confusion",
+    "cwe": "CWE-347",
+    "file": "evals/holdout-benchmark/safe/06-jwt-alg-confusion.js",
+    "targetLine": 14,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "JWT verification explicitly pins the expected algorithm to RS256, rejecting algorithm confusion attacks.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/06-jwt-alg-confusion.js",
+      "line": 14,
+      "reason": "Enforces strict algorithm whitelist pinned to RS256"
+    }
+  },
+  {
+    "id": "HLD-07-SAFE",
+    "name": "Canonical Target Path & Directory Prefix Enclosure Guard",
+    "category": "zip-slip-traversal",
+    "cwe": "CWE-22",
+    "file": "evals/holdout-benchmark/safe/07-zip-slip-traversal.js",
+    "targetLine": 16,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Resolved path is verified to remain strictly within the extraction root directory prefix.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/07-zip-slip-traversal.js",
+      "line": 16,
+      "reason": "Enforces canonical destination containment within directory prefix boundary"
+    }
+  },
+  {
+    "id": "HLD-08-SAFE",
+    "name": "DNS Resolution with Private/Loopback CIDR Egress Guard",
+    "category": "ssrf-dns-rebinding",
+    "cwe": "CWE-918",
+    "file": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
+    "targetLine": 20,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Webhook caller pre-resolves DNS hostname and blocks requests to private, loopback, or link-local addresses.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
+      "line": 20,
+      "reason": "Enforces pre-request DNS resolution and private/loopback IP egress barrier"
+    }
+  },
+  {
+    "id": "HLD-09-SAFE",
+    "name": "Strict CRLF Character Rejection Header Guard",
+    "category": "crlf-header-injection",
+    "cwe": "CWE-113",
+    "file": "evals/holdout-benchmark/safe/09-crlf-header-injection.js",
+    "targetLine": 11,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "Input is inspected for CRLF characters and rejected prior to setting response headers.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/09-crlf-header-injection.js",
+      "line": 11,
+      "reason": "Enforces strict CRLF character rejection prior to header assignment"
+    }
+  },
+  {
+    "id": "HLD-10-SAFE",
+    "name": "Atomic Token Check-and-Set Invalidation Guard",
+    "category": "race-token-reuse",
+    "cwe": "CWE-362",
+    "file": "evals/holdout-benchmark/safe/10-race-token-reuse.js",
+    "targetLine": 12,
+    "expectedVerdict": "SAFE",
+    "severity": "NONE",
+    "description": "One-time token is checked and invalidated atomically before asynchronous password update processing.",
+    "mitigationProof": {
+      "path": "evals/holdout-benchmark/safe/10-race-token-reuse.js",
+      "line": 12,
+      "reason": "Enforces atomic check-and-set invalidation before async operation"
+    }
+  }
+]

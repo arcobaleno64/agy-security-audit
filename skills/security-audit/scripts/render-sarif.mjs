@@ -102,7 +102,7 @@ import { validateAttackPath, detectProofGaps } from './validate-attack-path.mjs'
 import { validatePatchSyntax, detectStalePatch, verifyRemediation } from './validate-patch.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
-import { runSemanticEval } from './run-semantic-eval.mjs';
+import { runSemanticEval, runHoldoutEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
 import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment } from './record-benchmark-run.mjs';
 
@@ -5239,7 +5239,17 @@ export default appName;`;
 
   console.log('✔ 115. P0 Invariant: Evaluator enforces Default-Deny on evidenceOrigin & TCB Integrity.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (115/115).');
+  // 116. P0 Invariant: Holdout Generalization Benchmark Ground-Truth & Symmetrical Dual-Control
+  const holdoutResult = runHoldoutEval(process.cwd(), 1);
+  if (holdoutResult.failed > 0 || holdoutResult.total !== 20) {
+    throw new Error('P0 VIOLATION: runHoldoutEval failed to pass 20 holdout disposition ground-truth invariant cases');
+  }
+  if (holdoutResult.tp !== 10 || holdoutResult.tn !== 10 || holdoutResult.fp !== 0 || holdoutResult.fn !== 0) {
+    throw new Error('P0 VIOLATION: runHoldoutEval failed dual-control symmetry (expected TP=10, TN=10, FP=0, FN=0)');
+  }
+  console.log('✔ 116. P0 Invariant: Holdout Generalization Benchmark Ground-Truth & Symmetrical Dual-Control.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (116/116).');
 
   } finally {
     gitFixture.cleanup();

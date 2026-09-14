@@ -42,10 +42,10 @@ import {
 /**
  * Runs the disposition ground-truth benchmark against decision pairs.
  */
-export function runSemanticEval(repoRoot = process.cwd(), iterations = 2) {
+export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, groundTruthRelPath = 'evals/semantic-benchmark/ground-truth.json') {
   console.log('Running L1.5 Disposition Ground-Truth Benchmark (Canonical Decision Invariants)...\n');
   console.log('  [Notice] Verifies canonical finalizer decision logic compliance; not stochastic agent discovery.\n');
-  const groundTruthPath = path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
+  const groundTruthPath = path.resolve(repoRoot, groundTruthRelPath);
   if (!fs.existsSync(groundTruthPath)) {
     throw new Error(`Ground truth file not found at: ${groundTruthPath}`);
   }
@@ -231,13 +231,23 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2) {
   };
 }
 
+/**
+ * Runs the disposition ground-truth benchmark against the holdout generalization benchmark suite.
+ */
+export function runHoldoutEval(repoRoot = process.cwd(), iterations = 2) {
+  return runSemanticEval(repoRoot, iterations, 'evals/holdout-benchmark/ground-truth.json');
+}
+
 // -----------------------------------------------------------------------------
 // CLI Dispatch
 // -----------------------------------------------------------------------------
 const isDirectExecution = process.argv[1] && process.argv[1].endsWith('run-semantic-eval.mjs');
 
 if (isDirectExecution) {
-  const result = runSemanticEval(process.cwd());
+  const isHoldout = process.argv.includes('--holdout');
+  const result = isHoldout
+    ? runHoldoutEval(process.cwd())
+    : runSemanticEval(process.cwd());
   if (result.failed > 0 || !result.isStable) {
     console.error(`❌ Disposition Ground-Truth Benchmark FAILED.`);
     process.exit(1);

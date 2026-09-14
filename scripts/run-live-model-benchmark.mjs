@@ -47,18 +47,34 @@ export function sleepSync(ms) {
  * Fixture Partitioning Specification:
  * Explicit separation between development/calibration fixtures and holdout fixtures.
  */
-export const BENCHMARK_FIXTURE_SPLITS = {
-  developmentSet: {
-    ids: ['SEM-03', 'SEM-09'],
-    role: 'REGRESSION_BASELINE',
-    rationale: 'SEM-03 (Confused Deputy) and SEM-09 (Prototype Pollution) were calibrated with targeted prompt heuristics; classified as development/regression fixtures.'
+export const SUITE_FIXTURE_SPLITS = {
+  semantic: {
+    developmentSet: {
+      ids: ['SEM-03', 'SEM-09'],
+      role: 'REGRESSION_BASELINE',
+      rationale: 'SEM-03 (Confused Deputy) and SEM-09 (Prototype Pollution) were calibrated with targeted prompt heuristics; classified as development/regression fixtures.'
+    },
+    holdoutFixtures: {
+      ids: ['SEM-01', 'SEM-02', 'SEM-04', 'SEM-05', 'SEM-06', 'SEM-07', 'SEM-08', 'SEM-10'],
+      role: 'HOLDOUT_GENERALIZATION',
+      rationale: 'Fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization.'
+    }
   },
-  holdoutFixtures: {
-    ids: ['SEM-01', 'SEM-02', 'SEM-04', 'SEM-05', 'SEM-06', 'SEM-07', 'SEM-08', 'SEM-10'],
-    role: 'HOLDOUT_GENERALIZATION',
-    rationale: 'Fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization.'
+  holdout: {
+    developmentSet: {
+      ids: [],
+      role: 'REGRESSION_BASELINE',
+      rationale: 'Holdout generalization benchmark suite has no development or calibrated fixtures (Section 21 covenant).'
+    },
+    holdoutFixtures: {
+      ids: ['HLD-01', 'HLD-02', 'HLD-03', 'HLD-04', 'HLD-05', 'HLD-06', 'HLD-07', 'HLD-08', 'HLD-09', 'HLD-10'],
+      role: 'HOLDOUT_GENERALIZATION',
+      rationale: 'All 10 fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization.'
+    }
   }
 };
+
+export const BENCHMARK_FIXTURE_SPLITS = SUITE_FIXTURE_SPLITS.semantic;
 
 /**
  * Parses model stdout to extract structured JSON candidate findings.
@@ -171,7 +187,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   }
 
   const isSafeFixture = fixture.expectedVerdict === 'SAFE' || fixture.severity === 'NONE' || fixture.id.endsWith('-SAFE');
-  const isDevSet = BENCHMARK_FIXTURE_SPLITS.developmentSet.ids.includes(fixture.id);
+  const splits = options.fixtureSplits || BENCHMARK_FIXTURE_SPLITS;
+  const isDevSet = splits.developmentSet.ids.includes(fixture.id);
   const split = isSafeFixture ? 'SAFE_CONTROL' : (isDevSet ? 'DEVELOPMENT_SET' : 'HOLDOUT_SET');
 
   // Support simulated / offline mode for tests and CI
@@ -324,10 +341,11 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
  * from the Holdout Generalization Set (SEM-01..SEM-10 excluding SEM-03)
  * and evaluates safe control false-positive immunity.
  */
-export function computePartitionedMetrics(stabilityResult, groundTruth = []) {
+export function computePartitionedMetrics(stabilityResult, groundTruth = [], splits = BENCHMARK_FIXTURE_SPLITS) {
+  const activeSplits = splits || BENCHMARK_FIXTURE_SPLITS;
   const recurrence = stabilityResult.findingsRecurrence || [];
-  const devIds = new Set(BENCHMARK_FIXTURE_SPLITS.developmentSet.ids);
-  const holdoutIds = new Set(BENCHMARK_FIXTURE_SPLITS.holdoutFixtures.ids);
+  const devIds = new Set(activeSplits.developmentSet.ids);
+  const holdoutIds = new Set(activeSplits.holdoutFixtures.ids);
 
   const devRecurrences = [];
   const holdoutRecurrences = [];
@@ -364,7 +382,7 @@ export function computePartitionedMetrics(stabilityResult, groundTruth = []) {
     } else {
       if (uri.includes('/safe/')) {
         safeRecurrences.push(item);
-      } else if (uri.includes('03-confused-deputy') || uri.includes('09-prototype-pollution')) {
+      } else if (devIds.size > 0 && (uri.includes('03-confused-deputy') || uri.includes('09-prototype-pollution'))) {
         devRecurrences.push({ ...item, matchedFixtureId: uri.includes('03-confused-deputy') ? 'SEM-03' : 'SEM-09' });
       } else {
         holdoutRecurrences.push(item);
@@ -384,13 +402,13 @@ export function computePartitionedMetrics(stabilityResult, groundTruth = []) {
 
   return {
     developmentSet: {
-      fixtures: BENCHMARK_FIXTURE_SPLITS.developmentSet.ids,
+      fixtures: activeSplits.developmentSet.ids,
       lineagesCount: devRecurrences.length,
       meanRecurrenceRate: devMeanRecurrence,
       lineages: devRecurrences
     },
     holdoutSet: {
-      fixtures: BENCHMARK_FIXTURE_SPLITS.holdoutFixtures.ids,
+      fixtures: activeSplits.holdoutFixtures.ids,
       lineagesCount: holdoutRecurrences.length,
       meanRecurrenceRate: holdoutMeanRecurrence,
       lineages: holdoutRecurrences
@@ -430,20 +448,45 @@ export function renderEmpiricalBaselineReport({
   const devRec = partitionedMetrics.developmentSet;
   const holdRec = partitionedMetrics.holdoutSet;
   const safeRec = partitionedMetrics.safeControls;
+  const splits = options.fixtureSplits || (options.suite === 'holdout' ? SUITE_FIXTURE_SPLITS.holdout : BENCHMARK_FIXTURE_SPLITS);
+
+  const isHoldout = options.suite === 'holdout' || target0.corpus === 'holdout-benchmark' || (splits.holdoutFixtures?.ids[0]?.startsWith('HLD-'));
+
+  const corpusDesc = isHoldout
+    ? '`evals/holdout-benchmark` (20-fixture paired holdout benchmark)'
+    : '`evals/semantic-benchmark` (20-fixture paired semantic benchmark)';
+
+  const principleDesc = isHoldout
+    ? 'Default-Deny Presumption of Non-Pass; strictly uncalibrated Holdout Generalization Set (`HLD-01..HLD-10`) per Section 21 Holdout Covenant.'
+    : 'Default-Deny Presumption of Non-Pass; partitioned Development Set (`SEM-03`) vs. Holdout Generalization Set (`SEM-01..SEM-10`).';
+
+  const benchmarkScope = isHoldout ? 'holdout vulnerability benchmark' : 'semantic vulnerability benchmark';
+
+  const partitioningNarrative = isHoldout
+    ? `Under Section 21 governance, holdout benchmark fixtures are strictly segregated from calibration or training data to measure authentic out-of-distribution model generalization:
+1. **Development Set**: Uncalibrated (0 fixtures; Section 21 covenant forbids prompt heuristics for holdout fixtures).
+2. **Holdout Generalization Set (\`HLD-01..HLD-10\`)**: Evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution model generalization across 10 distinct CWE vulnerability classes.`
+    : `Under Section 21 governance, benchmark fixtures are strictly segregated to avoid prompt-tuning overfitting:
+1. **Development Set (\`SEM-03\` Confused Deputy & \`SEM-09\` Prototype Pollution)**: Calibrated during rule engineering with targeted prompt heuristics; serves as a regression baseline.
+2. **Holdout Generalization Set (\`SEM-01..SEM-10\` excluding SEM-03 and SEM-09)**: Evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution model generalization across 8 distinct CWE vulnerability classes.`;
+
+  const devSetRole = splits.developmentSet.ids.length > 0
+    ? 'Regression Baseline Calibration'
+    : 'Uncalibrated (0 Fixtures per Section 21 Covenant)';
 
   return `# Empirical Baseline Evaluation Report: Model-Dependent Stochastic Discovery (N=${totalPasses})
 
 **Evaluation Harness**: Antigravity Security Audit Plugin (\`@arcobaleno64/agy-security-audit\`)  
 **Publication Date**: 2026-09-13  
-**Corpus**: \`evals/semantic-benchmark\` (20-fixture paired semantic benchmark)  
+**Corpus**: ${corpusDesc}  
 **Governance Standard**: NIST SSDF (SP 800-218) / OWASP ASVS 5.0.0 / Section 21 Benchmark Protocol  
-**Principle**: Default-Deny Presumption of Non-Pass; partitioned Development Set (\`SEM-03\`) vs. Holdout Generalization Set (\`SEM-01..SEM-10\`).
+**Principle**: ${principleDesc}
 
 ---
 
 ## 1. Executive Summary & Provenance Attestation
 
-This evaluation establishes the project's first authentic, model-dependent empirical baseline across $N=${totalPasses}$ independent execution passes on the semantic vulnerability benchmark. Unlike synthetic harness self-tests that yield an invariant 100%, this report records genuine stochastic LLM discovery behavior, measuring finding-set Jaccard similarity, lineage stability, and generalization beyond calibration fixtures.
+This evaluation establishes the project's first authentic, model-dependent empirical baseline across $N=${totalPasses}$ independent execution passes on the ${benchmarkScope}. Unlike synthetic harness self-tests that yield an invariant 100%, this report records genuine stochastic LLM discovery behavior, measuring finding-set Jaccard similarity, lineage stability, and generalization beyond calibration fixtures.
 
 | Provenance Property | Value / Attestation |
 | :--- | :--- |
@@ -454,7 +497,7 @@ This evaluation establishes the project's first authentic, model-dependent empir
 | **Antigravity CLI Version** | \`${env0.agyVersion || '1.2.2'}\` |
 | **Node.js Runtime** | \`${env0.nodeVersion || process.version}\` |
 | **OS Architecture** | \`${env0.os || (process.platform + ' (' + process.arch + ')')}\` |
-| **Security Audit Plugin Version** | \`${env0.toolVersion || '1.2.1'}\` |
+| **Security Audit Plugin Version** | \`${env0.toolVersion || '1.2.2'}\` |
 | **TCB Integrity Digest** | \`${env0.toolIntegrityDigest || 'N/A'}\` |
 | **Tool Dirty State** | \`${env0.toolDirty === false ? 'CLEAN (false)' : 'DIRTY (true)'}\` |
 | **Repository Revision (SHA)** | \`${target0.commitSha || env0.toolRevision || 'UNKNOWN'}\` |
@@ -485,15 +528,13 @@ ${pairwiseTableRows}
 
 ## 3. Fixture Partitioning & Generalization Analysis
 
-Under Section 21 governance, benchmark fixtures are strictly segregated to avoid prompt-tuning overfitting:
-1. **Development Set (\`SEM-03\` Confused Deputy & \`SEM-09\` Prototype Pollution)**: Calibrated during rule engineering with targeted prompt heuristics; serves as a regression baseline.
-2. **Holdout Generalization Set (\`SEM-01..SEM-10\` excluding SEM-03 and SEM-09)**: Evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution model generalization across 8 distinct CWE vulnerability classes.
+${partitioningNarrative}
 
 ### Partition Metrics Summary
 | Partition Split | Fixture Count | Lineages Found | Mean Recurrence Rate | Role & Governance |
 | :--- | :--- | :--- | :--- | :--- |
-| **Development Set (\`SEM-03\`, \`SEM-09\`)** | ${BENCHMARK_FIXTURE_SPLITS.developmentSet.ids.length} | ${devRec.lineagesCount} | **${(devRec.meanRecurrenceRate * 100).toFixed(1)}%** | Regression Baseline Calibration |
-| **Holdout Generalization Set** | ${BENCHMARK_FIXTURE_SPLITS.holdoutFixtures.ids.length} | ${holdRec.lineagesCount} | **${(holdRec.meanRecurrenceRate * 100).toFixed(1)}%** | Unbiased Out-of-Distribution Generalization |
+| **Development Set${splits.developmentSet.ids.length > 0 ? ` (\`${splits.developmentSet.ids.join('`, `')}\`)` : ''}** | ${splits.developmentSet.ids.length} | ${devRec.lineagesCount} | **${(devRec.meanRecurrenceRate * 100).toFixed(1)}%** | ${devSetRole} |
+| **Holdout Generalization Set** | ${splits.holdoutFixtures.ids.length} | ${holdRec.lineagesCount} | **${(holdRec.meanRecurrenceRate * 100).toFixed(1)}%** | Unbiased Out-of-Distribution Generalization |
 
 ### Lineage Recurrence Breakdown
 | Lineage Digest | Fixture / Symbol | CWE Rule | Passes Observed | Reliability Rate | Stability Classification |
@@ -543,7 +584,13 @@ Under Default-Deny, any candidate missed during discovery or exhibiting low recu
  * Supports multi-pass execution, partitioned evaluation, and automatic report rendering.
  */
 export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}) {
-  const gtPath = options.groundTruthPath || path.resolve(repoRoot, 'evals/semantic-benchmark/ground-truth.json');
+  const suite = options.suite === 'holdout' ? 'holdout' : 'semantic';
+  const isHoldout = suite === 'holdout';
+  const activeSplits = options.fixtureSplits || SUITE_FIXTURE_SPLITS[suite];
+  const defaultGtRel = isHoldout
+    ? 'evals/holdout-benchmark/ground-truth.json'
+    : 'evals/semantic-benchmark/ground-truth.json';
+  const gtPath = options.groundTruthPath || path.resolve(repoRoot, defaultGtRel);
   if (!fs.existsSync(gtPath)) {
     throw new Error(`Ground truth file missing: ${gtPath}`);
   }
@@ -565,9 +612,10 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   const passes = options.passes ? parseInt(options.passes, 10) : 1;
   const delayMs = options.delayMs !== undefined ? options.delayMs : (options.mock ? 0 : 1000);
+  const defaultOutDirName = isHoldout ? 'evals/holdout-live-runs' : 'evals/live-runs';
   const outDir = options.outDir !== undefined
     ? (options.outDir ? path.resolve(repoRoot, options.outDir) : null)
-    : (passes > 1 && !options.mock ? path.resolve(repoRoot, 'evals/live-runs') : null);
+    : (passes > 1 && !options.mock ? path.resolve(repoRoot, defaultOutDirName) : null);
 
   const modelId = options.modelId || process.env.AGY_MODEL || 'gemini-3.8-flash-high';
   const modelProvider = options.modelProvider || process.env.AGY_MODEL_PROVIDER || 'google';
@@ -610,7 +658,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     for (let i = 0; i < targetFixtures.length; i++) {
       const fix = targetFixtures[i];
       console.log(`[Pass ${p}/${passes}] Auditing fixture [${fix.id}]: ${fix.file}...`);
-      const res = runAgyDiscoveryOnFixture(fix, repoRoot, { ...options, passIndex: p, modelId });
+      const res = runAgyDiscoveryOnFixture(fix, repoRoot, { ...options, fixtureSplits: activeSplits, passIndex: p, modelId });
       fixtureResults.push(res);
       passCandidates.push(...res.candidates);
 
@@ -634,9 +682,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
       evidenceOrigin: options.mock ? 'SYNTHETIC' : 'MODEL_OBSERVED',
       executionKind: options.mock ? 'SIMULATED_HARNESS' : 'LIVE_AGENT',
       target: {
-        repositoryName: 'evals/semantic-benchmark',
+        repositoryName: isHoldout ? 'evals/holdout-benchmark' : 'evals/semantic-benchmark',
         repositoryUri: 'https://github.com/arcobaleno64/agy-security-audit.git',
-        corpus: 'semantic-benchmark'
+        corpus: isHoldout ? 'holdout-benchmark' : 'semantic-benchmark'
       },
       environment: {
         ...envProv,
@@ -647,7 +695,8 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
       metadata: {
         passIndex: p,
         totalPasses: passes,
-        fixtureSplits: BENCHMARK_FIXTURE_SPLITS,
+        suite,
+        fixtureSplits: activeSplits,
         includeSafe: Boolean(options.includeSafe),
         fixtureResults: fixtureResults.map(r => ({
           fixtureId: r.fixtureId,
@@ -656,7 +705,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
           durationMs: r.durationMs,
           error: r.error || null
         })),
-        governanceNote: 'SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization.'
+        governanceNote: isHoldout
+          ? 'Holdout generalization benchmark: all 10 fixtures strictly uncalibrated per Section 21 covenant.'
+          : 'SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization.'
       }
     });
 
@@ -681,7 +732,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   if (passes >= 2) {
     stabilityResult = evaluateStability(envelopes, repoRoot, { groundTruth });
-    partitionedMetrics = computePartitionedMetrics(stabilityResult, groundTruth);
+    partitionedMetrics = computePartitionedMetrics(stabilityResult, groundTruth, activeSplits);
 
     console.log('\n================================================================');
     console.log(`Empirical Stability Aggregation (N=${passes} Passes):`);
@@ -690,8 +741,8 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     console.log(`  Mean Finding-Set Jaccard:        ${(stabilityResult.meanJaccardSimilarity * 100).toFixed(1)}%`);
     console.log(`  Unique Semantic Lineages:        ${stabilityResult.totalUniqueLineages}`);
     console.log(`  100% Reliable Lineages:          ${stabilityResult.perfectRecurrenceCount}/${stabilityResult.totalUniqueLineages}`);
-    console.log(`  Development Set Recurrence:      ${(partitionedMetrics.developmentSet.meanRecurrenceRate * 100).toFixed(1)}% (SEM-03)`);
-    console.log(`  Holdout Set Mean Recurrence:     ${(partitionedMetrics.holdoutSet.meanRecurrenceRate * 100).toFixed(1)}% (SEM-01..10)`);
+    console.log(`  Development Set Recurrence:      ${(partitionedMetrics.developmentSet.meanRecurrenceRate * 100).toFixed(1)}% (${activeSplits.developmentSet.ids.join(', ') || 'None'})`);
+    console.log(`  Holdout Set Mean Recurrence:     ${(partitionedMetrics.holdoutSet.meanRecurrenceRate * 100).toFixed(1)}% (${isHoldout ? 'HLD-01..10' : 'SEM-01..10'})`);
     if (options.includeSafe) {
       console.log(`  Safe Control False Positives:    ${partitionedMetrics.safeControls.totalFalsePositives}`);
     }
@@ -725,7 +776,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         stabilityResult,
         partitionedMetrics,
         envelopes,
-        options,
+        options: { ...options, fixtureSplits: activeSplits },
         repoRoot
       });
     } else {
@@ -781,11 +832,12 @@ if (isDirectExecution) {
 Usage: node scripts/run-live-model-benchmark.mjs [options]
 
 Options:
+  --suite <semantic|holdout> Benchmark suite to execute (default: semantic)
   --passes <N>         Number of distinct execution passes to run (default: 1)
   --include-safe       Include the 10 paired safe controls to measure live false-positive rate
   --fixture <id>       Run discovery only on a specific fixture (e.g. SEM-03)
   --model <modelId>    Override target model ID (default: gemini-3.8-flash-high)
-  --out-dir <dir>      Directory to write benchmark envelope JSON files (default: evals/live-runs if passes > 1)
+  --out-dir <dir>      Directory to write benchmark envelope JSON files (default: evals/live-runs or evals/holdout-live-runs if passes > 1)
   --output <path>      Path to output JSON benchmark envelope (for single pass)
   --report <path>      Path to write formal Markdown empirical baseline report
   --delay-ms <ms>      Throttle delay between fixture dispatches in milliseconds (default: 1000)
@@ -796,6 +848,8 @@ Options:
     process.exit(0);
   }
 
+  const suiteArg = getArg('--suite') || 'semantic';
+  const isHoldout = suiteArg === 'holdout';
   const passesArg = getArg('--passes') || getArg('-n');
   const passes = passesArg ? parseInt(passesArg, 10) : 1;
   const includeSafe = args.includes('--include-safe');
@@ -812,7 +866,9 @@ Options:
   const delayMs = delayArg ? parseInt(delayArg, 10) : undefined;
   const isMock = args.includes('--mock') || args.includes('--dry-run');
 
-  const defaultOutDir = (passes > 1 && !isMock && !outFile) ? 'evals/live-runs' : null;
+  const defaultOutDir = (passes > 1 && !isMock && !outFile)
+    ? (isHoldout ? 'evals/holdout-live-runs' : 'evals/live-runs')
+    : null;
   const effectiveOutDir = outDirArg !== null ? outDirArg : defaultOutDir;
 
   if (outFile && passes > 1) {
@@ -822,6 +878,7 @@ Options:
 
   try {
     const result = runLiveModelBenchmark(DEFAULT_REPO_ROOT, {
+      suite: suiteArg,
       passes,
       includeSafe,
       fixtureId,
