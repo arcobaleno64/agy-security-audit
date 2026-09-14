@@ -54,6 +54,13 @@ jobs:
       - run: npm run test:stability-recorded
       - run: npm run check-version
       - run: npm run check:release
+      - name: Bundle release evidence
+        run: node scripts/bundle-release-evidence.mjs --out-dir release-evidence
+      - name: Upload release evidence bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-evidence
+          path: release-evidence
       # No equivalent of `claude plugin validate --strict` here: `agy plugin
       # validate` needs the proprietary, authenticated Antigravity CLI binary,
       # which cannot run on a GitHub-hosted runner. This gate is deliberately
@@ -71,6 +78,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Download release evidence bundle
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: release-evidence
+          path: release-evidence
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,6 +94,7 @@ jobs:
             printf '%s\n' "$notes"
           } > release-notes.md
           gh release create "$GITHUB_REF_NAME" \
+            release-evidence/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-notes.md \

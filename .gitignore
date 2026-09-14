@@ -1,6 +1,9 @@
 node_modules/
 scratch/
-reports/
+release-evidence/
+reports/*
+!reports/empirical-baseline-n5-report-2026-09-13.md
+!reports/empirical-benchmark-20-paired-report-2026-09-13.md
 codeql-db/
 .semgrep/
 coverage/

@@ -32,4 +32,6 @@ jobs:
       - run: npm run test:semantic
       - run: npm run test:discovery
       - run: npm run test:stability
+      - run: npm run test:stability-recorded
+      - run: node scripts/bundle-release-evidence.mjs --check
       - run: npm run check:release

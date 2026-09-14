@@ -1,0 +1,406 @@
+#!/usr/bin/env node
+/**
+ * bundle-release-evidence.mjs
+ * Zero-dependency Node.js release evidence bundler for @arcobaleno64/agy-security-audit.
+ *
+ * Staging and validation script for empirical benchmark deliverables:
+ * 1. reports/empirical-baseline-n5-report-2026-09-13.md
+ * 2. reports/empirical-benchmark-20-paired-report-2026-09-13.md
+ * 3. evals/semantic-benchmark/ground-truth.json
+ * 4. skills/security-audit/tool-integrity-manifest.json
+ * 5. evals/live-runs/ and evals/recorded-runs/ -> empirical-benchmark-envelopes.tar.gz
+ * 6. Deterministic cryptographic checksums -> SHA256SUMS.txt
+ *
+ * Supported CLI flags:
+ *   --out-dir <dir>    Destination staging directory (default: 'release-evidence')
+ *   --repo-root <dir>  Repository root directory (default: parent of scripts/)
+ *   --check            Validates mandatory evidence files exist and are non-empty without writing
+ *   --help, -h         Display usage instructions
+ *
+ * Zero external dependencies. Enforces strict LF line endings.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const REPO_ROOT = path.resolve(path.dirname(__filename), '..');
+
+export const MANDATORY_INDIVIDUAL_FILES = [
+  {
+    repoPath: 'reports/empirical-baseline-n5-report-2026-09-13.md',
+    stagedName: 'empirical-baseline-n5-report-2026-09-13.md',
+    description: 'Authentic N=5 Model Discovery Baseline Report'
+  },
+  {
+    repoPath: 'reports/empirical-benchmark-20-paired-report-2026-09-13.md',
+    stagedName: 'empirical-benchmark-20-paired-report-2026-09-13.md',
+    description: '20-Fixture Paired Disposition Benchmark Report'
+  },
+  {
+    repoPath: 'evals/semantic-benchmark/ground-truth.json',
+    stagedName: 'ground-truth.json',
+    description: 'Authoritative 20-Fixture Paired Dataset'
+  },
+  {
+    repoPath: 'skills/security-audit/tool-integrity-manifest.json',
+    stagedName: 'tool-integrity-manifest.json',
+    description: 'Signed Cryptographic TCB Manifest'
+  }
+];
+
+export const MANDATORY_ENVELOPE_DIRS = [
+  {
+    repoDir: 'evals/live-runs',
+    archivePrefix: 'evals/live-runs',
+    description: 'Machine-readable MODEL_OBSERVED run envelopes'
+  },
+  {
+    repoDir: 'evals/recorded-runs',
+    archivePrefix: 'evals/recorded-runs',
+    description: 'Machine-readable SYNTHETIC run envelopes'
+  }
+];
+
+/**
+ * Creates a standard POSIX UStar 512-byte tar header.
+ */
+function createTarHeader(name, size, mode = 0o644, mtime = 0) {
+  const buf = Buffer.alloc(512, 0);
+
+  // 0..99: File name
+  const nameBytes = Buffer.from(name, 'utf8');
+  if (nameBytes.length > 100) {
+    throw new Error(`Tar entry name exceeds 100 bytes limit: ${name}`);
+  }
+  nameBytes.copy(buf, 0);
+
+  // 100..107: File mode (octal, 8 bytes, null-padded)
+  const modeStr = (mode & 0o7777).toString(8).padStart(7, '0');
+  buf.write(modeStr + '\0', 100, 8, 'ascii');
+
+  // 108..115: Owner UID (octal, 8 bytes, null-padded)
+  buf.write('0000000\0', 108, 8, 'ascii');
+
+  // 116..123: Owner GID (octal, 8 bytes, null-padded)
+  buf.write('0000000\0', 116, 8, 'ascii');
+
+  // 124..135: File size (octal, 12 bytes, null-padded)
+  const sizeStr = size.toString(8).padStart(11, '0');
+  buf.write(sizeStr + '\0', 124, 12, 'ascii');
+
+  // 136..147: Modification time (octal, 12 bytes, null-padded, fixed at 0 for determinism)
+  const mtimeStr = mtime.toString(8).padStart(11, '0');
+  buf.write(mtimeStr + '\0', 136, 12, 'ascii');
+
+  // 148..155: Checksum field initially 8 spaces (0x20)
+  buf.fill(0x20, 148, 156);
+
+  // 156: Type flag ('0' for regular file)
+  buf[156] = 0x30; // '0'
+
+  // 157..256: Link name (unused, zeroes)
+
+  // 257..262: Magic indicator 'ustar\0'
+  buf.write('ustar\0', 257, 6, 'ascii');
+
+  // 263..264: Version '00'
+  buf.write('00', 263, 2, 'ascii');
+
+  // Compute checksum (sum of all 512 bytes where checksum field is spaces)
+  let sum = 0;
+  for (let i = 0; i < 512; i++) {
+    sum += buf[i];
+  }
+  const sumStr = sum.toString(8).padStart(6, '0') + '\0 ';
+  buf.write(sumStr, 148, 8, 'ascii');
+
+  return buf;
+}
+
+/**
+ * Packs files into a deterministic, zero-dependency .tar.gz archive.
+ * @param {Array<{ archivePath: string, content: Buffer|string }>} entries
+ * @returns {Buffer}
+ */
+export function createDeterministicTarGz(entries) {
+  // Sort entries alphabetically by archivePath for strict determinism
+  const sorted = [...entries].sort((a, b) => a.archivePath.localeCompare(b.archivePath));
+
+  const chunks = [];
+  for (const entry of sorted) {
+    const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, 'utf8');
+    const header = createTarHeader(entry.archivePath, content.length, 0o644, 0);
+    chunks.push(header);
+    chunks.push(content);
+
+    // Pad content to 512-byte boundary
+    const padSize = (512 - (content.length % 512)) % 512;
+    if (padSize > 0) {
+      chunks.push(Buffer.alloc(padSize, 0));
+    }
+  }
+
+  // End of archive marker: two 512-byte zero blocks
+  chunks.push(Buffer.alloc(1024, 0));
+
+  const tarBuffer = Buffer.concat(chunks);
+
+  // Compress with max compression level
+  const gzBuffer = zlib.gzipSync(tarBuffer, { level: 9 });
+
+  // Normalize gzip header for deterministic cross-platform byte output:
+  // Bytes 4..7: MTIME (little-endian 32-bit timestamp) -> set to 0
+  // Byte 9: OS flag -> set to 0xff (unknown)
+  if (gzBuffer.length >= 10) {
+    gzBuffer[4] = 0;
+    gzBuffer[5] = 0;
+    gzBuffer[6] = 0;
+    gzBuffer[7] = 0;
+    gzBuffer[9] = 0xff;
+  }
+
+  return gzBuffer;
+}
+
+/**
+ * Validates that all required evidence files exist and are non-empty.
+ * @param {string} repoRoot
+ * @returns {{ valid: boolean, errors: string[], checkedFiles: string[] }}
+ */
+export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
+  const errors = [];
+  const checkedFiles = [];
+
+  // Check individual mandatory files
+  for (const item of MANDATORY_INDIVIDUAL_FILES) {
+    const fullPath = path.resolve(repoRoot, item.repoPath);
+    if (!fs.existsSync(fullPath)) {
+      errors.push(`Missing mandatory evidence file: ${item.repoPath} (${item.description})`);
+    } else {
+      const stats = fs.statSync(fullPath);
+      if (!stats.isFile()) {
+        errors.push(`Mandatory evidence path is not a regular file: ${item.repoPath}`);
+      } else if (stats.size === 0) {
+        errors.push(`Mandatory evidence file is empty: ${item.repoPath}`);
+      } else {
+        if (item.repoPath.endsWith('.json')) {
+          try {
+            JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+          } catch (err) {
+            errors.push(`Mandatory evidence file is not valid JSON: ${item.repoPath} (${err.message})`);
+          }
+        }
+        checkedFiles.push(item.repoPath);
+      }
+    }
+  }
+
+  // Check envelope directories
+  for (const item of MANDATORY_ENVELOPE_DIRS) {
+    const fullDir = path.resolve(repoRoot, item.repoDir);
+    if (!fs.existsSync(fullDir) || !fs.statSync(fullDir).isDirectory()) {
+      errors.push(`Missing mandatory envelope directory: ${item.repoDir} (${item.description})`);
+      continue;
+    }
+
+    const files = fs.readdirSync(fullDir)
+      .filter(f => f.endsWith('.json'))
+      .sort();
+
+    if (files.length === 0) {
+      errors.push(`Envelope directory contains no JSON files: ${item.repoDir}`);
+      continue;
+    }
+
+    for (const f of files) {
+      const filePath = path.join(fullDir, f);
+      const relPath = path.join(item.repoDir, f).replace(/\\/g, '/');
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) {
+        continue;
+      }
+      if (stats.size === 0) {
+        errors.push(`Envelope file is empty: ${relPath}`);
+      } else {
+        try {
+          JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          checkedFiles.push(relPath);
+        } catch (err) {
+          errors.push(`Envelope file is not valid JSON: ${relPath} (${err.message})`);
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    checkedFiles
+  };
+}
+
+/**
+ * Bundles and stages all release evidence into target directory.
+ * @param {string} outDir
+ * @param {string} repoRoot
+ * @returns {{ targetDir: string, stagedAssets: Array<{ name: string, sizeBytes: number, sha256: string }>, shaSumsContent: string }}
+ */
+export function bundleReleaseEvidence(outDir, repoRoot = REPO_ROOT) {
+  const check = checkEvidenceCompleteness(repoRoot);
+  if (!check.valid) {
+    throw new Error(`Evidence check failed before bundling:\n${check.errors.join('\n')}`);
+  }
+
+  const targetDir = path.resolve(repoRoot, outDir);
+  if (targetDir === path.resolve(repoRoot)) {
+    throw new Error(`Target outDir cannot be identical to repository root: ${outDir}`);
+  }
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const stagedAssets = [];
+
+  // 1. Stage mandatory individual files
+  for (const item of MANDATORY_INDIVIDUAL_FILES) {
+    const src = path.resolve(repoRoot, item.repoPath);
+    const content = fs.readFileSync(src);
+    const dest = path.join(targetDir, item.stagedName);
+    fs.writeFileSync(dest, content);
+
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    stagedAssets.push({
+      name: item.stagedName,
+      sizeBytes: content.length,
+      sha256: hash
+    });
+  }
+
+  // 2. Bundle envelope directories into empirical-benchmark-envelopes.tar.gz
+  const archiveEntries = [];
+  for (const item of MANDATORY_ENVELOPE_DIRS) {
+    const fullDir = path.resolve(repoRoot, item.repoDir);
+    const files = fs.readdirSync(fullDir)
+      .filter(f => f.endsWith('.json'))
+      .sort();
+
+    for (const f of files) {
+      const filePath = path.join(fullDir, f);
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) continue;
+      const content = fs.readFileSync(filePath);
+      const archivePath = `${item.archivePrefix}/${f}`.replace(/\\/g, '/');
+      archiveEntries.push({ archivePath, content });
+    }
+  }
+
+  const tarGzBuffer = createDeterministicTarGz(archiveEntries);
+  const tarGzName = 'empirical-benchmark-envelopes.tar.gz';
+  const tarGzDest = path.join(targetDir, tarGzName);
+  fs.writeFileSync(tarGzDest, tarGzBuffer);
+
+  const tarGzHash = crypto.createHash('sha256').update(tarGzBuffer).digest('hex');
+  stagedAssets.push({
+    name: tarGzName,
+    sizeBytes: tarGzBuffer.length,
+    sha256: tarGzHash
+  });
+
+  // Sort staged assets alphabetically for deterministic SHA256SUMS.txt
+  stagedAssets.sort((a, b) => a.name.localeCompare(b.name));
+
+  // 3. Write SHA256SUMS.txt (POSIX LF, standard 2-space separator)
+  const shaSumsLines = stagedAssets.map(asset => `${asset.sha256}  ${asset.name}`);
+  const shaSumsContent = shaSumsLines.join('\n') + '\n';
+  const shaSumsPath = path.join(targetDir, 'SHA256SUMS.txt');
+  fs.writeFileSync(shaSumsPath, shaSumsContent, 'utf8');
+
+  return {
+    targetDir,
+    stagedAssets,
+    shaSumsContent
+  };
+}
+
+// CLI Execution Entrypoint
+export function runCli(args = process.argv.slice(2)) {
+  let outDir = 'release-evidence';
+  let checkOnly = false;
+  let repoRoot = REPO_ROOT;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--check') {
+      checkOnly = true;
+    } else if (arg === '--out-dir') {
+      if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+        console.error('Error: --out-dir requires a directory path argument.');
+        process.exit(1);
+      }
+      outDir = args[++i];
+    } else if (arg.startsWith('--out-dir=')) {
+      outDir = arg.slice('--out-dir='.length);
+      if (!outDir) {
+        console.error('Error: --out-dir requires a directory path argument.');
+        process.exit(1);
+      }
+    } else if (arg === '--repo-root') {
+      if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+        console.error('Error: --repo-root requires a directory path argument.');
+        process.exit(1);
+      }
+      repoRoot = path.resolve(args[++i]);
+    } else if (arg.startsWith('--repo-root=')) {
+      repoRoot = path.resolve(arg.slice('--repo-root='.length));
+    } else if (arg === '-h' || arg === '--help') {
+      console.log('Usage: node scripts/bundle-release-evidence.mjs [options]');
+      console.log('');
+      console.log('Options:');
+      console.log('  --out-dir <dir>    Staging directory (default: release-evidence)');
+      console.log('  --repo-root <dir>  Repository root directory (default: auto-detected)');
+      console.log('  --check            Validate mandatory evidence completeness without staging');
+      console.log('  -h, --help         Show this help message');
+      process.exit(0);
+    } else {
+      console.error(`Error: Unrecognized option '${arg}'. Run with --help for usage.`);
+      process.exit(1);
+    }
+  }
+
+  if (checkOnly) {
+    console.log('Checking mandatory release evidence completeness...');
+    const result = checkEvidenceCompleteness(repoRoot);
+    if (!result.valid) {
+      console.error('Release evidence check FAILED:');
+      for (const err of result.errors) {
+        console.error(`  ✖ ${err}`);
+      }
+      process.exit(1);
+    }
+    console.log(`Release evidence check PASSED (${result.checkedFiles.length} files verified):`);
+    for (const f of result.checkedFiles) {
+      console.log(`  ✔ ${f}`);
+    }
+    process.exit(0);
+  }
+
+  console.log(`Bundling release evidence into '${outDir}'...`);
+  try {
+    const result = bundleReleaseEvidence(outDir, repoRoot);
+    console.log(`Successfully staged ${result.stagedAssets.length} release assets to ${result.targetDir}:`);
+    for (const asset of result.stagedAssets) {
+      console.log(`  ✔ ${asset.name} (${asset.sizeBytes} bytes) - sha256: ${asset.sha256}`);
+    }
+    console.log('  ✔ SHA256SUMS.txt generated.');
+  } catch (err) {
+    console.error(`Failed to bundle release evidence: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+// Auto-run when invoked directly as CLI
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+  runCli();
+}

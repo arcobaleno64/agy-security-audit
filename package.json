@@ -21,6 +21,7 @@
     "test:stability-recorded": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/recorded-runs",
     "test:stability-live": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/live-runs",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs",
+    "bundle:evidence": "node scripts/bundle-release-evidence.mjs",
     "bump-version": "node scripts/bump-version.mjs",
     "check-version": "node scripts/bump-version.mjs --check",
     "regen-integrity-manifest": "node scripts/regen-integrity-manifest.mjs",
