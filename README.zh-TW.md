@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.2.1
+# agy-security-audit (plugin ID: `security-audit`) v1.2.2
 
 以證據為本、多階段的安全保證與弱點驗證外掛，專為 **Google Antigravity (AGY)** 打造，對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究等前沿代理安全框架的防禦性架構概念。
 

@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.2.1
+# agy-security-audit (plugin ID: `security-audit`) v1.2.2
 
 Evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Google Antigravity (AGY)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
 
