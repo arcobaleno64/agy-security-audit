@@ -361,7 +361,9 @@ export function runStabilityEval(repoRoot = process.cwd(), options = {}) {
       };
     }
 
-    const files = fs.readdirSync(runsDirPath).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(runsDirPath)
+      .filter(f => f.endsWith('.json') && !f.startsWith('.'))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
     if (files.length < 2) {
       console.log('================================================================');
       console.log('Empirical Stability: NOT MEASURED');
@@ -469,7 +471,8 @@ if (isDirectExecution) {
 
   const res = runStabilityEval(process.cwd(), { runsDir, recorded });
   const defaultThreshold = res.evaluationMode === 'RECORDED_EMPIRICAL' ? 0.70 : 0.80;
-  const minThreshold = threshIdx !== -1 ? parseFloat(args[threshIdx + 1]) : defaultThreshold;
+  const parsedThreshold = threshIdx !== -1 && threshIdx + 1 < args.length ? parseFloat(args[threshIdx + 1]) : NaN;
+  const minThreshold = !isNaN(parsedThreshold) ? parsedThreshold : defaultThreshold;
 
   if (res.status === 'NOT_MEASURED') {
     // Graceful exit for unmeasured empirical run

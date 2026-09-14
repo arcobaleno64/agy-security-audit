@@ -19,6 +19,7 @@
     "test:stability": "node skills/security-audit/scripts/run-stability-eval.mjs",
     "test:stability-harness": "node skills/security-audit/scripts/run-stability-eval.mjs",
     "test:stability-recorded": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/recorded-runs",
+    "test:stability-live": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/live-runs",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs",
     "bump-version": "node scripts/bump-version.mjs",
     "check-version": "node scripts/bump-version.mjs --check",

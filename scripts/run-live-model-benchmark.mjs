@@ -68,12 +68,20 @@ export function parseModelJsonOutput(rawOutput) {
 
   const text = rawOutput.trim();
 
+  function extractArray(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Array.isArray(obj)) return obj;
+    if (Array.isArray(obj.candidates)) return obj.candidates;
+    if (Array.isArray(obj.findings)) return obj.findings;
+    if (Array.isArray(obj.results)) return obj.results;
+    return null;
+  }
+
   // 1. Direct JSON parse
   try {
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed && Array.isArray(parsed.candidates)) return parsed.candidates;
-    if (parsed && Array.isArray(parsed.findings)) return parsed.findings;
+    const arr = extractArray(parsed);
+    if (arr) return arr;
   } catch {}
 
   // 2. Extract JSON from Markdown code blocks (```json ... ``` or ``` ...)
@@ -82,19 +90,31 @@ export function parseModelJsonOutput(rawOutput) {
   while ((match = codeBlockRegex.exec(text)) !== null) {
     try {
       const candidateJson = JSON.parse(match[1].trim());
-      if (Array.isArray(candidateJson)) return candidateJson;
-      if (candidateJson && Array.isArray(candidateJson.candidates)) return candidateJson.candidates;
+      const arr = extractArray(candidateJson);
+      if (arr) return arr;
     } catch {}
   }
 
-  // 3. Fallback: bracket match extraction [ { ... } ]
+  // 3. Fallback: bracket match extraction [ { ... } ] or { ... }
   const firstBracket = text.indexOf('[');
   const lastBracket = text.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket > firstBracket) {
     try {
       const sliced = text.slice(firstBracket, lastBracket + 1);
       const parsed = JSON.parse(sliced);
-      if (Array.isArray(parsed)) return parsed;
+      const arr = extractArray(parsed);
+      if (arr) return arr;
+    } catch {}
+  }
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      const sliced = text.slice(firstBrace, lastBrace + 1);
+      const parsed = JSON.parse(sliced);
+      const arr = extractArray(parsed);
+      if (arr) return arr;
     } catch {}
   }
 
@@ -209,8 +229,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       '--mode', 'plan',
       '--disable-slash-commands'
     ];
-    if (options.modelId) {
-      agyArgs.push('--model', options.modelId);
+    if (modelId) {
+      agyArgs.push('--model', modelId);
     }
     agyArgs.push('--print', prompt);
 
@@ -532,7 +552,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   const passes = options.passes ? parseInt(options.passes, 10) : 1;
   const delayMs = options.delayMs !== undefined ? options.delayMs : (options.mock ? 0 : 1000);
-  const outDir = options.outDir || (passes > 1 ? path.resolve(repoRoot, 'evals/live-runs') : null);
+  const outDir = options.outDir !== undefined
+    ? (options.outDir ? path.resolve(repoRoot, options.outDir) : null)
+    : (passes > 1 && !options.mock ? path.resolve(repoRoot, 'evals/live-runs') : null);
 
   const modelId = options.modelId || process.env.AGY_MODEL || 'gemini-3.8-flash-high';
   const modelProvider = options.modelProvider || process.env.AGY_MODEL_PROVIDER || 'google';
@@ -663,6 +685,20 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     console.log('================================================================\n');
   } else {
     discoveryEval = evaluateDiscovery(envelopes[0].findings.candidates, groundTruth, options);
+    console.log('\n================================================================');
+    console.log('Empirical Discovery Evaluation (Single Pass):');
+    console.log(`  Run ID:                          ${envelopes[0].runId}`);
+    console.log(`  Evidence Origin:                 ${envelopes[0].evidenceOrigin}`);
+    console.log(`  Execution Kind:                  ${envelopes[0].executionKind}`);
+    console.log(`  Total Ground Truth:              ${discoveryEval.totalGroundTruth} (${discoveryEval.vulnerableCount} vuln, ${discoveryEval.safeCount} safe)`);
+    console.log(`  Candidates Evaluated:            ${discoveryEval.totalCandidates}`);
+    console.log(`  Candidate True Pos (TP):         ${discoveryEval.candidateTP}`);
+    console.log(`  Candidate False Pos (FP):        ${discoveryEval.candidateFP}`);
+    console.log(`  Candidate False Neg (FN):        ${discoveryEval.candidateFN}`);
+    console.log(`  Discovery Precision:             ${(discoveryEval.precision * 100).toFixed(1)}%`);
+    console.log(`  Discovery Recall:                ${(discoveryEval.recall * 100).toFixed(1)}%`);
+    console.log(`  Discovery F1 Score:              ${discoveryEval.f1.toFixed(3)}`);
+    console.log('================================================================\n');
   }
 
   // Formal Report Generation Hook
@@ -681,7 +717,23 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
       });
     } else {
       // Single pass report
-      reportMarkdown = `# Single-Pass Discovery Benchmark Run\n\nRun ID: \`${envelopes[0]?.runId}\`\nTotal Candidates: ${envelopes[0]?.findings?.candidates?.length || 0}\n`;
+      reportMarkdown = `# Single-Pass Discovery Benchmark Run
+
+**Run ID**: \`${envelopes[0]?.runId}\`  
+**Evidence Origin**: \`${envelopes[0]?.evidenceOrigin}\`  
+**Execution Kind**: \`${envelopes[0]?.executionKind}\`  
+**Model ID**: \`${envelopes[0]?.environment?.modelId || 'unknown'}\`  
+**Total Candidates**: ${envelopes[0]?.findings?.candidates?.length || 0}  
+
+### Discovery Evaluation Metrics
+- **Candidates Evaluated**: ${discoveryEval?.totalCandidates ?? 0}
+- **True Positives (TP)**: ${discoveryEval?.candidateTP ?? 0}
+- **False Positives (FP)**: ${discoveryEval?.candidateFP ?? 0}
+- **False Negatives (FN)**: ${discoveryEval?.candidateFN ?? 0}
+- **Discovery Precision**: ${discoveryEval ? (discoveryEval.precision * 100).toFixed(1) : '0.0'}%
+- **Discovery Recall**: ${discoveryEval ? (discoveryEval.recall * 100).toFixed(1) : '0.0'}%
+- **Discovery F1 Score**: ${discoveryEval ? discoveryEval.f1.toFixed(3) : '0.000'}
+`;
     }
 
     fs.writeFileSync(reportTarget, reportMarkdown, 'utf8');
@@ -745,8 +797,13 @@ Options:
   const delayMs = delayArg ? parseInt(delayArg, 10) : undefined;
   const isMock = args.includes('--mock') || args.includes('--dry-run');
 
-  const defaultOutDir = passes > 1 ? 'evals/live-runs' : null;
-  const effectiveOutDir = outDirArg || (outFile ? null : defaultOutDir);
+  const defaultOutDir = (passes > 1 && !isMock && !outFile) ? 'evals/live-runs' : null;
+  const effectiveOutDir = outDirArg !== null ? outDirArg : defaultOutDir;
+
+  if (outFile && passes > 1) {
+    console.error('❌ Error: --output is only supported for single-pass runs (--passes 1). Use --out-dir to specify an output directory for multi-pass runs.');
+    process.exit(1);
+  }
 
   try {
     const result = runLiveModelBenchmark(DEFAULT_REPO_ROOT, {
