@@ -34,7 +34,11 @@
     "benchmark:live": "node scripts/run-live-model-benchmark.mjs",
     "benchmark:live:holdout": "node scripts/run-live-model-benchmark.mjs --suite holdout",
     "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
-    "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs"
+    "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs",
+    "benchmark:live:safe:smoke": "node scripts/run-live-model-benchmark.mjs --safe-only --passes 3 --out-dir evals/live-runs/safe-smoke",
+    "benchmark:live:safe:n10": "node scripts/run-live-model-benchmark.mjs --safe-only --passes 10 --out-dir evals/live-runs/safe-n10",
+    "test:safe-control:mock": "node scripts/run-live-model-benchmark.mjs --safe-only --mock --passes 3",
+    "test:harness": "node scripts/run-live-model-benchmark.mjs --test"
   },
   "keywords": [
     "antigravity",

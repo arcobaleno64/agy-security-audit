@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-pass-3",
+  "recordedAt": "2026-09-16T17:10:36.579Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "target": {
+    "repositoryName": "evals/semantic-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "corpus": "semantic-benchmark"
+  },
+  "environment": {
+    "agyVersion": "1.2.4",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "toolVersion": "1.4.0-dev",
+    "toolRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
+    "toolDirty": false
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-285-6",
+        "ruleId": "CWE-285",
+        "title": "Improper authorization in verifyAdmin grants unverified callers admin access to maintenance endpoint",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/01-authz-bypass.js",
+          "startLine": 6,
+          "endLine": 14
+        },
+        "symbol": "verifyAdmin",
+        "lineageId": "05cfb8bc749d695bab9146db61529b07"
+      }
+    ],
+    "verifiedFindings": null,
+    "unresolvedCandidates": null,
+    "suppressedCandidates": null
+  },
+  "summary": {
+    "candidateCount": 1,
+    "verifiedCount": null,
+    "deferredCount": null,
+    "suppressedCount": null,
+    "executionDurationMs": 138459
+  },
+  "metadata": {
+    "passIndex": 3,
+    "totalPasses": 3,
+    "suite": "semantic",
+    "fixtureSplits": {
+      "developmentSet": {
+        "ids": [
+          "SEM-03",
+          "SEM-09"
+        ],
+        "role": "REGRESSION_BASELINE",
+        "rationale": "SEM-03 (Confused Deputy) and SEM-09 (Prototype Pollution) were calibrated with targeted prompt heuristics; classified as development/regression fixtures."
+      },
+      "holdoutFixtures": {
+        "ids": [
+          "SEM-01",
+          "SEM-02",
+          "SEM-04",
+          "SEM-05",
+          "SEM-06",
+          "SEM-07",
+          "SEM-08",
+          "SEM-10"
+        ],
+        "role": "HOLDOUT_GENERALIZATION",
+        "rationale": "Fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
+      }
+    },
+    "includeSafe": true,
+    "safeOnly": true,
+    "shuffleSeed": null,
+    "labelBlind": true,
+    "fixtureResults": [
+      {
+        "fixtureId": "SEM-01-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 138458,
+        "error": null
+      }
+    ],
+    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization."
+  },
+  "executionTelemetry": {
+    "format": "AGY_STREAM_JSON_V1",
+    "conversationId": "15b9c486-59b0-4e7c-a1b5-3499aeef9a16",
+    "telemetryDigest": "0d96169c47b3f9b9e047bca4124c966387b41de133a834cc140c4ceaa98989eb",
+    "totalEvents": 31,
+    "availableTools": [
+      "ask_custom_permission",
+      "ask_permission",
+      "ask_question",
+      "browser_click_element",
+      "browser_drag_pixel_to_pixel",
+      "browser_get_dom",
+      "browser_get_network_request",
+      "browser_input",
+      "browser_list_network_requests",
+      "browser_mouse_down",
+      "browser_mouse_up",
+      "browser_move_mouse",
+      "browser_press_key",
+      "browser_refresh_page",
+      "browser_resize_window",
+      "browser_scroll",
+      "browser_scroll_dom",
+      "browser_select_option",
+      "browser_subagent",
+      "call_mcp_tool",
+      "capture_browser_console_logs",
+      "capture_browser_screenshot",
+      "click_browser_pixel",
+      "command_status",
+      "define_subagent",
+      "delete_knowledge",
+      "execute_browser_javascript",
+      "find_by_name",
+      "finish",
+      "generate_image",
+      "grep_search",
+      "invoke_subagent",
+      "list_browser_pages",
+      "list_dir",
+      "list_permissions",
+      "list_resources",
+      "manage_inbox",
+      "manage_subagents",
+      "manage_task",
+      "multi_replace_file_content",
+      "notebook_edit",
+      "notebook_execution",
+      "open_browser_url",
+      "read_browser_page",
+      "read_resource",
+      "read_url_content",
+      "replace_file_content",
+      "run_command",
+      "schedule",
+      "search_web",
+      "sed_file",
+      "send_command_input",
+      "send_message",
+      "view_file",
+      "wait",
+      "wait_5_seconds",
+      "write_to_file"
+    ],
+    "toolsUsed": [
+      "view_file"
+    ],
+    "subagentsInvoked": [],
+    "permissionMode": "always-proceed",
+    "sandboxEnabled": false,
+    "tokenUsage": {
+      "inputTokens": 23689,
+      "outputTokens": 21752,
+      "thinkingTokens": 21520,
+      "cacheReadTokens": 20366,
+      "totalTokens": 45441
+    },
+    "durationSeconds": 138.459
+  }
+}
