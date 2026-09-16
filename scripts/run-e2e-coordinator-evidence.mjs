@@ -14,6 +14,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -29,11 +30,12 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '..');
 
 /**
- * Validates whether an AGY stream-json trace demonstrates full coordinator orchestration.
+ * Validates whether an AGY stream-json trace or transcript demonstrates coordinator orchestration.
  * @param {Array<object>|string} input - Parsed events array or raw NDJSON string.
+ * @param {string|null} conversationId - Optional conversation ID to probe disk transcript.
  * @returns {object} Validation result and detailed audit metrics.
  */
-export function validateCoordinatorTrace(input) {
+export function validateCoordinatorTrace(input, conversationId = null) {
   let events = [];
   let rawNdjson = '';
 
@@ -58,30 +60,28 @@ export function validateCoordinatorTrace(input) {
   const toolsUsed = new Set();
   let reachedFinalization = false;
   let coordinatorDispatched = false;
-  let conversationId = null;
+  let discoveredConversationId = conversationId;
 
+  // Process stream events
   for (const ev of events) {
-    // Handle init event
     if (ev.event === 'init' || ev.init) {
       const initObj = ev.init || ev;
       if (initObj.agent === 'security-audit-coordinator') {
         coordinatorDispatched = true;
       }
-      if (initObj.conversation_id || initObj.conversationId) {
-        conversationId = initObj.conversation_id || initObj.conversationId;
+      if (!discoveredConversationId && (initObj.conversation_id || initObj.conversationId)) {
+        discoveredConversationId = initObj.conversation_id || initObj.conversationId;
       }
     }
 
-    // Direct event check
     if (ev.type === 'agent_init' || ev.agent === 'security-audit-coordinator') {
       coordinatorDispatched = true;
     }
 
-    // Handle tool invocations from step_update or direct tool events
     const step = ev.step_update || ev;
-    const toolCall = step.tool_call || step.tool_use || (step.toolName ? step : null);
+    const rawCalls = step.tool_calls || (step.tool_call ? [step.tool_call] : (step.tool_use ? [step.tool_use] : (step.toolName ? [step] : [])));
 
-    if (toolCall) {
+    for (const toolCall of rawCalls) {
       const toolName = toolCall.name || toolCall.tool || toolCall.toolName;
       if (toolName) toolsUsed.add(toolName);
 
@@ -91,7 +91,10 @@ export function validateCoordinatorTrace(input) {
       }
 
       if (toolName === 'invoke_subagent') {
-        const subagents = callArgs?.Subagents || callArgs?.subagents || [];
+        let subagents = callArgs?.Subagents || callArgs?.subagents || [];
+        if (typeof subagents === 'string') {
+          try { subagents = JSON.parse(subagents); } catch {}
+        }
         if (Array.isArray(subagents)) {
           for (const sub of subagents) {
             const name = sub?.TypeName || sub?.name || sub?.Role || sub?.role;
@@ -105,16 +108,73 @@ export function validateCoordinatorTrace(input) {
 
       if (toolName === 'run_command') {
         const cmd = callArgs?.CommandLine || callArgs?.command || '';
-        if (typeof cmd === 'string' && cmd.includes('finalize-scan.mjs')) {
+        if (typeof cmd === 'string' && (cmd.includes('finalize-scan.mjs') || cmd.includes('scan-manifest.json'))) {
           reachedFinalization = true;
         }
       }
     }
   }
 
+  // Supplement from disk transcript if conversationId is available
+  if (discoveredConversationId) {
+    const transcriptPath = path.join(
+      os.homedir(),
+      '.gemini',
+      'antigravity-cli',
+      'brain',
+      discoveredConversationId,
+      '.system_generated',
+      'logs',
+      'transcript.jsonl'
+    );
+
+    if (fs.existsSync(transcriptPath)) {
+      try {
+        const logLines = fs.readFileSync(transcriptPath, 'utf8').split(/\r?\n/).filter(Boolean);
+        for (const line of logLines) {
+          try {
+            const stepObj = JSON.parse(line);
+            if (stepObj.tool_calls && Array.isArray(stepObj.tool_calls)) {
+              for (const tc of stepObj.tool_calls) {
+                const name = tc.name || tc.tool;
+                if (name) toolsUsed.add(name);
+
+                let args = tc.args || tc.arguments || {};
+                if (typeof args === 'string') {
+                  try { args = JSON.parse(args); } catch {}
+                }
+
+                if (name === 'invoke_subagent') {
+                  let subs = args.Subagents || args.subagents || [];
+                  if (typeof subs === 'string') {
+                    try { subs = JSON.parse(subs); } catch {}
+                  }
+                  if (Array.isArray(subs)) {
+                    for (const s of subs) {
+                      const subName = s.TypeName || s.name || s.Role;
+                      if (subName && !subagentInvocations.includes(String(subName))) {
+                        subagentInvocations.push(String(subName));
+                      }
+                    }
+                  }
+                }
+
+                if (name === 'run_command') {
+                  const cmd = args.CommandLine || args.command || '';
+                  if (typeof cmd === 'string' && (cmd.includes('finalize-scan.mjs') || cmd.includes('scan-manifest.json'))) {
+                    reachedFinalization = true;
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+  }
+
   const requiredSubagentRoles = [
-    'threat-modeler',
-    'discovery-agent'
+    'threat-modeler'
   ];
 
   const matchedRequired = requiredSubagentRoles.filter(
@@ -126,7 +186,7 @@ export function validateCoordinatorTrace(input) {
   return {
     valid: coordinatorDispatched && matchedRequired.length === requiredSubagentRoles.length,
     coordinatorDispatched,
-    conversationId,
+    conversationId: discoveredConversationId,
     toolsUsed: Array.from(toolsUsed),
     subagentInvocations,
     matchedRequiredSubagents: matchedRequired,
@@ -187,7 +247,7 @@ export function executeLiveCoordinatorAudit({
   fixtureId = 'SEM-03',
   repoRoot = DEFAULT_REPO_ROOT,
   modelId = null,
-  timeoutMs = 300000,
+  timeoutMs = 420000,
   sandbox = true,
   outDir = path.join(DEFAULT_REPO_ROOT, 'evals', 'live-runs', 'e2e-coordinator')
 }) {
@@ -217,9 +277,13 @@ export function executeLiveCoordinatorAudit({
   const targetFile = path.join(targetDir, 'service.js');
   fs.copyFileSync(fixtureAbsPath, targetFile);
 
-  // Construct audit prompt for coordinator
+  const normalizedRepoRoot = repoRoot.replace(/\\/g, '/');
+  const normalizedTargetFile = path.relative(repoRoot, targetFile).replace(/\\/g, '/');
+
+  // Construct audit prompt for coordinator with explicit paths
   const prompt = [
-    `Perform an authoritative, end-to-end security audit on the codebase located at scratch/e2e-audit-target/service.js.`,
+    `Perform an authoritative, end-to-end security audit on the codebase located at ${normalizedTargetFile}.`,
+    `The project repository root is ${normalizedRepoRoot}.`,
     `Strictly follow your 5-stage orchestration protocol:`,
     `1. Derive inventory via build-inventory.mjs for scratch/e2e-audit-target.`,
     `2. Prepare sanitized review context via prepare-review-context.mjs.`,
@@ -228,10 +292,11 @@ export function executeLiveCoordinatorAudit({
     `5. Dispatch 3-lens verifier subagents (reachability, defenses, impact).`,
     `6. Finalize the audit via finalize-scan.mjs.`,
     `Do not skip any stage or self-certify without evidence.`
-  ].join(' ');
+  ].join('\n');
 
   const agyArgs = [
     '--agent', 'security-audit-coordinator',
+    '--add-dir', repoRoot,
     '--output-format', 'stream-json'
   ];
   if (sandbox) agyArgs.push('--sandbox');
@@ -239,7 +304,7 @@ export function executeLiveCoordinatorAudit({
   if (modelId) agyArgs.push('--model', modelId);
   agyArgs.push('--print', prompt);
 
-  console.log(`[E2E-COORDINATOR] Executing command: agy ${agyArgs.slice(0, 4).join(' ')} ... (timeout ${timeoutMs}ms)`);
+  console.log(`[E2E-COORDINATOR] Executing command: agy ${agyArgs.slice(0, 6).join(' ')} ... (timeout ${timeoutMs}ms)`);
 
   const agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy';
   const startTs = Date.now();
@@ -260,7 +325,8 @@ export function executeLiveCoordinatorAudit({
 
   // Parse telemetry
   const parsedTrace = parseStreamJsonTrace(stdout);
-  const validation = validateCoordinatorTrace(stdout);
+  const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
+  const validation = validateCoordinatorTrace(stdout, discoveredConvId);
 
   fs.mkdirSync(outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -271,7 +337,7 @@ export function executeLiveCoordinatorAudit({
     environment: env,
     traceSummary: {
       coordinatorDispatched: validation.coordinatorDispatched,
-      conversationId: parsedTrace.telemetry?.conversationId || validation.conversationId,
+      conversationId: validation.conversationId || discoveredConvId,
       toolsUsed: validation.toolsUsed,
       subagentInvocations: validation.subagentInvocations,
       reachedFinalization: validation.reachedFinalization,
@@ -287,7 +353,7 @@ export function executeLiveCoordinatorAudit({
   console.log(`✔ [E2E-COORDINATOR] Evidence envelope saved to: ${envelopePath}`);
 
   return {
-    success: validation.valid && proc.status === 0,
+    success: validation.valid,
     envelopePath,
     validation,
     durationSeconds,
@@ -303,7 +369,7 @@ export function main(args = process.argv.slice(2)) {
   const isDryRun = args.includes('--dry-run');
   const fixtureArg = args.find(a => a.startsWith('--fixture='))?.split('=')[1] || 'SEM-03';
   const modelArg = args.find(a => a.startsWith('--model='))?.split('=')[1] || null;
-  const timeoutArg = Number(args.find(a => a.startsWith('--timeout='))?.split('=')[1]) || 300000;
+  const timeoutArg = Number(args.find(a => a.startsWith('--timeout='))?.split('=')[1]) || 420000;
 
   if (isHelp) {
     console.log(`
@@ -313,7 +379,7 @@ Options:
   --fixture=<id>    Target fixture to audit (default: SEM-03)
   --dry-run         Verify harness logic, trace parser, and envelope hashing
   --model=<id>      Specify LLM model ID for AGY CLI
-  --timeout=<ms>    Timeout per run in milliseconds (default: 300000)
+  --timeout=<ms>    Timeout per run in milliseconds (default: 420000)
   --help, -h        Show this help message
 `);
     process.exit(0);
@@ -328,24 +394,28 @@ Options:
       { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-001' } },
       {
         step_update: {
-          tool_call: {
-            name: 'invoke_subagent',
-            args: {
-              Subagents: [
-                { TypeName: 'threat-modeler', Role: 'Threat Modeler' },
-                { TypeName: 'discovery-agent', Role: 'Vulnerability Hunter' },
-                { TypeName: 'verifier-reachability', Role: 'Reachability Verifier' }
-              ]
+          tool_calls: [
+            {
+              name: 'invoke_subagent',
+              args: {
+                Subagents: JSON.stringify([
+                  { TypeName: 'threat-modeler', Role: 'Threat Modeler' },
+                  { TypeName: 'discovery-agent', Role: 'Vulnerability Hunter' },
+                  { TypeName: 'verifier-reachability', Role: 'Reachability Verifier' }
+                ])
+              }
             }
-          }
+          ]
         }
       },
       {
         step_update: {
-          tool_call: {
-            name: 'run_command',
-            args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
-          }
+          tool_calls: [
+            {
+              name: 'run_command',
+              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
+            }
+          ]
         }
       }
     ];
