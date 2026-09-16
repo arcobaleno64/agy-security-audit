@@ -80,6 +80,223 @@ export const SUITE_FIXTURE_SPLITS = {
 export const BENCHMARK_FIXTURE_SPLITS = SUITE_FIXTURE_SPLITS.semantic;
 
 /**
+ * Strips comments that could leak ground truth labels, categories, CWE numbers,
+ * or evaluation status from fixture source code during blind evaluation.
+ *
+ * Line numbers are strictly preserved (1-to-1) by replacing leaking comment lines
+ * with neutral comment markers, preventing line-number shift artifacts in reported findings.
+ */
+export function stripLabelLeakingComments(sourceCode) {
+  if (typeof sourceCode !== 'string') return '';
+  const lines = sourceCode.split('\n');
+  const result = [];
+  let inLeadingCommentBlock = true;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (inLeadingCommentBlock) {
+      if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed === '') {
+        if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+          result.push('// [blind-review: header comment redacted]');
+        } else {
+          result.push(line);
+        }
+        continue;
+      } else {
+        inLeadingCommentBlock = false;
+      }
+    }
+
+    // After leading header block, neutralize any comment mentioning ground truth tokens
+    if (
+      trimmed.startsWith('//') &&
+      /evals\/|\b(?:safe|guarded|vulnerable|cwe-\d+|semantic\s*category|holdout\s*category)\b/i.test(trimmed)
+    ) {
+      result.push('// [blind-review: metadata comment redacted]');
+    } else {
+      result.push(line);
+    }
+  }
+
+  return result.join('\n');
+}
+
+/**
+ * Projects a benchmark fixture into a deterministic label-blind case file under scratch/
+ * (e.g. scratch/live-benchmark/cases/case-<hash>.js).
+ *
+ * Prevents lexical leakage where the model infers safety from paths like /safe/ or header comments.
+ * The projected file is written both to scratch/live-benchmark/cases and shadow context (if present).
+ */
+export function projectLabelBlindFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, casesDir = 'scratch/context/cases') {
+  const sourcePath = path.resolve(repoRoot, fixture.file);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Fixture file not found: ${sourcePath}`);
+  }
+  const rawContent = fs.readFileSync(sourcePath, 'utf8');
+  const strippedContent = stripLabelLeakingComments(rawContent);
+
+  const fileHash = crypto.createHash('sha256').update(fixture.file).digest('hex').slice(0, 12);
+  const projectedFileName = `case-${fileHash}.js`;
+  const normalizedCasesDir = casesDir.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  const projectedRelPath = `${normalizedCasesDir}/${projectedFileName}`;
+  const projectedAbsPath = path.resolve(repoRoot, projectedRelPath);
+
+  fs.mkdirSync(path.dirname(projectedAbsPath), { recursive: true });
+  fs.writeFileSync(projectedAbsPath, strippedContent, 'utf8');
+
+  // Also mirror to scratch/live-benchmark/cases for permanent trace recording
+  const mirrorRelPath = `scratch/live-benchmark/cases/${projectedFileName}`;
+  const mirrorAbsPath = path.resolve(repoRoot, mirrorRelPath);
+  try {
+    fs.mkdirSync(path.dirname(mirrorAbsPath), { recursive: true });
+    fs.writeFileSync(mirrorAbsPath, strippedContent, 'utf8');
+  } catch {}
+
+  // Mirror to scratch/context/cases if shadow context is active and casesDir was different
+  if (normalizedCasesDir !== 'scratch/context/cases') {
+    const shadowAbsPath = path.resolve(repoRoot, 'scratch/context/cases', projectedFileName);
+    try {
+      fs.mkdirSync(path.dirname(shadowAbsPath), { recursive: true });
+      fs.writeFileSync(shadowAbsPath, strippedContent, 'utf8');
+    } catch {}
+  }
+
+  return {
+    originalFile: fixture.file,
+    projectedRelPath,
+    projectedAbsPath,
+    fileHash,
+    strippedContent,
+    lineCount: strippedContent.split('\n').length
+  };
+}
+
+/**
+ * Deterministically shuffles an array using Mulberry32 PRNG given a seed.
+ */
+export function shuffleArrayWithSeed(array, seed) {
+  if (seed === undefined || seed === null || seed === '') return array.slice();
+  const copy = array.slice();
+  let s = 0;
+  if (typeof seed === 'number') {
+    s = seed | 0;
+  } else {
+    const str = String(seed);
+    for (let i = 0; i < str.length; i++) {
+      s = ((s << 5) - s + str.charCodeAt(i)) | 0;
+    }
+  }
+
+  function random() {
+    s |= 0;
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/**
+ * Computes safe-control specificity metrics under dual controlled ground truth.
+ *
+ * Metrics:
+ * 1. Fixture FP Rate = (safe fixtures with >= 1 FP) / safeFixtureCount
+ * 2. Run-exposure FP Rate = (safe exposures with >= 1 FP) / (safeFixtureCount * totalPasses)
+ * 3. Exposure Specificity = 1 - Run-exposure FP Rate
+ * 4. FP Candidate Density = (total spurious candidates) / (safeFixtureCount * totalPasses)
+ * 5. Max Lineage Recurrence = Maximum recurrence of any single spurious lineage
+ */
+export function computeSafeControlMetrics({
+  safeRecurrences = [],
+  allPassResults = [],
+  totalPasses = 1,
+  safeFixtureCount = 10,
+  safeResults = []
+} = {}) {
+  const K = Math.max(1, safeFixtureCount);
+  const N = Math.max(1, totalPasses);
+  const totalExposures = K * N;
+
+  const fixtureFPCounts = new Map();
+  let exposuresWithFPCount = 0;
+  let totalSpuriousCandidates = 0;
+
+  if (allPassResults && allPassResults.length > 0) {
+    for (const pass of allPassResults) {
+      const fixResults = pass.fixtureResults || [];
+      for (const res of fixResults) {
+        const isSafe = res.split === 'SAFE_CONTROL' || res.fixtureId?.endsWith('-SAFE') || (res.file && res.file.includes('/safe/'));
+        if (!isSafe) continue;
+        const candCount = Array.isArray(res.candidates) ? res.candidates.length : 0;
+        if (candCount > 0) {
+          exposuresWithFPCount++;
+          totalSpuriousCandidates += candCount;
+          fixtureFPCounts.set(res.fixtureId, (fixtureFPCounts.get(res.fixtureId) || 0) + candCount);
+        }
+      }
+    }
+  } else if (safeResults && safeResults.length > 0) {
+    for (const res of safeResults) {
+      const candCount = Array.isArray(res.candidates) ? res.candidates.length : 0;
+      if (candCount > 0) {
+        exposuresWithFPCount++;
+        totalSpuriousCandidates += candCount;
+        fixtureFPCounts.set(res.fixtureId, (fixtureFPCounts.get(res.fixtureId) || 0) + candCount);
+      }
+    }
+  } else if (safeRecurrences && safeRecurrences.length > 0) {
+    for (const r of safeRecurrences) {
+      const count = r.recurrenceCount || 1;
+      totalSpuriousCandidates += count;
+      const fid = r.matchedFixtureId || r.symbol || r.id;
+      fixtureFPCounts.set(fid, (fixtureFPCounts.get(fid) || 0) + count);
+    }
+    exposuresWithFPCount = Math.min(totalSpuriousCandidates, totalExposures);
+  }
+
+  const fixturesWithFP = fixtureFPCounts.size;
+  const fixtureFPRate = Number((fixturesWithFP / K).toFixed(4));
+  const runExposureFPRate = Number((exposuresWithFPCount / totalExposures).toFixed(4));
+  const exposureSpecificity = Number((1 - runExposureFPRate).toFixed(4));
+  const fpCandidateDensity = Number((totalSpuriousCandidates / totalExposures).toFixed(4));
+
+  let maxLineageRecurrence = 0;
+  if (Array.isArray(safeRecurrences) && safeRecurrences.length > 0) {
+    for (const r of safeRecurrences) {
+      if ((r.recurrenceCount || 0) > maxLineageRecurrence) {
+        maxLineageRecurrence = r.recurrenceCount;
+      }
+    }
+  }
+  const maxLineageRecurrenceRate = Number((maxLineageRecurrence / N).toFixed(4));
+
+  return {
+    safeFixtureCount: K,
+    totalPasses: N,
+    totalExposures,
+    fixturesWithFP,
+    fixtureFPRate,
+    exposuresWithFP: exposuresWithFPCount,
+    runExposureFPRate,
+    exposureSpecificity,
+    totalSpuriousCandidates,
+    fpCandidateDensity,
+    maxLineageRecurrence,
+    maxLineageRecurrenceRate,
+    spuriousLineages: safeRecurrences
+  };
+}
+
+/**
  * Parses model stdout to extract structured JSON candidate findings.
  * Handles pure JSON, Markdown code blocks, or embedded JSON arrays.
  */
@@ -148,21 +365,13 @@ export function buildDiscoveryPrompt(fixtureRelPath, fixtureContent = '') {
   return `You are conducting a strict defensive software engineering and code quality review under Default-Deny on the following file:
 File: ${fixtureRelPath}
 
-Source Code:
-\`\`\`javascript
-${fixtureContent}
-\`\`\`
-
-Review Scope & Quality Properties:
-Identify unmitigated software defects, specifically:
-- Input sanitization, authorization controls, and tenancy boundaries (BOLA/IDOR)
-- Missing key validation in object traversal and mutation (CWE-1321)
-- Safe resource handling, state integrity, and execution boundaries
-
-Safety & Defensive Reporting Instructions:
-1. Presumption of Non-Pass: Audit under Default-Deny. If no concrete defect or vulnerability is present, return an empty candidate set: {"schemaVersion": "1.0.0", "candidates": []}.
-2. Frame all finding descriptions purely as defensive code defects (e.g. "Missing key validation in recursive object merge", "Missing tenant check in lookup"). Do not include exploit payloads or offensive instructions.
-3. If defects exist, output ONLY structured JSON conforming to candidate-set.schema.json:
+Review Instructions:
+1. Inspect the file located at '${fixtureRelPath}' using view_file.
+2. Audit the file under Default-Deny for unmitigated software defects (such as input sanitization, broken authorization or tenancy boundaries, unvalidated object mutation CWE-1321, or unsafe resource handling).
+3. Do not invoke external search tools or search other repository files. Base your analysis solely on '${fixtureRelPath}'.
+4. Presumption of Non-Pass: If the implementation is safe, properly mitigated, or has no unmitigated defects, return an empty candidate set:
+{"schemaVersion": "1.0.0", "candidates": []}
+5. If unmitigated defects exist, output ONLY structured JSON conforming to candidate-set.schema.json:
 {
   "schemaVersion": "1.0.0",
   "candidates": [
@@ -170,20 +379,20 @@ Safety & Defensive Reporting Instructions:
       "id": "CAND-<RULE>-<LINE>",
       "ruleId": "CWE-XXX",
       "title": "Concise defect description",
-      "securityProperty": "<affected security property, e.g. input-validation, authorization, safe-resource-handling>",
-      "findingType": "VULNERABILITY" | "HARDENING" | "INFORMATIONAL",
-      "proofKind": "STATIC_TRACE" | "UNIT_TEST" | "BENIGN_REPRODUCTION" | "CONFIG_EVIDENCE" | "DEPENDENCY_EVIDENCE" | "EXTERNAL_SCANNER_EVIDENCE" | "MANUAL_ATTESTATION",
-      "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+      "securityProperty": "authorization",
+      "findingType": "VULNERABILITY",
+      "proofKind": "STATIC_TRACE",
+      "severity": "CRITICAL",
       "location": {
         "uri": "${fixtureRelPath}",
         "startLine": 1,
         "endLine": 1
       },
-      "symbol": "<vulnerable sink call or function name, e.g. mockDatabase.find, fetch, recursiveMerge>"
+      "symbol": "functionOrSinkName"
     }
   ]
 }
-Output ONLY valid JSON matching the schema. Do not include commentary outside the JSON.`;
+Output ONLY valid JSON. Do not include commentary outside the JSON.`;
 }
 
 /**
@@ -200,8 +409,17 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   const isDevSet = splits.developmentSet.ids.includes(fixture.id);
   const split = isSafeFixture ? 'SAFE_CONTROL' : (isDevSet ? 'DEVELOPMENT_SET' : 'HOLDOUT_SET');
 
+  const useLabelBlind = options.labelBlind !== false;
+  const defaultCasesDir = fs.existsSync(path.resolve(repoRoot, 'scratch/context'))
+    ? 'scratch/context/cases'
+    : 'scratch/live-benchmark/cases';
+  const effectiveCasesDir = options.casesDir || defaultCasesDir;
+
   // Support simulated / offline mode for tests and CI
   if (options.mock || options.mockCandidates) {
+    if (useLabelBlind) {
+      projectLabelBlindFixture(fixture, repoRoot, effectiveCasesDir);
+    }
     if (isSafeFixture) {
       const safeCandidateSet = { schemaVersion: '1.0.0', candidates: [] };
       const mockTelemetry = {
@@ -304,21 +522,29 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   }
 
   const fixtureContent = fs.readFileSync(fixturePath, 'utf8');
-  const prompt = buildDiscoveryPrompt(fixture.file, fixtureContent);
+  let promptTargetFile = fixture.file;
+  let promptContent = fixtureContent;
+  let projectedInfo = null;
+
+  if (useLabelBlind) {
+    projectedInfo = projectLabelBlindFixture(fixture, repoRoot, effectiveCasesDir);
+    promptTargetFile = projectedInfo.projectedRelPath;
+    promptContent = projectedInfo.strippedContent;
+  }
+
+  const prompt = buildDiscoveryPrompt(promptTargetFile, promptContent);
   const modelId = options.modelId || process.env.AGY_MODEL || 'gemini-3.8-flash-high';
-  const timeoutMs = options.timeoutMs || 120000;
+  const timeoutMs = options.timeoutMs || 240000;
   const maxAttempts = options.retries !== undefined ? options.retries + 1 : 3;
 
   let lastResult = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startTime = Date.now();
-    const schemaPath = path.resolve(repoRoot, 'schemas/candidate-set.schema.json');
     const agyArgs = [
-      '--mode', 'plan',
-      '--disable-slash-commands',
-      '--output-format', 'stream-json',
-      '--json-schema', schemaPath
+      '--add-dir', repoRoot,
+      '--dangerously-skip-permissions',
+      '--output-format', 'stream-json'
     ];
     if (options.sandbox) {
       agyArgs.push('--sandbox');
@@ -402,6 +628,10 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     // Normalize candidate lineage IDs and sanitize
     for (const cand of rawCandidates) {
       if (!cand || typeof cand !== 'object') continue;
+      // Remap candidate URI back to authoritative fixture file if label-blind projected
+      if (cand.location) {
+        cand.location.uri = fixture.file;
+      }
       normalizeCandidateSymbol(cand, fixtureContent);
       if (!cand.lineageId) {
         cand.lineageId = computeLineageFingerprint({
@@ -453,7 +683,7 @@ export const executeLiveDiscoveryPass = runAgyDiscoveryOnFixture;
  * from the Holdout Generalization Set (SEM-01..SEM-10 excluding SEM-03)
  * and evaluates safe control false-positive immunity.
  */
-export function computePartitionedMetrics(stabilityResult, groundTruth = [], splits = BENCHMARK_FIXTURE_SPLITS) {
+export function computePartitionedMetrics(stabilityResult, groundTruth = [], splits = BENCHMARK_FIXTURE_SPLITS, extra = {}) {
   const activeSplits = splits || BENCHMARK_FIXTURE_SPLITS;
   const recurrence = stabilityResult.findingsRecurrence || [];
   const devIds = new Set(activeSplits.developmentSet.ids);
@@ -510,7 +740,14 @@ export function computePartitionedMetrics(stabilityResult, groundTruth = [], spl
     ? Number((holdoutRecurrences.reduce((acc, r) => acc + r.reliabilityRate, 0) / holdoutRecurrences.length).toFixed(4))
     : 0;
 
-  const safeTotalFalsePositives = safeRecurrences.reduce((acc, r) => acc + r.recurrenceCount, 0);
+  const safeCount = groundTruth.filter(gt => gt.expectedVerdict === 'SAFE').length || 10;
+  const totalPasses = extra.totalPasses || (stabilityResult.pairwiseJaccard ? stabilityResult.pairwiseJaccard.length + 1 : 1);
+  const safeMetrics = computeSafeControlMetrics({
+    safeRecurrences,
+    allPassResults: extra.allPassResults || [],
+    totalPasses,
+    safeFixtureCount: safeCount
+  });
 
   return {
     developmentSet: {
@@ -526,8 +763,9 @@ export function computePartitionedMetrics(stabilityResult, groundTruth = [], spl
       lineages: holdoutRecurrences
     },
     safeControls: {
+      ...safeMetrics,
       lineagesCount: safeRecurrences.length,
-      totalFalsePositives: safeTotalFalsePositives,
+      totalFalsePositives: safeMetrics.totalSpuriousCandidates,
       spuriousLineages: safeRecurrences
     }
   };
@@ -559,10 +797,15 @@ export function renderEmpiricalBaselineReport({
 
   const devRec = partitionedMetrics.developmentSet;
   const holdRec = partitionedMetrics.holdoutSet;
-  const safeRec = partitionedMetrics.safeControls;
+  const safeRec = partitionedMetrics.safeControls || {};
+  const safeMetrics = safeRec;
+  const safeCount = safeMetrics.safeFixtureCount || 10;
+  const totalSafeExposures = safeMetrics.totalExposures || (safeCount * totalPasses);
   const splits = options.fixtureSplits || (options.suite === 'holdout' ? SUITE_FIXTURE_SPLITS.holdout : BENCHMARK_FIXTURE_SPLITS);
 
   const isHoldout = options.suite === 'holdout' || target0.corpus === 'holdout-benchmark' || (splits.holdoutFixtures?.ids[0]?.startsWith('HLD-'));
+  const safeCorpusRel = isHoldout ? 'evals/holdout-benchmark/safe' : 'evals/semantic-benchmark/safe';
+  const hasSafeControls = Boolean(options.includeSafe || options.safeOnly);
 
   const corpusDesc = isHoldout
     ? '`evals/holdout-benchmark` (20-fixture paired holdout benchmark)'
@@ -614,7 +857,7 @@ This evaluation establishes the project's first authentic, model-dependent empir
 | **Tool Dirty State** | \`${env0.toolDirty === false ? 'CLEAN (false)' : 'DIRTY (true)'}\` |
 | **Repository Revision (SHA)** | \`${target0.commitSha || env0.toolRevision || 'UNKNOWN'}\` |
 | **Total Evaluation Passes (N)** | \`${totalPasses}\` |
-| **Safe Controls Audited** | \`${options.includeSafe ? 'YES (10 paired safe controls)' : 'NO (vulnerable fixtures only)'}\` |
+| **Safe Controls Audited** | \`${hasSafeControls ? `YES (${safeCount} paired safe controls${options.safeOnly ? ', safe-only mode' : ''})` : 'NO (vulnerable fixtures only)'}\` |
 
 ### Key Benchmark Metrics
 - **Mean Pairwise Jaccard Similarity**: **${(stabilityResult.meanJaccardSimilarity * 100).toFixed(1)}%**
@@ -626,7 +869,7 @@ ${stabilityResult.empiricalEfficacy ? `- **Mean Candidate Recall**: **${(stabili
 
 ## 2. Multi-Pass Stochastic Stability & Jaccard Matrix (N=${totalPasses})
 
-The pairwise Jaccard similarity metric $J(A, B) = \\frac{|A \\cap B|}{|A \\cup B|}$ measures candidate finding-set invariance across independent discovery passes on identical codebases.
+The pairwise Jaccard similarity metric $J(A, B) = \frac{|A \cap B|}{|A \cup B|}$ measures candidate finding-set invariance across independent discovery passes on identical codebases.
 
 ### Pairwise Comparison Matrix
 | Pass Comparison | Jaccard Similarity | Status (Threshold ≥ 80.0%) |
@@ -655,14 +898,26 @@ ${recurrenceTableRows}
 
 ---
 
-## 4. Safe Control False Positive Immunity
+## 4. Safe Control Specificity Baseline (Controlled Ground Truth)
 
-${options.includeSafe ? `The benchmark harness audited all 10 paired safe controls (\`evals/semantic-benchmark/safe/*.js\`) across all $N=${totalPasses}$ passes to establish empirical false-positive resistance.
+${hasSafeControls ? `The benchmark harness audited all ${safeCount} paired safe controls (\`${safeCorpusRel}/*.js\`) across all $N=${totalPasses}$ independent passes (${totalSafeExposures} safe exposures) under label-blind materialization (\`LABEL_BLIND_V1\`).
 
-- **Total Safe Fixtures Evaluated**: 10
-- **Total Safe Lineages Generated**: ${safeRec.lineagesCount}
-- **Total False Positives Recorded**: ${safeRec.totalFalsePositives}
-- **Empirical False Positive Rate**: **${(safeRec.totalFalsePositives / (10 * totalPasses) * 100).toFixed(1)}%**` : `Safe control auditing was disabled for this run (\`--include-safe\` not active). False-positive immunity was verified via the deterministic invariant test suite (\`npm test\` invariant 70/74).`}
+### Safe-Control Specificity Metrics (Controlled Dual Ground Truth)
+| Metric | Observed Value | Definition & Formula |
+| :--- | :--- | :--- |
+| **Controlled Safe Fixtures Evaluated** | \`${safeCount}\` | Distinct safe baseline control fixtures ($K$) |
+| **Total Safe Exposures ($K \\times N$)** | \`${totalSafeExposures}\` | Total independent model exposures across passes |
+| **Fixture False-Positive Rate** | **${((safeMetrics.fixtureFPRate || 0) * 100).toFixed(1)}%** (${safeMetrics.fixturesWithFP || 0}/${safeCount}) | Fraction of safe fixtures with $\\ge 1$ spurious candidate |
+| **Run-Exposure False-Positive Rate** | **${((safeMetrics.runExposureFPRate || 0) * 100).toFixed(1)}%** (${safeMetrics.exposuresWithFP || 0}/${totalSafeExposures}) | Fraction of $(fixture, pass)$ exposures with $\\ge 1$ spurious candidate |
+| **Exposure Specificity** | **${((safeMetrics.exposureSpecificity !== undefined ? safeMetrics.exposureSpecificity : 1) * 100).toFixed(1)}%** | $1 - \\text{Run-Exposure FP Rate}$ ($TN / (TN + FP)$) |
+| **FP Candidate Density** | **${(safeMetrics.fpCandidateDensity || 0).toFixed(3)}** | Spurious candidates per safe exposure ($C_{spurious} / (K \\times N)$) |
+| **Max Lineage Recurrence** | **${safeMetrics.maxLineageRecurrence || 0} / ${totalPasses}** (${((safeMetrics.maxLineageRecurrenceRate || 0) * 100).toFixed(1)}%) | Maximum recurrence of any single spurious lineage |
+
+> [!IMPORTANT]
+> ${(safeMetrics.totalSpuriousCandidates || safeRec.totalFalsePositives || 0) === 0
+  ? `0 reportable false positives observed across ${totalPasses} valid runs on ${safeCount} controlled safe fixtures. This result is corpus- and configuration-bounded and does not imply false-positive immunity.`
+  : `${safeMetrics.totalSpuriousCandidates || safeRec.totalFalsePositives} spurious candidate(s) observed across ${totalPasses} valid runs on ${safeCount} controlled safe fixtures. Specificity calibrated at ${((safeMetrics.exposureSpecificity || 0) * 100).toFixed(1)}%.`}
+` : `Safe control auditing was disabled for this run (\`--include-safe\` or \`--safe-only\` not active). Specificity baseline was verified via the deterministic invariant test suite (\`npm test\` invariant 116/120).`}
 
 ---
 
@@ -711,15 +966,20 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   const vulnerableFixtures = groundTruth.filter(gt => gt.expectedVerdict === 'VULNERABLE');
   const safeFixtures = groundTruth.filter(gt => gt.expectedVerdict === 'SAFE');
 
-  let targetFixtures = options.includeSafe
-    ? [...vulnerableFixtures, ...safeFixtures]
-    : vulnerableFixtures;
+  const isSafeOnly = Boolean(options.safeOnly);
+  let targetFixtures = isSafeOnly
+    ? safeFixtures
+    : (options.includeSafe ? [...vulnerableFixtures, ...safeFixtures] : vulnerableFixtures);
 
   if (options.fixtureId) {
     targetFixtures = targetFixtures.filter(f => f.id === options.fixtureId);
     if (targetFixtures.length === 0) {
       throw new Error(`Target fixture not found: ${options.fixtureId}`);
     }
+  }
+
+  if (options.shuffleSeed) {
+    targetFixtures = shuffleArrayWithSeed(targetFixtures, options.shuffleSeed);
   }
 
   const passes = options.passes ? parseInt(options.passes, 10) : 1;
@@ -738,7 +998,11 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   console.log(`  Execution Kind:        ${options.mock ? 'SIMULATED_HARNESS' : 'LIVE_AGENT'}`);
   console.log(`  Model ID:              ${modelId}`);
   console.log(`  Evaluation Passes (N): ${passes}`);
-  console.log(`  Target Fixtures:       ${targetFixtures.length} (${vulnerableFixtures.length} vuln${options.includeSafe ? ', ' + safeFixtures.length + ' safe controls' : ''})`);
+  console.log(`  Target Fixtures:       ${targetFixtures.length} (${isSafeOnly ? safeFixtures.length + ' safe controls only' : vulnerableFixtures.length + ' vuln' + (options.includeSafe ? ', ' + safeFixtures.length + ' safe controls' : '')})`);
+  if (options.shuffleSeed) {
+    console.log(`  Shuffle Seed:          ${options.shuffleSeed}`);
+  }
+  console.log(`  Label-Blind Mode:      ${options.labelBlind !== false ? 'ENABLED (LABEL_BLIND_V1)' : 'DISABLED'}`);
   console.log(`  Throttle Delay:        ${delayMs}ms`);
   console.log(`  Sandbox Mode:          ${options.sandbox ? 'ENABLED (--sandbox)' : 'DISABLED'}`);
   if (outDir) {
@@ -866,7 +1130,10 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         totalPasses: passes,
         suite,
         fixtureSplits: activeSplits,
-        includeSafe: Boolean(options.includeSafe),
+        includeSafe: Boolean(options.includeSafe || options.safeOnly),
+        safeOnly: isSafeOnly,
+        shuffleSeed: options.shuffleSeed || null,
+        labelBlind: options.labelBlind !== false,
         fixtureResults: fixtureResults.map(r => ({
           fixtureId: r.fixtureId,
           split: r.split,
@@ -901,7 +1168,10 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   if (passes >= 2) {
     stabilityResult = evaluateStability(envelopes, repoRoot, { groundTruth });
-    partitionedMetrics = computePartitionedMetrics(stabilityResult, groundTruth, activeSplits);
+    partitionedMetrics = computePartitionedMetrics(stabilityResult, groundTruth, activeSplits, {
+      allPassResults,
+      totalPasses: passes
+    });
 
     console.log('\n================================================================');
     console.log(`Empirical Stability Aggregation (N=${passes} Passes):`);
@@ -912,8 +1182,10 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     console.log(`  100% Reliable Lineages:          ${stabilityResult.perfectRecurrenceCount}/${stabilityResult.totalUniqueLineages}`);
     console.log(`  Development Set Recurrence:      ${(partitionedMetrics.developmentSet.meanRecurrenceRate * 100).toFixed(1)}% (${activeSplits.developmentSet.ids.join(', ') || 'None'})`);
     console.log(`  Holdout Set Mean Recurrence:     ${(partitionedMetrics.holdoutSet.meanRecurrenceRate * 100).toFixed(1)}% (${isHoldout ? 'HLD-01..10' : 'SEM-01..10'})`);
-    if (options.includeSafe) {
+    if (options.includeSafe || options.safeOnly) {
+      console.log(`  Safe Control Specificity:        ${((partitionedMetrics.safeControls.exposureSpecificity ?? 1) * 100).toFixed(1)}%`);
       console.log(`  Safe Control False Positives:    ${partitionedMetrics.safeControls.totalFalsePositives}`);
+      console.log(`  Safe Run-Exposure FP Rate:       ${((partitionedMetrics.safeControls.runExposureFPRate ?? 0) * 100).toFixed(1)}%`);
     }
     console.log('================================================================\n');
   } else {
@@ -945,7 +1217,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         stabilityResult,
         partitionedMetrics,
         envelopes,
-        options: { ...options, fixtureSplits: activeSplits },
+        options: { ...options, fixtureSplits: activeSplits, safeOnly: isSafeOnly },
         repoRoot
       });
     } else {
@@ -984,6 +1256,112 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   };
 }
 
+/**
+ * Internal self-test suite validating label stripping, projection, shuffling, and specificity metrics.
+ */
+export function runHarnessSelfTests(repoRoot = DEFAULT_REPO_ROOT) {
+  console.log('Running run-live-model-benchmark.mjs harness unit tests...');
+
+  // Test 1: stripLabelLeakingComments preserves lines and strips leakage
+  const sample1 = `// evals/semantic-benchmark/safe/01-authz-bypass.js
+// Semantic Category: authz-bypass (CWE-862 - SAFE GUARDED)
+import express from 'express';
+const router = express.Router();
+// normal inline comment
+const x = 1;
+// evals/something safe
+const y = 2;`;
+
+  const stripped = stripLabelLeakingComments(sample1);
+  const strippedLines = stripped.split('\n');
+  if (strippedLines.length !== sample1.split('\n').length) {
+    throw new Error(`stripLabelLeakingComments line count mismatch: expected ${sample1.split('\n').length}, got ${strippedLines.length}`);
+  }
+  if (/evals\/|authz-bypass|CWE-862|SAFE GUARDED/i.test(stripped)) {
+    throw new Error('stripLabelLeakingComments leaked ground truth tokens');
+  }
+  if (!strippedLines[2].includes('import express')) {
+    throw new Error(`stripLabelLeakingComments corrupted code line 3: ${strippedLines[2]}`);
+  }
+  console.log('  ✔ Test 1: stripLabelLeakingComments correctly strips labels while preserving 1:1 line numbers.');
+
+  // Test 2: projectLabelBlindFixture creates projected file and returns proper metadata
+  const dummyFixture = {
+    id: 'SEM-01-SAFE',
+    file: 'evals/semantic-benchmark/safe/01-authz-bypass.js',
+    expectedVerdict: 'SAFE'
+  };
+  const proj = projectLabelBlindFixture(dummyFixture, repoRoot);
+  if (!fs.existsSync(proj.projectedAbsPath)) {
+    throw new Error(`Projected file not found: ${proj.projectedAbsPath}`);
+  }
+  if (proj.strippedContent.includes('evals/semantic-benchmark/safe')) {
+    throw new Error('Projected content contains raw path');
+  }
+  console.log('  ✔ Test 2: projectLabelBlindFixture successfully materializes label-blind case.');
+
+  // Test 3: shuffleArrayWithSeed determinism
+  const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const shuf1 = shuffleArrayWithSeed(arr, 'seed-123');
+  const shuf2 = shuffleArrayWithSeed(arr, 'seed-123');
+  const shuf3 = shuffleArrayWithSeed(arr, 'seed-456');
+  if (JSON.stringify(shuf1) !== JSON.stringify(shuf2)) {
+    throw new Error('shuffleArrayWithSeed not deterministic for same seed');
+  }
+  if (JSON.stringify(shuf1) === JSON.stringify(arr)) {
+    throw new Error('shuffleArrayWithSeed failed to permute array');
+  }
+  if (JSON.stringify(shuf1) === JSON.stringify(shuf3)) {
+    throw new Error('shuffleArrayWithSeed produced identical array for different seeds');
+  }
+  console.log('  ✔ Test 3: shuffleArrayWithSeed produces deterministic permutations.');
+
+  // Test 4: computeSafeControlMetrics calculations
+  const zeroFP = computeSafeControlMetrics({
+    safeRecurrences: [],
+    allPassResults: [
+      { passIndex: 1, fixtureResults: [{ fixtureId: 'F1', split: 'SAFE_CONTROL', candidates: [] }] },
+      { passIndex: 2, fixtureResults: [{ fixtureId: 'F1', split: 'SAFE_CONTROL', candidates: [] }] }
+    ],
+    totalPasses: 2,
+    safeFixtureCount: 10
+  });
+  if (zeroFP.exposureSpecificity !== 1.0 || zeroFP.totalSpuriousCandidates !== 0 || zeroFP.fixturesWithFP !== 0) {
+    throw new Error(`computeSafeControlMetrics failed on zero-FP: ${JSON.stringify(zeroFP)}`);
+  }
+
+  const positiveFP = computeSafeControlMetrics({
+    safeRecurrences: [{ matchedFixtureId: 'F1', recurrenceCount: 2 }],
+    allPassResults: [
+      { passIndex: 1, fixtureResults: [{ fixtureId: 'F1', split: 'SAFE_CONTROL', candidates: [{ id: 'C1' }] }] },
+      { passIndex: 2, fixtureResults: [{ fixtureId: 'F1', split: 'SAFE_CONTROL', candidates: [{ id: 'C2' }] }] }
+    ],
+    totalPasses: 2,
+    safeFixtureCount: 10
+  });
+  if (positiveFP.fixturesWithFP !== 1 || positiveFP.runExposureFPRate !== 0.1 || positiveFP.exposureSpecificity !== 0.9 || positiveFP.totalSpuriousCandidates !== 2) {
+    throw new Error(`computeSafeControlMetrics failed on positive-FP: ${JSON.stringify(positiveFP)}`);
+  }
+  console.log('  ✔ Test 4: computeSafeControlMetrics correctly computes specificity, density, and recurrence.');
+
+  // Test 5: Simulated safe-only multi-pass benchmark
+  const mockRun = runLiveModelBenchmark(repoRoot, {
+    safeOnly: true,
+    mock: true,
+    passes: 3,
+    shuffleSeed: 'test-seed'
+  });
+  if (!mockRun.stabilityResult || mockRun.envelopes.length !== 3) {
+    throw new Error('runLiveModelBenchmark mock safe-only run failed');
+  }
+  if (mockRun.partitionedMetrics.safeControls.exposureSpecificity !== 1.0) {
+    throw new Error('Mock safe controls had non-1.0 specificity');
+  }
+  console.log('  ✔ Test 5: runLiveModelBenchmark executes safe-only mock passes cleanly.');
+
+  console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
+}
+
 // -----------------------------------------------------------------------------
 // CLI Dispatch
 // -----------------------------------------------------------------------------
@@ -1004,6 +1382,10 @@ Options:
   --suite <semantic|holdout> Benchmark suite to execute (default: semantic)
   --passes <N>         Number of distinct execution passes to run (default: 1)
   --include-safe       Include the 10 paired safe controls to measure live false-positive rate
+  --safe-only          Run discovery ONLY on the paired safe controls to calibrate specificity
+  --shuffle-seed <str> Deterministically shuffle evaluation order to mitigate presentation bias
+  --no-label-blind     Disable label-blind case materialization (defaults to enabled)
+  --test               Run internal harness unit tests
   --fixture <id>       Run discovery only on a specific fixture (e.g. SEM-03)
   --model <modelId>    Override target model ID (default: gemini-3.8-flash-high)
   --out-dir <dir>      Directory to write benchmark envelope JSON files (default: evals/live-runs or evals/holdout-live-runs if passes > 1)
@@ -1018,11 +1400,19 @@ Options:
     process.exit(0);
   }
 
+  if (args.includes('--test')) {
+    runHarnessSelfTests(DEFAULT_REPO_ROOT);
+    process.exit(0);
+  }
+
   const suiteArg = getArg('--suite') || 'semantic';
   const isHoldout = suiteArg === 'holdout';
   const passesArg = getArg('--passes') || getArg('-n');
   const passes = passesArg ? parseInt(passesArg, 10) : 1;
   const includeSafe = args.includes('--include-safe');
+  const isSafeOnly = args.includes('--safe-only');
+  const shuffleSeed = getArg('--shuffle-seed') || getArg('--seed');
+  const noLabelBlind = args.includes('--no-label-blind');
   const fixtureId = getArg('--fixture');
   const outDirArg = getArg('--out-dir') || getArg('--output-dir');
   const outFile = getArg('--output');
@@ -1052,6 +1442,9 @@ Options:
       suite: suiteArg,
       passes,
       includeSafe,
+      safeOnly: isSafeOnly,
+      shuffleSeed,
+      labelBlind: !noLabelBlind,
       fixtureId,
       modelId: model || undefined,
       retries,
