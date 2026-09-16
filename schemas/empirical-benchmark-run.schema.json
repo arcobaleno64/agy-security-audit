@@ -92,6 +92,75 @@
         "executionDurationMs": { "type": ["number", "null"], "minimum": 0 }
       }
     },
+    "executionTelemetry": {
+      "type": "object",
+      "required": [
+        "format",
+        "totalEvents",
+        "availableTools",
+        "toolsUsed",
+        "subagentsInvoked",
+        "tokenUsage"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["AGY_STREAM_JSON_V1", "SIMULATED_MOCK"]
+        },
+        "conversationId": {
+          "type": ["string", "null"]
+        },
+        "telemetryDigest": {
+          "type": ["string", "null"]
+        },
+        "totalEvents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "availableTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "toolsUsed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subagentsInvoked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "permissionMode": {
+          "type": ["string", "null"]
+        },
+        "tokenUsage": {
+          "type": "object",
+          "required": [
+            "inputTokens",
+            "outputTokens",
+            "thinkingTokens",
+            "cacheReadTokens",
+            "totalTokens"
+          ],
+          "properties": {
+            "inputTokens": { "type": "integer", "minimum": 0 },
+            "outputTokens": { "type": "integer", "minimum": 0 },
+            "thinkingTokens": { "type": "integer", "minimum": 0 },
+            "cacheReadTokens": { "type": "integer", "minimum": 0 },
+            "totalTokens": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "durationSeconds": {
+          "type": ["number", "null"],
+          "minimum": 0
+        }
+      }
+    },
     "metadata": {
       "type": "object"
     }

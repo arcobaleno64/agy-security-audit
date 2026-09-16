@@ -15,13 +15,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   createBenchmarkRunEnvelope,
   validateBenchmarkRunEnvelope,
   validateCandidateSet,
-  probeEnvironment
+  probeEnvironment,
+  parseStreamJsonTrace
 } from '../skills/security-audit/scripts/record-benchmark-run.mjs';
 import {
   finalizeScan,
@@ -202,6 +204,24 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   if (options.mock || options.mockCandidates) {
     if (isSafeFixture) {
       const safeCandidateSet = { schemaVersion: '1.0.0', candidates: [] };
+      const mockTelemetry = {
+        format: 'SIMULATED_MOCK',
+        conversationId: `sim-mock-${fixture.id}`,
+        telemetryDigest: crypto.createHash('sha256').update(JSON.stringify(safeCandidateSet)).digest('hex'),
+        totalEvents: 3,
+        availableTools: ['view_file', 'list_dir', 'grep_search', 'find_by_name'],
+        toolsUsed: ['view_file'],
+        subagentsInvoked: [],
+        permissionMode: 'always-proceed',
+        tokenUsage: {
+          inputTokens: 350,
+          outputTokens: 40,
+          thinkingTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 390
+        },
+        durationSeconds: 0.025
+      };
       return {
         fixtureId: fixture.id,
         file: fixture.file,
@@ -209,7 +229,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
         candidates: [],
         rawOutput: JSON.stringify(safeCandidateSet),
         error: null,
-        split
+        split,
+        executionTelemetry: mockTelemetry
       };
     }
 
@@ -251,6 +272,24 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       }
     }
     const mockCandidateSet = { schemaVersion: '1.0.0', candidates: mockCands };
+    const mockTelemetry = {
+      format: 'SIMULATED_MOCK',
+      conversationId: `sim-mock-${fixture.id}`,
+      telemetryDigest: crypto.createHash('sha256').update(JSON.stringify(mockCandidateSet)).digest('hex'),
+      totalEvents: 3,
+      availableTools: ['view_file', 'list_dir', 'grep_search', 'find_by_name'],
+      toolsUsed: ['view_file'],
+      subagentsInvoked: [],
+      permissionMode: 'always-proceed',
+      tokenUsage: {
+        inputTokens: 500,
+        outputTokens: 120,
+        thinkingTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 620
+      },
+      durationSeconds: 0.05
+    };
     return {
       fixtureId: fixture.id,
       file: fixture.file,
@@ -258,7 +297,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       candidates: mockCands,
       rawOutput: JSON.stringify(mockCandidateSet),
       error: null,
-      split
+      split,
+      executionTelemetry: mockTelemetry
     };
   }
 
@@ -276,7 +316,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     const agyArgs = [
       '--mode', 'plan',
       '--disable-slash-commands',
-      '--output-format', 'json',
+      '--output-format', 'stream-json',
       '--json-schema', schemaPath
     ];
     if (modelId) {
@@ -318,11 +358,26 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let parsedOutput = null;
     let rawCandidates = [];
     let schemaError = null;
+    let executionTelemetry = null;
 
-    try {
-      parsedOutput = JSON.parse(stdout.trim());
-    } catch (err) {
-      schemaError = `SCHEMA_VIOLATION: Invalid JSON: ${err.message}`;
+    const trace = parseStreamJsonTrace(stdout);
+    if (trace.success) {
+      executionTelemetry = trace.telemetry;
+      try {
+        parsedOutput = JSON.parse(trace.rawResponse.trim());
+      } catch (err) {
+        schemaError = `SCHEMA_VIOLATION: Invalid JSON in stream result response: ${err.message}`;
+      }
+    } else {
+      if (trace.telemetry) {
+        executionTelemetry = trace.telemetry;
+      }
+      // Fallback in case raw JSON was returned directly without stream events
+      try {
+        parsedOutput = JSON.parse(stdout.trim());
+      } catch (err) {
+        schemaError = `STREAM_JSON_PARSE_ERROR: ${trace.error || err.message}`;
+      }
     }
 
     if (parsedOutput) {
@@ -366,7 +421,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       candidates,
       rawOutput: stdout,
       error,
-      split
+      split,
+      executionTelemetry
     };
 
     if (!error) {
@@ -723,6 +779,59 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     const passDurationMs = Date.now() - passStartTime;
     const runId = passes > 1 ? `run-pass-${p}` : (options.runId || `run-pass-${p}`);
 
+    const telemList = fixtureResults.map(r => r.executionTelemetry).filter(Boolean);
+    let passTelemetry = null;
+    if (telemList.length > 0) {
+      const primary = telemList[0];
+      const aggregatedTokens = telemList.reduce((acc, t) => {
+        const u = t.tokenUsage || {};
+        acc.inputTokens += (u.inputTokens || 0);
+        acc.outputTokens += (u.outputTokens || 0);
+        acc.thinkingTokens += (u.thinkingTokens || 0);
+        acc.cacheReadTokens += (u.cacheReadTokens || 0);
+        acc.totalTokens += (u.totalTokens || 0);
+        return acc;
+      }, { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheReadTokens: 0, totalTokens: 0 });
+
+      const allAvailableTools = Array.from(new Set(telemList.flatMap(t => t.availableTools || [])));
+      const allToolsUsed = Array.from(new Set(telemList.flatMap(t => t.toolsUsed || [])));
+      const allSubagents = Array.from(new Set(telemList.flatMap(t => t.subagentsInvoked || [])));
+      const totalEvents = telemList.reduce((acc, t) => acc + (t.totalEvents || 0), 0);
+      const totalDuration = Number((passDurationMs / 1000).toFixed(3));
+
+      passTelemetry = {
+        format: options.mock ? 'SIMULATED_MOCK' : (primary.format || 'AGY_STREAM_JSON_V1'),
+        conversationId: primary.conversationId || (options.mock ? `sim-mock-pass-${p}` : null),
+        telemetryDigest: crypto.createHash('sha256').update(telemList.map(t => t.telemetryDigest || '').join(':')).digest('hex'),
+        totalEvents,
+        availableTools: allAvailableTools.length > 0 ? allAvailableTools : (primary.availableTools || ['view_file', 'list_dir', 'grep_search', 'find_by_name']),
+        toolsUsed: allToolsUsed,
+        subagentsInvoked: allSubagents,
+        permissionMode: primary.permissionMode || 'always-proceed',
+        tokenUsage: aggregatedTokens,
+        durationSeconds: totalDuration
+      };
+    } else if (options.mock) {
+      passTelemetry = {
+        format: 'SIMULATED_MOCK',
+        conversationId: `sim-mock-pass-${p}`,
+        telemetryDigest: crypto.createHash('sha256').update(`sim-mock-pass-${p}`).digest('hex'),
+        totalEvents: 1,
+        availableTools: ['view_file', 'list_dir', 'grep_search', 'find_by_name'],
+        toolsUsed: ['view_file'],
+        subagentsInvoked: [],
+        permissionMode: 'always-proceed',
+        tokenUsage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          thinkingTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 150
+        },
+        durationSeconds: Number((passDurationMs / 1000).toFixed(3))
+      };
+    }
+
     const envelope = createBenchmarkRunEnvelope({
       repoRoot,
       runId,
@@ -740,6 +849,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
       },
       candidates: passCandidates,
       executionDurationMs: passDurationMs,
+      executionTelemetry: passTelemetry,
       metadata: {
         passIndex: p,
         totalPasses: passes,

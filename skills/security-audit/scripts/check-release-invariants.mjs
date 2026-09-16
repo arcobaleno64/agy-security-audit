@@ -136,7 +136,8 @@ const REQUIRED_FILES = [
   'agents/discovery-agent.md',
   'agents/verifier-reachability.md',
   'agents/verifier-defenses.md',
-  'agents/verifier-impact.md'
+  'agents/verifier-impact.md',
+  'agents/security-audit-coordinator.md'
 ];
 
 /**

@@ -51,6 +51,256 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
 }
 
 /**
+ * Parses and validates Antigravity CLI stream-json trace (NDJSON format).
+ * Extracts raw response, first-party execution telemetry, tool usage,
+ * subagent invocations, and token consumption under Default-Deny.
+ *
+ * @param {string} rawNdjson - Raw newline-delimited JSON stream output
+ * @returns {{ success: boolean, telemetry: object|null, rawResponse: string, error: string|null }}
+ */
+export function parseStreamJsonTrace(rawNdjson) {
+  if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
+    return {
+      success: false,
+      telemetry: null,
+      rawResponse: '',
+      error: 'NDJSON trace is empty or invalid'
+    };
+  }
+
+  const telemetryDigest = crypto.createHash('sha256').update(rawNdjson, 'utf8').digest('hex');
+  const lines = rawNdjson.split(/\r?\n/);
+
+  let totalEvents = 0;
+  let conversationId = null;
+  let permissionMode = null;
+  const availableTools = new Set();
+  const toolsUsed = new Set();
+  const subagentsInvoked = new Set();
+  let rawResponse = '';
+  let accumulatedText = '';
+  let durationSeconds = null;
+  let finalStatus = null;
+  let hasResultEvent = false;
+  let resultError = null;
+
+  let tokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    thinkingTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 0
+  };
+  let resultUsage = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let eventObj;
+    try {
+      eventObj = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+
+    totalEvents++;
+
+    const evtType = eventObj.event || eventObj.type;
+
+    // Handle init event
+    if (evtType === 'init' || eventObj.init) {
+      const initObj = eventObj.init || eventObj;
+      if (initObj.conversation_id || initObj.conversationId) {
+        conversationId = initObj.conversation_id || initObj.conversationId;
+      } else if (eventObj.conversation_id || eventObj.conversationId) {
+        conversationId = eventObj.conversation_id || eventObj.conversationId;
+      }
+      if (initObj.permission_mode || initObj.permissionMode) {
+        permissionMode = initObj.permission_mode || initObj.permissionMode;
+      }
+      const tools = initObj.tools || initObj.available_tools || initObj.availableTools || eventObj.tools;
+      if (Array.isArray(tools)) {
+        for (const t of tools) {
+          if (typeof t === 'string' && t.trim()) availableTools.add(t.trim());
+        }
+      }
+    }
+
+    // Handle step_update event
+    if (evtType === 'step_update' || eventObj.step_update) {
+      const step = eventObj.step_update || eventObj;
+      if (!conversationId && (step.conversation_id || step.conversationId)) {
+        conversationId = step.conversation_id || step.conversationId;
+      }
+
+      // Track text deltas
+      if (typeof step.text_delta === 'string') {
+        accumulatedText += step.text_delta;
+      }
+
+      // Track tool executions
+      let toolName = null;
+      if (typeof step.tool === 'string') {
+        toolName = step.tool;
+      } else if (typeof step.tool_name === 'string') {
+        toolName = step.tool_name;
+      } else if (step.tool_call) {
+        toolName = typeof step.tool_call === 'string' ? step.tool_call : (step.tool_call.name || step.tool_call.tool);
+      } else if (step.tool_use) {
+        toolName = typeof step.tool_use === 'string' ? step.tool_use : (step.tool_use.name || step.tool_use.tool);
+      } else if ((step.step_type === 'tool_use' || step.step_type === 'tool_call') && typeof step.tool === 'string') {
+        toolName = step.tool;
+      } else if ((step.step_type === 'tool_use' || step.step_type === 'tool_call') && typeof step.name === 'string') {
+        toolName = step.name;
+      }
+
+      if (toolName && typeof toolName === 'string') {
+        toolsUsed.add(toolName);
+        if (toolName === 'invoke_subagent') {
+          let callArgs = step.tool_call?.args ?? step.tool_call?.arguments ??
+                         step.tool_use?.args ?? step.tool_use?.arguments ??
+                         step.args;
+          if (typeof callArgs === 'string') {
+            try { callArgs = JSON.parse(callArgs); } catch {}
+          }
+          const subagentName = callArgs?.agent ||
+                               callArgs?.subagent ||
+                               callArgs?.name;
+          if (subagentName && typeof subagentName === 'string') {
+            subagentsInvoked.add(subagentName);
+          }
+        }
+      }
+
+      const directSubagent = step.subagent || step.subagent_invoked || step.subagentName;
+      if (directSubagent && typeof directSubagent === 'string') {
+        subagentsInvoked.add(directSubagent);
+      }
+
+      // Track token usage accumulation from step_update
+      const u = step.usage || step.token_usage || eventObj.usage;
+      if (u && typeof u === 'object') {
+        tokenUsage.inputTokens += (u.input_tokens ?? u.inputTokens ?? 0);
+        tokenUsage.outputTokens += (u.output_tokens ?? u.outputTokens ?? 0);
+        tokenUsage.thinkingTokens += (u.thinking_tokens ?? u.thinkingTokens ?? 0);
+        tokenUsage.cacheReadTokens += (u.cache_read_tokens ?? u.cacheReadTokens ?? 0);
+        tokenUsage.totalTokens += (u.total_tokens ?? u.totalTokens ?? 0);
+      }
+    }
+
+    // Handle result event
+    if (evtType === 'result' || eventObj.result) {
+      hasResultEvent = true;
+      const res = eventObj.result || eventObj;
+      if (res.conversation_id || res.conversationId) {
+        conversationId = res.conversation_id || res.conversationId;
+      }
+      if (typeof res.response === 'string') {
+        rawResponse = res.response;
+      } else if (typeof res.text === 'string') {
+        rawResponse = res.text;
+      }
+      if (typeof res.duration_seconds === 'number') {
+        durationSeconds = res.duration_seconds;
+      } else if (typeof res.durationSeconds === 'number') {
+        durationSeconds = res.durationSeconds;
+      }
+      if (res.status) {
+        finalStatus = res.status;
+      }
+      if (res.error) {
+        resultError = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
+      } else if (eventObj.error) {
+        resultError = typeof eventObj.error === 'string' ? eventObj.error : JSON.stringify(eventObj.error);
+      }
+      const u = res.usage || eventObj.usage;
+      if (u && typeof u === 'object') {
+        resultUsage = {
+          inputTokens: (u.input_tokens ?? u.inputTokens ?? 0),
+          outputTokens: (u.output_tokens ?? u.outputTokens ?? 0),
+          thinkingTokens: (u.thinking_tokens ?? u.thinkingTokens ?? 0),
+          cacheReadTokens: (u.cache_read_tokens ?? u.cacheReadTokens ?? 0),
+          totalTokens: (u.total_tokens ?? u.totalTokens ?? 0)
+        };
+      }
+    }
+  }
+
+  if (totalEvents === 0) {
+    return {
+      success: false,
+      telemetry: null,
+      rawResponse: '',
+      error: 'No valid JSON events found in trace'
+    };
+  }
+
+  // Fallback to accumulated text if no result.response was provided
+  if (!rawResponse && accumulatedText) {
+    rawResponse = accumulatedText;
+  }
+
+  // If tokenUsage was not populated by step_update events, but resultUsage exists, use resultUsage
+  if (tokenUsage.totalTokens === 0 && tokenUsage.inputTokens === 0 && tokenUsage.outputTokens === 0 && resultUsage) {
+    tokenUsage = resultUsage;
+  }
+
+  // Reconcile totalTokens if 0 but components exist
+  if (tokenUsage.totalTokens === 0 && (tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0)) {
+    tokenUsage.totalTokens = tokenUsage.inputTokens + tokenUsage.outputTokens + tokenUsage.thinkingTokens + tokenUsage.cacheReadTokens;
+  }
+
+  const telemetry = {
+    format: 'AGY_STREAM_JSON_V1',
+    conversationId: conversationId || null,
+    telemetryDigest,
+    totalEvents,
+    availableTools: Array.from(availableTools),
+    toolsUsed: Array.from(toolsUsed),
+    subagentsInvoked: Array.from(subagentsInvoked),
+    permissionMode: permissionMode || null,
+    tokenUsage,
+    durationSeconds: durationSeconds !== null ? durationSeconds : null
+  };
+
+  // Fail-Closed Validation under Default-Deny:
+  if (resultError) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `Stream execution error: ${resultError}`
+    };
+  }
+
+  if (finalStatus && finalStatus !== 'SUCCESS' && finalStatus !== 'COMPLETED') {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `Stream result status indicates failure: ${finalStatus}`
+    };
+  }
+
+  if (!hasResultEvent && !rawResponse.trim()) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: 'NDJSON stream terminated prematurely without result event or response text'
+    };
+  }
+
+  return {
+    success: true,
+    telemetry,
+    rawResponse,
+    error: null
+  };
+}
+
+/**
  * Validates an empirical benchmark run envelope against structural rules.
  */
 export function validateBenchmarkRunEnvelope(envelope) {
@@ -111,6 +361,52 @@ export function validateBenchmarkRunEnvelope(envelope) {
   } else {
     if (typeof envelope.summary.candidateCount !== 'number' || envelope.summary.candidateCount < 0) {
       errors.push('summary.candidateCount must be a non-negative number');
+    }
+  }
+
+  if (envelope.executionTelemetry !== undefined) {
+    if (!envelope.executionTelemetry || typeof envelope.executionTelemetry !== 'object') {
+      errors.push('executionTelemetry must be a non-null object');
+    } else {
+      const telem = envelope.executionTelemetry;
+      const VALID_FORMATS = ['AGY_STREAM_JSON_V1', 'SIMULATED_MOCK'];
+      if (!VALID_FORMATS.includes(telem.format)) {
+        errors.push(`Invalid executionTelemetry.format: expected one of ${VALID_FORMATS.join(', ')}, got '${telem.format}'`);
+      }
+      if (telem.conversationId !== null && typeof telem.conversationId !== 'string') {
+        errors.push('executionTelemetry.conversationId must be a string or null');
+      }
+      if (telem.telemetryDigest !== null && typeof telem.telemetryDigest !== 'string') {
+        errors.push('executionTelemetry.telemetryDigest must be a string or null');
+      }
+      if (typeof telem.totalEvents !== 'number' || telem.totalEvents < 0 || !Number.isInteger(telem.totalEvents)) {
+        errors.push('executionTelemetry.totalEvents must be an integer >= 0');
+      }
+      if (!Array.isArray(telem.availableTools) || !telem.availableTools.every(t => typeof t === 'string')) {
+        errors.push('executionTelemetry.availableTools must be an array of strings');
+      }
+      if (!Array.isArray(telem.toolsUsed) || !telem.toolsUsed.every(t => typeof t === 'string')) {
+        errors.push('executionTelemetry.toolsUsed must be an array of strings');
+      }
+      if (!Array.isArray(telem.subagentsInvoked) || !telem.subagentsInvoked.every(t => typeof t === 'string')) {
+        errors.push('executionTelemetry.subagentsInvoked must be an array of strings');
+      }
+      if (telem.permissionMode !== null && typeof telem.permissionMode !== 'string') {
+        errors.push('executionTelemetry.permissionMode must be a string or null');
+      }
+      if (!telem.tokenUsage || typeof telem.tokenUsage !== 'object') {
+        errors.push('executionTelemetry.tokenUsage must be an object');
+      } else {
+        const fields = ['inputTokens', 'outputTokens', 'thinkingTokens', 'cacheReadTokens', 'totalTokens'];
+        for (const f of fields) {
+          if (typeof telem.tokenUsage[f] !== 'number' || telem.tokenUsage[f] < 0 || !Number.isInteger(telem.tokenUsage[f])) {
+            errors.push(`executionTelemetry.tokenUsage.${f} must be an integer >= 0`);
+          }
+        }
+      }
+      if (telem.durationSeconds !== null && (typeof telem.durationSeconds !== 'number' || Number.isNaN(telem.durationSeconds) || telem.durationSeconds < 0)) {
+        errors.push('executionTelemetry.durationSeconds must be a non-negative number or null');
+      }
     }
   }
 
@@ -329,6 +625,10 @@ export function createBenchmarkRunEnvelope(options = {}) {
     summary,
     metadata: options.metadata || {}
   };
+
+  if (options.executionTelemetry !== undefined) {
+    envelope.executionTelemetry = options.executionTelemetry;
+  }
 
   const validation = validateBenchmarkRunEnvelope(envelope);
   if (!validation.valid) {

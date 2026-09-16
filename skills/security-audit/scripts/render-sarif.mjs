@@ -104,7 +104,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval, runHoldoutEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet, parseStreamJsonTrace } from './record-benchmark-run.mjs';
 
 
 
@@ -5350,7 +5350,148 @@ export default appName;`;
   }
   console.log('✔ 117. P0 Invariant: Hermetic Telemetry Isolation & Default-Deny on Untrusted Workspace Telemetry.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (117/117).');
+  // 118. P0 Invariant: Stream-JSON First-Party Telemetry & Coordinator Agent Specification
+  const coordPath = path.resolve(process.cwd(), 'agents/security-audit-coordinator.md');
+  if (!fs.existsSync(coordPath)) {
+    throw new Error('P0-118 VIOLATION: Expected agent missing: agents/security-audit-coordinator.md');
+  }
+  const coordContent = fs.readFileSync(coordPath, 'utf8');
+  if (!coordContent.includes('mainAgent: true') || !coordContent.includes('subagent: false')) {
+    throw new Error('P0-118 VIOLATION: security-audit-coordinator must declare mainAgent: true and subagent: false');
+  }
+  if (!coordContent.includes('commandExecutionPolicy: allow-required')) {
+    throw new Error('P0-118 VIOLATION: security-audit-coordinator must declare commandExecutionPolicy: allow-required');
+  }
+
+  // Test parseStreamJsonTrace against mock NDJSON trace
+  const mockTraceNdjson = [
+    JSON.stringify({
+      event: 'init',
+      conversation_id: 'conv-test-118-telemetry',
+      init: {
+        tools: ['view_file', 'list_dir', 'grep_search', 'run_command', 'invoke_subagent'],
+        permission_mode: 'always-proceed'
+      }
+    }),
+    JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-test-118-telemetry',
+        step_index: 1,
+        tool: 'view_file',
+        usage: {
+          input_tokens: 1500,
+          output_tokens: 300,
+          thinking_tokens: 50,
+          cache_read_tokens: 100,
+          total_tokens: 1950
+        }
+      }
+    }),
+    JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-test-118-telemetry',
+        step_index: 2,
+        tool_call: {
+          name: 'invoke_subagent',
+          args: { agent: 'discovery-agent' }
+        },
+        usage: {
+          input_tokens: 500,
+          output_tokens: 100,
+          thinking_tokens: 0,
+          cache_read_tokens: 0,
+          total_tokens: 600
+        }
+      }
+    }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        conversation_id: 'conv-test-118-telemetry',
+        status: 'SUCCESS',
+        response: JSON.stringify({ schemaVersion: '1.0.0', candidates: [] }),
+        duration_seconds: 3.45
+      }
+    })
+  ].join('\n');
+
+  const expectedDigest = crypto.createHash('sha256').update(mockTraceNdjson, 'utf8').digest('hex');
+  const traceParsed = parseStreamJsonTrace(mockTraceNdjson);
+  if (!traceParsed.success) {
+    throw new Error(`P0-118 VIOLATION: parseStreamJsonTrace failed: ${traceParsed.error}`);
+  }
+  if (traceParsed.telemetry.conversationId !== 'conv-test-118-telemetry') {
+    throw new Error(`P0-118 VIOLATION: Expected conversationId 'conv-test-118-telemetry', got ${traceParsed.telemetry.conversationId}`);
+  }
+  if (!traceParsed.telemetry.toolsUsed.includes('view_file') || !traceParsed.telemetry.toolsUsed.includes('invoke_subagent')) {
+    throw new Error(`P0-118 VIOLATION: Expected toolsUsed to include view_file and invoke_subagent, got ${JSON.stringify(traceParsed.telemetry.toolsUsed)}`);
+  }
+  if (!traceParsed.telemetry.subagentsInvoked.includes('discovery-agent')) {
+    throw new Error(`P0-118 VIOLATION: Expected subagentsInvoked to include discovery-agent, got ${JSON.stringify(traceParsed.telemetry.subagentsInvoked)}`);
+  }
+  if (traceParsed.telemetry.telemetryDigest !== expectedDigest) {
+    throw new Error(`P0-118 VIOLATION: Expected digest ${expectedDigest}, got ${traceParsed.telemetry.telemetryDigest}`);
+  }
+  if (traceParsed.telemetry.tokenUsage.inputTokens !== 2000 || traceParsed.telemetry.tokenUsage.outputTokens !== 400 || traceParsed.telemetry.tokenUsage.totalTokens !== 2550) {
+    throw new Error(`P0-118 VIOLATION: Unexpected tokenUsage: ${JSON.stringify(traceParsed.telemetry.tokenUsage)}`);
+  }
+
+  // Validate envelope with executionTelemetry
+  const envelopeWithTelem = createBenchmarkRunEnvelope({
+    runId: 'run-test-118-telemetry',
+    benchmarkMode: 'DISCOVERY',
+    evidenceOrigin: 'MODEL_OBSERVED',
+    executionKind: 'LIVE_AGENT',
+    target: {
+      repositoryName: 'test-repo',
+      repositoryUri: 'https://github.com/test/repo',
+      commitSha: 'a'.repeat(40)
+    },
+    environment: {
+      agyVersion: '1.3.0',
+      modelId: 'gemini-3.8-flash-high',
+      modelProvider: 'google',
+      os: 'win32',
+      nodeVersion: process.version
+    },
+    candidates: [],
+    executionTelemetry: traceParsed.telemetry
+  });
+  const envValResult = validateBenchmarkRunEnvelope(envelopeWithTelem);
+  if (!envValResult.valid) {
+    throw new Error(`P0-118 VIOLATION: validateBenchmarkRunEnvelope rejected valid envelope with telemetry: ${envValResult.errors.join('; ')}`);
+  }
+
+  // Fail-Closed Invariant: Status ERROR returns success: false under Default-Deny
+  const errorTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({ event: 'result', result: { status: 'ERROR', error: 'Upstream model quota exceeded' } })
+  ].join('\n');
+  const errorParsed = parseStreamJsonTrace(errorTrace);
+  if (errorParsed.success !== false || !errorParsed.error) {
+    throw new Error('P0-118 VIOLATION: parseStreamJsonTrace must fail-closed on result.status === ERROR');
+  }
+
+  // Fail-Closed Invariant: Premature truncated stream without result or response returns success: false
+  const truncatedTrace = JSON.stringify({ event: 'init', init: { tools: ['view_file'] } });
+  const truncatedParsed = parseStreamJsonTrace(truncatedTrace);
+  if (truncatedParsed.success !== false || !truncatedParsed.error) {
+    throw new Error('P0-118 VIOLATION: parseStreamJsonTrace must fail-closed on premature stream truncation');
+  }
+
+  // Fail-Closed Invariant: validateBenchmarkRunEnvelope rejects negative token usage
+  const invalidTelemEnvelope = JSON.parse(JSON.stringify(envelopeWithTelem));
+  invalidTelemEnvelope.executionTelemetry.tokenUsage.inputTokens = -50;
+  const invalidTelemVal = validateBenchmarkRunEnvelope(invalidTelemEnvelope);
+  if (invalidTelemVal.valid) {
+    throw new Error('P0-118 VIOLATION: validateBenchmarkRunEnvelope must reject negative token usage in executionTelemetry');
+  }
+
+  console.log('✔ 118. P0 Invariant: Stream-JSON First-Party Telemetry & Coordinator Agent Specification.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (118/118).');
 
   } finally {
     gitFixture.cleanup();
