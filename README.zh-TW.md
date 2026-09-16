@@ -40,6 +40,34 @@
 
 ---
 
+## 四層縱深防禦架構與沙盒規範 (4-Layer Defense-in-Depth)
+
+審計不受信任的目標代碼需要多層防護，以抵禦提示詞注入、目錄穿越、未授權工具呼叫與主機入侵。本專案正式確立四層縱深防禦體系：
+
+| 防禦層 | 組件 | 邊界與防護機制 | 安全目標 |
+| :--- | :--- | :--- | :--- |
+| **Layer 1** | **終端沙盒**<br>`agy --sandbox` | OS 層級容器 / 命名空間 / Seatbelt 隔離 | 阻斷不受信任目標代碼在終端執行任意指令、惡意網路外聯或持久破壞檔案系統。 |
+| **Layer 2** | **權限引擎**<br>`recommended-security-audit-permissions.json` | AGY CLI 運行時工具調度 (`deny > ask > allow`) | 依審計角色 (`coordinator`、`discovery`、`verifiers`、`remediation`) 限縮可用工具，杜絕越權調度或資料外洩。 |
+| **Layer 3** | **陰影上下文守衛**<br>`hooks/shadow-context-guard.mjs` | PreToolUse 生命週期勾點 | 攔截檔案讀取操作，透明重定向至 `scratch/context/` 去敏沙盒複本，阻斷符號連結目錄逃逸 (CWE-59)。 |
+| **Layer 4** | **確定性 TCB**<br>`path-containment.mjs` | 原子檔案描述子檢驗 (`fs.openSync` + `fs.fstatSync`) | 消除檔案系統競爭條件 (TOCTOU) 與同級目錄欺騙 (如 `scratch/context-evil`)。 |
+
+### 推薦權限設定檔使用方式
+
+為在生產環境以最小權限運行安全審計，建議啟用終端沙盒啟動 Antigravity：
+
+```bash
+# 於 OS 沙盒與角色權限管控下執行安全審計
+agy --sandbox "audit this repository for security vulnerabilities"
+```
+
+`recommended-security-audit-permissions.json` 所定義的角色權限邊界：
+- **`coordinator`** (主協調代理)：允許協調工具 (`invoke_subagent`、`send_message`、`run_command:node skills/security-audit/scripts/*`)；詢問 `run_command:git *`；嚴格拒絕網路外聯 (`read_url_content`、`search_web`、`curl`、`wget`) 與寫入操作。
+- **`discovery`** (漏洞發現代理)：僅唯讀探索 (`view_file`、`list_dir`、`grep_search`、`find_by_name`)；嚴格拒絕所有寫入、網路與命令執行。
+- **`verifiers`** (3-Lens 驗證群)：僅唯讀檢驗；嚴格拒絕所有寫入、命令執行與網路存取。
+- **`remediation`** (修復代理)：於隔離 scratch 工作區生成外科手術式最小修復；詢問 `write_to_file`；嚴格拒絕 CI/CD 清單 (`.github/*`)、Git 元資料 (`.git/*`)、遠端推送 (`git push`) 與網路外聯。
+
+---
+
 ## 目錄結構
 
 ```text
@@ -49,6 +77,7 @@ security-audit/
 ├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
 ├── hooks/                                # 生命週期勾點實作
 │   └── shadow-context-guard.mjs          # PreToolUse 拒絕未經審核之原庫存取並導向 scratch/context/
+├── recommended-security-audit-permissions.json # AGY Default-Deny 角色最小權限設定檔
 ├── SECURITY.md                           # 誠實信任模型與沙箱邊界說明
 ├── agents/                               # 專責子代理定義 (位於外掛根目錄)
 │   ├── threat-modeler.md                 # 威脅建模專員
@@ -73,8 +102,9 @@ security-audit/
 │   ├── verifier-ballot.schema.json       # 檢驗選票綱要 (3-Lens 證據綁定)
 │   ├── canonical-finding.schema.json     # 權威規範弱點綱要 (分類法與原因碼)
 │   ├── execution-attestation.schema.json # 執行證明綱要 (階段覆蓋完整性)
-│   ├── audit-baseline.schema.json        # 審查基準狀態綱要 (歷史狀態基準)
-│   └── empirical-benchmark-run.schema.json # 實證基準執行封套綱要
+│   ├── audit-baseline.schema.json        # 審計歷史基準綱要
+│   ├── empirical-benchmark-run.schema.json # 實證評測 run envelope 綱要
+│   └── permissions-profile.schema.json  # 角色權限設定檔綱要
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
 └── skills/

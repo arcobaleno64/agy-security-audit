@@ -138,6 +138,9 @@
         "permissionMode": {
           "type": ["string", "null"]
         },
+        "sandboxEnabled": {
+          "type": ["boolean", "null"]
+        },
         "tokenUsage": {
           "type": "object",
           "required": [

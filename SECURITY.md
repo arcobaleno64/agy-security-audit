@@ -65,6 +65,29 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 - **Granular Evidence Binding**: External findings are classified into authoritative binding states: `BOUND` (source line and hash verified), `UNBOUND_PATH` (line beyond EOF or syntax issue), `UNBOUND_MISSING_FILE` (target file missing), `GENERATED_DUPLICATE` (findings from generated shadow contexts such as `scratch/context/`), and `OUTSIDE_SCOPE` (paths outside repository root).
 - **Filesystem Race (TOCTOU) Defense**: Hardened via `safeReadFileContained()` in `path-containment.mjs`. Instead of sequential `fs.existsSync` -> `fs.readFileSync` windows (flagged by CodeQL `js/file-system-race`), the implementation opens a dedicated file descriptor (`fs.openSync`), inspects the handle directly (`fs.fstatSync`), asserts canonical realpath containment, reads content directly from the descriptor (`fs.readSync`), and guarantees descriptor closure via `finally`.
 
+### 2.8 4-Layer Defense-in-Depth Execution Model (v1.3.0-dev / Production)
+In security audit contexts, no single security perimeter can protect against all attack vectors (e.g. prompt injection in reviewed code, symlink path traversal, arbitrary shell execution, secret exfiltration). The plugin operates under a formal four-layer defense-in-depth model:
+
+1. **Layer 1: Terminal Sandbox (`agy --sandbox`)**
+   - **Boundary**: OS kernel containment (Container/Namespaces/Seatbelt/AppContainer).
+   - **Objective**: Prevents untrusted target repository code from executing arbitrary system commands, corrupting files outside the sandbox, or establishing outbound network connections.
+   - **Failure Modes & Defenses**: If target code attempts malicious binary execution or reverse shells, Layer 1 denies kernel-level syscalls and network egress fail-closed.
+
+2. **Layer 2: Permission Engine (`recommended-security-audit-permissions.json`)**
+   - **Boundary**: AGY CLI runtime tool dispatch engine evaluated in strict `deny > ask > allow` order.
+   - **Objective**: Restricts available agent tools by assigned role (`coordinator`, `discovery`, `verifiers`, `remediation`) under Default-Deny.
+   - **Failure Modes & Defenses**: If a subagent attempts privilege escalation or unauthorized actions (e.g. discovery agent attempting code edits or network access), Layer 2 blocks tool dispatch before model execution.
+
+3. **Layer 3: Shadow Context Guard (`hooks/shadow-context-guard.mjs`, PreToolUse Hook)**
+   - **Boundary**: Workspace application layer intercepting file read operations (`view_file`, `grep_search`, `list_dir`, `find_by_name`).
+   - **Objective**: Intercepts direct access to raw workspace files, transparently redirects agents to the sanitized shadow context (`scratch/context/`), and blocks symlink directory traversal escaping repository roots (CWE-59).
+   - **Failure Modes & Defenses**: If an agent attempts direct inspection of unsanitized or traversing files, Layer 3 intercepts and emits a fail-closed denial directing the agent to the shadow replica.
+
+4. **Layer 4: Deterministic Path Containment & TOCTOU-Resistant TCB (`path-containment.mjs`)**
+   - **Boundary**: Trusted Computing Base (TCB) atomic filesystem I/O boundary.
+   - **Objective**: Centralizes containment algebra and uses dedicated file descriptor inspection (`fs.openSync` + `fs.fstatSync` + `fs.readSync`) to prevent filesystem race conditions (TOCTOU) and sibling-prefix path collisions (e.g. `scratch/context-evil`).
+   - **Failure Modes & Defenses**: If a symlink or file swap occurs between validation and read, Layer 4 descriptor binding guarantees containment against race conditions and out-of-boundary access.
+
 ---
 
 ## 3. Reporting Vulnerabilities

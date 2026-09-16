@@ -77,7 +77,7 @@ import { buildThreatModel, detectRepositoryInventory, generateDiscoveryMatrix } 
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, validatePermissionsProfile } from './record-benchmark-run.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -137,7 +137,9 @@ const REQUIRED_FILES = [
   'agents/verifier-reachability.md',
   'agents/verifier-defenses.md',
   'agents/verifier-impact.md',
-  'agents/security-audit-coordinator.md'
+  'agents/security-audit-coordinator.md',
+  'recommended-security-audit-permissions.json',
+  'schemas/permissions-profile.schema.json'
 ];
 
 /**
@@ -1729,6 +1731,34 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           }
         } finally {
           fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-39',
+      name: 'Recommended Permissions Profile & 4-Layer Defense-in-Depth Invariant',
+      check: () => {
+        const profPath = path.resolve(repoRoot, 'recommended-security-audit-permissions.json');
+        if (!fs.existsSync(profPath)) {
+          throw new Error('recommended-security-audit-permissions.json missing from repository root');
+        }
+        const parsed = JSON.parse(fs.readFileSync(profPath, 'utf8'));
+        const valRes = validatePermissionsProfile(parsed);
+        if (!valRes.valid) {
+          throw new Error(`recommended-security-audit-permissions.json failed validation: ${valRes.errors.join('; ')}`);
+        }
+        const schemaPath = path.resolve(repoRoot, 'schemas/permissions-profile.schema.json');
+        if (!fs.existsSync(schemaPath)) {
+          throw new Error('schemas/permissions-profile.schema.json missing');
+        }
+        const schemaParsed = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+        if (!schemaParsed.$schema || !schemaParsed.properties?.defenseInDepth || !schemaParsed.properties?.roles) {
+          throw new Error('schemas/permissions-profile.schema.json missing required schema structure');
+        }
+        const secPath = path.resolve(repoRoot, 'SECURITY.md');
+        const secContent = fs.readFileSync(secPath, 'utf8');
+        if (!secContent.includes('4-Layer Defense-in-Depth Execution Model')) {
+          throw new Error('SECURITY.md missing Section 2.8 4-Layer Defense-in-Depth Execution Model');
         }
       }
     }

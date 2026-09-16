@@ -1,0 +1,121 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/permissions-profile.schema.json",
+  "schemaVersion": "1.0.0",
+  "profileName": "recommended-security-audit-permissions",
+  "version": "1.3.0",
+  "description": "Recommended role-based permissions profile and sandbox boundaries for AGY Security Audit under Default-Deny.",
+  "defenseInDepth": {
+    "layer1_terminal_sandbox": {
+      "boundary": "OS-level process, network, and filesystem namespace jail",
+      "objective": "Prevent arbitrary shell execution, system compromise, or out-of-band egress via agy --sandbox"
+    },
+    "layer2_permission_engine": {
+      "boundary": "AGY runtime tool scheduling and authorization engine",
+      "objective": "Enforce strict least-privilege tool capabilities per audit role",
+      "precedence": "deny > ask > allow"
+    },
+    "layer3_shadow_context_guard": {
+      "boundary": "Workspace application-level filesystem interception",
+      "objective": "Prevent direct model exposure to unredacted secrets and enforce realpath containment algebra",
+      "hook": "hooks/shadow-context-guard.mjs"
+    },
+    "layer4_deterministic_tcb": {
+      "boundary": "Authoritative TCB filesystem I/O kernel",
+      "objective": "Eliminate TOCTOU filesystem races and sibling path confusion via safe file descriptors",
+      "module": "skills/security-audit/scripts/path-containment.mjs"
+    }
+  },
+  "roles": {
+    "coordinator": {
+      "description": "Primary orchestrator (security-audit-coordinator) coordinating subagent swarms and deterministic scan finalization.",
+      "allow": [
+        "view_file",
+        "list_dir",
+        "invoke_subagent",
+        "send_message",
+        "manage_subagents",
+        "run_command:node skills/security-audit/scripts/*"
+      ],
+      "ask": [
+        "run_command:git *"
+      ],
+      "deny": [
+        "write_to_file",
+        "replace_file_content",
+        "read_url_content",
+        "search_web",
+        "call_mcp_tool:*",
+        "run_command:curl *",
+        "run_command:wget *",
+        "run_command:git push *"
+      ]
+    },
+    "discovery": {
+      "description": "Discovery agent (discovery-agent) hunting candidate vulnerabilities in component x family matrices.",
+      "allow": [
+        "view_file",
+        "list_dir",
+        "grep_search",
+        "find_by_name"
+      ],
+      "ask": [],
+      "deny": [
+        "write_to_file",
+        "replace_file_content",
+        "run_command:*",
+        "read_url_content",
+        "search_web",
+        "invoke_subagent",
+        "send_message",
+        "manage_subagents",
+        "call_mcp_tool:*"
+      ]
+    },
+    "verifiers": {
+      "description": "Independent 3-lens verifiers (verifier-reachability, verifier-defenses, verifier-impact) voting on candidate validity.",
+      "allow": [
+        "view_file",
+        "list_dir",
+        "grep_search",
+        "find_by_name"
+      ],
+      "ask": [],
+      "deny": [
+        "write_to_file",
+        "replace_file_content",
+        "run_command:*",
+        "read_url_content",
+        "search_web",
+        "invoke_subagent",
+        "send_message",
+        "manage_subagents",
+        "call_mcp_tool:*"
+      ]
+    },
+    "remediation": {
+      "description": "Remediation agent operating inside isolated branch workspaces to draft patches for verified vulnerabilities.",
+      "allow": [
+        "view_file",
+        "replace_file_content",
+        "run_command:npm test",
+        "run_command:node skills/security-audit/scripts/validate-patch.mjs *"
+      ],
+      "ask": [
+        "write_to_file",
+        "run_command:npm run *"
+      ],
+      "deny": [
+        "write_to_file:.github/*",
+        "write_to_file:.git/*",
+        "replace_file_content:.github/*",
+        "replace_file_content:.git/*",
+        "read_url_content",
+        "search_web",
+        "run_command:git push *",
+        "run_command:curl *",
+        "run_command:wget *",
+        "call_mcp_tool:*"
+      ]
+    }
+  }
+}

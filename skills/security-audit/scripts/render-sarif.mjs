@@ -104,7 +104,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval, runHoldoutEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet, parseStreamJsonTrace } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet, parseStreamJsonTrace, validatePermissionsProfile } from './record-benchmark-run.mjs';
 
 
 
@@ -1531,7 +1531,7 @@ export function runTests() {
     const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
     try {
       // Copy project files (excluding .git) to simulate freshly extracted zip archive
-      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'hooks.json', 'hooks', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit'];
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'hooks.json', 'hooks', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit', 'recommended-security-audit-permissions.json'];
       for (const item of copyItems) {
         const srcPath = path.resolve(process.cwd(), item);
         if (fs.existsSync(srcPath)) {
@@ -5491,7 +5491,104 @@ export default appName;`;
 
   console.log('✔ 118. P0 Invariant: Stream-JSON First-Party Telemetry & Coordinator Agent Specification.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (118/118).');
+  // 119. P0 Invariant: Recommended Role Permissions Profile & 4-Layer Defense-in-Depth Sandbox Model
+  const profPath119 = path.resolve(process.cwd(), 'recommended-security-audit-permissions.json');
+  if (!fs.existsSync(profPath119)) {
+    throw new Error('P0-119 VIOLATION: recommended-security-audit-permissions.json missing from repository root');
+  }
+  const prof119 = JSON.parse(fs.readFileSync(profPath119, 'utf8'));
+  const val119 = validatePermissionsProfile(prof119);
+  if (!val119.valid || val119.errors.length > 0) {
+    throw new Error(`P0-119 VIOLATION: recommended-security-audit-permissions.json failed validation: ${val119.errors.join('; ')}`);
+  }
+
+  // 119.1 Fail-closed tamper tests against validatePermissionsProfile:
+  // Missing role
+  const badRole119 = JSON.parse(JSON.stringify(prof119));
+  delete badRole119.roles.discovery;
+  if (validatePermissionsProfile(badRole119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted profile with missing discovery role');
+  }
+
+  // Write allowed in discovery
+  const writeDisc119 = JSON.parse(JSON.stringify(prof119));
+  writeDisc119.roles.discovery.allow.push('write_to_file');
+  if (validatePermissionsProfile(writeDisc119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted write_to_file in discovery role');
+  }
+
+  // Command execution allowed in verifiers
+  const cmdVer119 = JSON.parse(JSON.stringify(prof119));
+  cmdVer119.roles.verifiers.allow.push('run_command');
+  if (validatePermissionsProfile(cmdVer119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted command execution in verifiers role');
+  }
+
+  // Network egress allowed in coordinator
+  const netCoord119 = JSON.parse(JSON.stringify(prof119));
+  netCoord119.roles.coordinator.allow.push('read_url_content');
+  if (validatePermissionsProfile(netCoord119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted network egress in coordinator role');
+  }
+
+  // Arbitrary unconstrained shell commands allowed in coordinator
+  const arbCmdCoord119 = JSON.parse(JSON.stringify(prof119));
+  arbCmdCoord119.roles.coordinator.allow.push('run_command:*');
+  if (validatePermissionsProfile(arbCmdCoord119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted arbitrary run_command:* in coordinator role');
+  }
+
+  // CI/CD manifest modification not denied in remediation
+  const noGithubDeny119 = JSON.parse(JSON.stringify(prof119));
+  noGithubDeny119.roles.remediation.deny = noGithubDeny119.roles.remediation.deny.filter(x => !x.includes('.github'));
+  if (validatePermissionsProfile(noGithubDeny119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted remediation without CI/CD .github deny');
+  }
+
+  // Missing defenseInDepth layers
+  const badDid119 = JSON.parse(JSON.stringify(prof119));
+  delete badDid119.defenseInDepth.layer1_terminal_sandbox;
+  if (validatePermissionsProfile(badDid119).valid) {
+    throw new Error('P0-119 VIOLATION: validatePermissionsProfile accepted missing defenseInDepth layer');
+  }
+
+  // 119.2 Schema presence & structural validity
+  const schemaPath119 = path.resolve(process.cwd(), 'schemas/permissions-profile.schema.json');
+  if (!fs.existsSync(schemaPath119)) {
+    throw new Error('P0-119 VIOLATION: schemas/permissions-profile.schema.json missing');
+  }
+  const schemaParsed119 = JSON.parse(fs.readFileSync(schemaPath119, 'utf8'));
+  if (schemaParsed119.$schema !== 'http://json-schema.org/draft-07/schema#' || !schemaParsed119.properties?.defenseInDepth || !schemaParsed119.properties?.roles) {
+    throw new Error('P0-119 VIOLATION: schemas/permissions-profile.schema.json is not valid Draft-07 schema');
+  }
+
+  // 119.3 SECURITY.md 4-layer defense-in-depth documentation
+  const secPath119 = path.resolve(process.cwd(), 'SECURITY.md');
+  const secContent119 = fs.readFileSync(secPath119, 'utf8');
+  if (!secContent119.includes('### 2.8 4-Layer Defense-in-Depth Execution Model') ||
+      !secContent119.includes('Layer 1: Terminal Sandbox') ||
+      !secContent119.includes('Layer 2: Permission Engine') ||
+      !secContent119.includes('Layer 3: Shadow Context Guard') ||
+      !secContent119.includes('Layer 4: Deterministic Path Containment & TOCTOU-Resistant TCB')) {
+    throw new Error('P0-119 VIOLATION: SECURITY.md missing complete 4-layer defense-in-depth specification');
+  }
+
+  // 119.4 validateBenchmarkRunEnvelope sandboxEnabled validation
+  const testEnvelope119 = JSON.parse(JSON.stringify(envelopeWithTelem));
+  testEnvelope119.executionTelemetry.sandboxEnabled = true;
+  const envValRes119 = validateBenchmarkRunEnvelope(testEnvelope119);
+  if (!envValRes119.valid) {
+    throw new Error(`P0-119 VIOLATION: validateBenchmarkRunEnvelope rejected sandboxEnabled: true: ${envValRes119.errors.join('; ')}`);
+  }
+  testEnvelope119.executionTelemetry.sandboxEnabled = 'not-a-boolean';
+  const badEnvValRes119 = validateBenchmarkRunEnvelope(testEnvelope119);
+  if (badEnvValRes119.valid) {
+    throw new Error('P0-119 VIOLATION: validateBenchmarkRunEnvelope accepted non-boolean sandboxEnabled');
+  }
+
+  console.log('✔ 119. P0 Invariant: Recommended Role Permissions Profile & 4-Layer Defense-in-Depth Sandbox Model.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (119/119).');
 
   } finally {
     gitFixture.cleanup();

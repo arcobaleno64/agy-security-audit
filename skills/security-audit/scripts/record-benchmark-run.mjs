@@ -394,6 +394,9 @@ export function validateBenchmarkRunEnvelope(envelope) {
       if (telem.permissionMode !== null && typeof telem.permissionMode !== 'string') {
         errors.push('executionTelemetry.permissionMode must be a string or null');
       }
+      if (telem.sandboxEnabled !== undefined && telem.sandboxEnabled !== null && typeof telem.sandboxEnabled !== 'boolean') {
+        errors.push('executionTelemetry.sandboxEnabled must be a boolean or null');
+      }
       if (!telem.tokenUsage || typeof telem.tokenUsage !== 'object') {
         errors.push('executionTelemetry.tokenUsage must be an object');
       } else {
@@ -407,6 +410,197 @@ export function validateBenchmarkRunEnvelope(envelope) {
       if (telem.durationSeconds !== null && (typeof telem.durationSeconds !== 'number' || Number.isNaN(telem.durationSeconds) || telem.durationSeconds < 0)) {
         errors.push('executionTelemetry.durationSeconds must be a non-negative number or null');
       }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validates a role-based permissions profile conforming to schemas/permissions-profile.schema.json
+ * and enforces Default-Deny least-privilege security boundaries.
+ *
+ * @param {object} profile - Parsed permissions profile object
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validatePermissionsProfile(profile) {
+  const errors = [];
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    return { valid: false, errors: ['Permissions profile must be a non-null object'] };
+  }
+
+  if (profile.schemaVersion !== '1' && profile.schemaVersion !== '1.0.0') {
+    errors.push(`Invalid or missing schemaVersion: expected '1' or '1.0.0', got '${profile.schemaVersion}'`);
+  }
+
+  if (typeof profile.profileName !== 'string' || !profile.profileName.trim()) {
+    errors.push('Missing or empty profileName');
+  }
+
+  // 1. Validate defenseInDepth specification (4 layers)
+  if (!profile.defenseInDepth || typeof profile.defenseInDepth !== 'object') {
+    errors.push('Missing defenseInDepth specification object');
+  } else {
+    const did = profile.defenseInDepth;
+    const requiredLayers = [
+      'layer1_terminal_sandbox',
+      'layer2_permission_engine',
+      'layer3_shadow_context_guard',
+      'layer4_deterministic_tcb'
+    ];
+    for (const l of requiredLayers) {
+      if (!did[l] || typeof did[l] !== 'object') {
+        errors.push(`Missing or invalid defenseInDepth layer: '${l}'`);
+      } else {
+        if (typeof did[l].boundary !== 'string' || !did[l].boundary.trim()) {
+          errors.push(`defenseInDepth.${l}.boundary must be a non-empty string`);
+        }
+        if (typeof did[l].objective !== 'string' || !did[l].objective.trim()) {
+          errors.push(`defenseInDepth.${l}.objective must be a non-empty string`);
+        }
+      }
+    }
+    if (did.layer2_permission_engine && (typeof did.layer2_permission_engine.precedence !== 'string' || !did.layer2_permission_engine.precedence.trim())) {
+      errors.push('defenseInDepth.layer2_permission_engine.precedence must be a non-empty string');
+    }
+    if (did.layer3_shadow_context_guard && (typeof did.layer3_shadow_context_guard.hook !== 'string' || !did.layer3_shadow_context_guard.hook.trim())) {
+      errors.push('defenseInDepth.layer3_shadow_context_guard.hook must be a non-empty string');
+    }
+    if (did.layer4_deterministic_tcb && (typeof did.layer4_deterministic_tcb.module !== 'string' || !did.layer4_deterministic_tcb.module.trim())) {
+      errors.push('defenseInDepth.layer4_deterministic_tcb.module must be a non-empty string');
+    }
+  }
+
+  // 2. Validate roles presence and structure
+  const REQUIRED_ROLES = ['coordinator', 'discovery', 'verifiers', 'remediation'];
+  if (!profile.roles || typeof profile.roles !== 'object') {
+    errors.push('Missing roles object');
+  } else {
+    for (const roleName of REQUIRED_ROLES) {
+      const role = profile.roles[roleName];
+      if (!role || typeof role !== 'object') {
+        errors.push(`Missing required role definition: '${roleName}'`);
+        continue;
+      }
+      if (!Array.isArray(role.allow) || !role.allow.every(item => typeof item === 'string')) {
+        errors.push(`role.${roleName}.allow must be an array of strings`);
+      }
+      if (!Array.isArray(role.ask) || !role.ask.every(item => typeof item === 'string')) {
+        errors.push(`role.${roleName}.ask must be an array of strings`);
+      }
+      if (!Array.isArray(role.deny) || !role.deny.every(item => typeof item === 'string')) {
+        errors.push(`role.${roleName}.deny must be an array of strings`);
+      }
+    }
+  }
+
+  // If structural validation failed on roles, return early before checking permissions
+  if (errors.length > 0 && (!profile.roles || typeof profile.roles !== 'object')) {
+    return { valid: false, errors };
+  }
+
+  const roles = profile.roles || {};
+
+  // Helpers to test tool properties
+  const isWriteTool = (perm) => perm.startsWith('write_to_file') || perm.startsWith('replace_file_content');
+  const isNetworkTool = (perm) => perm === 'read_url_content' || perm === 'search_web' || perm.startsWith('read_url') || perm.startsWith('run_command:curl') || perm.startsWith('run_command:wget') || perm.includes('curl ') || perm.includes('wget ');
+  const isCommandTool = (perm) => perm.startsWith('run_command');
+  const isSubagentTool = (perm) => perm === 'invoke_subagent' || perm === 'manage_subagents';
+
+  // 3. Default-Deny boundary assertions
+
+  // Discovery Role Assertions
+  const disc = roles.discovery;
+  if (disc && Array.isArray(disc.allow)) {
+    if (disc.allow.some(isWriteTool)) {
+      errors.push("Role 'discovery' must NOT allow file write or modify tools (Default-Deny violation)");
+    }
+    if (disc.allow.some(isNetworkTool)) {
+      errors.push("Role 'discovery' must NOT allow network or web search tools (Default-Deny violation)");
+    }
+    if (disc.allow.some(isCommandTool)) {
+      errors.push("Role 'discovery' must NOT allow command execution (Default-Deny violation)");
+    }
+    if (disc.allow.some(isSubagentTool)) {
+      errors.push("Role 'discovery' must NOT allow subagent management or invocation (Default-Deny violation)");
+    }
+  }
+
+  // Verifiers Role Assertions
+  const verifiers = roles.verifiers;
+  if (verifiers && Array.isArray(verifiers.allow)) {
+    if (verifiers.allow.some(isWriteTool)) {
+      errors.push("Role 'verifiers' must NOT allow file write or modify tools (Default-Deny violation)");
+    }
+    if (verifiers.allow.some(isNetworkTool)) {
+      errors.push("Role 'verifiers' must NOT allow network or web search tools (Default-Deny violation)");
+    }
+    if (verifiers.allow.some(isCommandTool)) {
+      errors.push("Role 'verifiers' must NOT allow command execution (Default-Deny violation)");
+    }
+    if (verifiers.allow.some(isSubagentTool)) {
+      errors.push("Role 'verifiers' must NOT allow subagent management or invocation (Default-Deny violation)");
+    }
+  }
+
+  // Coordinator Role Assertions
+  const coord = roles.coordinator;
+  if (coord && Array.isArray(coord.allow)) {
+    if (coord.allow.some(isNetworkTool)) {
+      errors.push("Role 'coordinator' must NOT allow network egress tools (Default-Deny violation)");
+    }
+    if (coord.allow.some(isWriteTool)) {
+      errors.push("Role 'coordinator' must NOT allow direct file modification tools (Default-Deny violation)");
+    }
+    // Assert coordinator commands are bounded, not arbitrary shell execution
+    const arbitraryCommands = coord.allow.filter(perm => perm === 'run_command' || perm === 'run_command:*' || perm === 'run_command:bash *' || perm === 'run_command:sh *' || perm === 'run_command:pwsh *' || perm === 'run_command:cmd *');
+    if (arbitraryCommands.length > 0) {
+      errors.push("Role 'coordinator' must NOT allow arbitrary unconstrained shell commands (Default-Deny violation)");
+    }
+  }
+  if (coord && Array.isArray(coord.deny)) {
+    const coordDenySet = new Set(coord.deny);
+    if (!coordDenySet.has('read_url_content') || !coordDenySet.has('search_web')) {
+      errors.push("Role 'coordinator' must explicitly deny network access ('read_url_content', 'search_web')");
+    }
+    if (!coordDenySet.has('write_to_file') || !coordDenySet.has('replace_file_content')) {
+      errors.push("Role 'coordinator' must explicitly deny write tools ('write_to_file', 'replace_file_content')");
+    }
+    if (!coord.deny.some(perm => perm.includes('git push'))) {
+      errors.push("Role 'coordinator' must explicitly deny 'git push' commands");
+    }
+  }
+
+  // Remediation Role Assertions
+  const rem = roles.remediation;
+  if (rem && Array.isArray(rem.deny)) {
+    const deniesGithub = rem.deny.some(perm => perm.includes('.github'));
+    const deniesGit = rem.deny.some(perm => perm.includes('.git'));
+    const deniesGitPush = rem.deny.some(perm => perm.includes('git push'));
+    const deniesNetwork = rem.deny.some(perm => perm === 'read_url_content' || perm === 'search_web' || perm.includes('curl') || perm.includes('wget'));
+
+    if (!deniesGithub) {
+      errors.push("Role 'remediation' must explicitly deny CI/CD manifest modification ('.github/*')");
+    }
+    if (!deniesGit) {
+      errors.push("Role 'remediation' must explicitly deny git metadata modification ('.git/*')");
+    }
+    if (!deniesGitPush) {
+      errors.push("Role 'remediation' must explicitly deny remote repository mutation ('git push')");
+    }
+    if (!deniesNetwork) {
+      errors.push("Role 'remediation' must explicitly deny network egress (curl, wget, read_url_content)");
+    }
+  }
+  if (rem && Array.isArray(rem.allow)) {
+    if (rem.allow.some(isNetworkTool)) {
+      errors.push("Role 'remediation' must NOT allow network egress tools (Default-Deny violation)");
+    }
+    if (rem.allow.some(perm => perm === 'run_command' || perm === 'run_command:*')) {
+      errors.push("Role 'remediation' must NOT allow arbitrary command execution (Default-Deny violation)");
     }
   }
 

@@ -40,6 +40,34 @@ Uses conjunctive logic to prevent a 2-to-1 democratic vote from overriding a con
 
 ---
 
+## 4-Layer Defense-in-Depth Execution Model & Sandbox Policy
+
+Auditing untrusted source code requires multi-layered defense to prevent prompt injection, path traversal, unauthorized tool invocation, and host compromise. The plugin enforces a cohesive four-layer defense model:
+
+| Layer | Component | Boundary & Mechanism | Security Objective |
+| :--- | :--- | :--- | :--- |
+| **Layer 1** | **Terminal Sandbox**<br>`agy --sandbox` | OS-level container / namespaces / seatbelt isolation | Blocks arbitrary shell command execution, malicious network egress, and persistent filesystem corruption from untrusted audited code. |
+| **Layer 2** | **Permission Engine**<br>`recommended-security-audit-permissions.json` | AGY CLI runtime tool dispatch (`deny > ask > allow`) | Enforces role-based least privilege (`coordinator`, `discovery`, `verifiers`, `remediation`), preventing subagents from invoking unauthorized tools or exfiltrating data. |
+| **Layer 3** | **Shadow Context Guard**<br>`hooks/shadow-context-guard.mjs` | PreToolUse lifecycle hook | Transparently redirects file reads to sanitized shadow copies under `scratch/context/`, blocking symlink traversal (CWE-59) escaping repository boundaries. |
+| **Layer 4** | **Deterministic TCB**<br>`path-containment.mjs` | Atomic file descriptor verification (`fs.openSync` + `fs.fstatSync`) | Eliminates filesystem race conditions (TOCTOU) and sibling-prefix path collisions (e.g. `scratch/context-evil`). |
+
+### Recommended Permission Profile Usage
+
+To run security audits under production-grade least privilege, launch Antigravity with the terminal sandbox enabled:
+
+```bash
+# Execute security audit under OS sandbox and role-based permissions
+agy --sandbox "audit this repository for security vulnerabilities"
+```
+
+The role permissions defined in `recommended-security-audit-permissions.json` enforce:
+- **`coordinator`**: Allowed orchestration tools (`invoke_subagent`, `send_message`, `run_command:node skills/security-audit/scripts/*`); asked on `run_command:git *`; strictly denied network egress (`read_url_content`, `search_web`, `curl`, `wget`) and write operations.
+- **`discovery`**: Read-only exploration (`view_file`, `list_dir`, `grep_search`, `find_by_name`); strictly denied all write tools, network tools, and command executions.
+- **`verifiers`**: Read-only 3-Lens verification panel; strictly denied all write tools, command executions, and network access.
+- **`remediation`**: Surgical patch generation in isolated scratch workspaces; asked on `write_to_file`; strictly denied CI/CD manifests (`.github/*`), git metadata (`.git/*`), remote pushing (`git push`), and network egress.
+
+---
+
 ## Directory Structure
 
 ```text
@@ -49,6 +77,7 @@ security-audit/
 ├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
 ├── hooks/                                # Lifecycle hook implementations
 │   └── shadow-context-guard.mjs          # PreToolUse fail-closed deny with redirection to scratch/context/
+├── recommended-security-audit-permissions.json # Role-based permissions profile under AGY Default-Deny
 ├── SECURITY.md                           # Honest trust model and sandbox boundary disclosure
 ├── agents/                               # Dedicated subagent definitions (at plugin root)
 │   ├── threat-modeler.md                 # Threat-modeling specialist
@@ -74,7 +103,8 @@ security-audit/
 │   ├── canonical-finding.schema.json     # Canonical authoritative-finding schema (Taxonomy & Reason Code)
 │   ├── execution-attestation.schema.json # Execution-attestation schema (stage-coverage completeness)
 │   ├── audit-baseline.schema.json        # Audit-baseline schema (historical state baseline)
-│   └── empirical-benchmark-run.schema.json # Empirical benchmark run envelope schema
+│   ├── empirical-benchmark-run.schema.json # Empirical benchmark run envelope schema
+│   └── permissions-profile.schema.json  # Role-based permissions profile schema
 ├── rules/
 │   └── AGENTS.md                         # Global zero-trust and data-review boundary rules
 └── skills/

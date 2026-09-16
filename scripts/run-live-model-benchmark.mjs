@@ -281,6 +281,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       toolsUsed: ['view_file'],
       subagentsInvoked: [],
       permissionMode: 'always-proceed',
+      sandboxEnabled: Boolean(options.sandbox),
       tokenUsage: {
         inputTokens: 500,
         outputTokens: 120,
@@ -319,6 +320,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       '--output-format', 'stream-json',
       '--json-schema', schemaPath
     ];
+    if (options.sandbox) {
+      agyArgs.push('--sandbox');
+    }
     if (modelId) {
       agyArgs.push('--model', modelId);
     }
@@ -378,6 +382,10 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       } catch (err) {
         schemaError = `STREAM_JSON_PARSE_ERROR: ${trace.error || err.message}`;
       }
+    }
+
+    if (executionTelemetry) {
+      executionTelemetry.sandboxEnabled = Boolean(options.sandbox);
     }
 
     if (parsedOutput) {
@@ -732,6 +740,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   console.log(`  Evaluation Passes (N): ${passes}`);
   console.log(`  Target Fixtures:       ${targetFixtures.length} (${vulnerableFixtures.length} vuln${options.includeSafe ? ', ' + safeFixtures.length + ' safe controls' : ''})`);
   console.log(`  Throttle Delay:        ${delayMs}ms`);
+  console.log(`  Sandbox Mode:          ${options.sandbox ? 'ENABLED (--sandbox)' : 'DISABLED'}`);
   if (outDir) {
     console.log(`  Output Directory:      ${outDir}`);
   }
@@ -808,6 +817,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         toolsUsed: allToolsUsed,
         subagentsInvoked: allSubagents,
         permissionMode: primary.permissionMode || 'always-proceed',
+        sandboxEnabled: Boolean(options.sandbox),
         tokenUsage: aggregatedTokens,
         durationSeconds: totalDuration
       };
@@ -821,6 +831,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         toolsUsed: ['view_file'],
         subagentsInvoked: [],
         permissionMode: 'always-proceed',
+        sandboxEnabled: Boolean(options.sandbox),
         tokenUsage: {
           inputTokens: 100,
           outputTokens: 50,
@@ -1000,6 +1011,7 @@ Options:
   --report <path>      Path to write formal Markdown empirical baseline report
   --delay-ms <ms>      Throttle delay between fixture dispatches in milliseconds (default: 1000)
   --timeout <ms>       Execution timeout per fixture in milliseconds (default: 120000)
+  --sandbox            Enable OS terminal sandbox (passes --sandbox to agy)
   --mock, --dry-run    Run with simulated fixture candidate generator (offline CI mode)
   --help, -h           Show this help message
 `);
@@ -1023,6 +1035,7 @@ Options:
   const delayArg = getArg('--delay-ms') || getArg('--delay');
   const delayMs = delayArg ? parseInt(delayArg, 10) : undefined;
   const isMock = args.includes('--mock') || args.includes('--dry-run');
+  const isSandbox = args.includes('--sandbox');
 
   const defaultOutDir = (passes > 1 && !isMock && !outFile)
     ? (isHoldout ? 'evals/holdout-live-runs' : 'evals/live-runs')
@@ -1045,6 +1058,7 @@ Options:
       timeoutMs,
       delayMs,
       mock: isMock,
+      sandbox: isSandbox,
       outDir: effectiveOutDir,
       reportPath
     });

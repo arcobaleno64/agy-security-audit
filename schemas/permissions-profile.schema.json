@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/permissions-profile.schema.json",
+  "title": "AGY Security Audit Recommended Permissions Profile Schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "profileName",
+    "defenseInDepth",
+    "roles"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0", "1.0.0"] },
+    "profileName": { "type": "string", "enum": ["recommended-security-audit-permissions"] },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "defenseInDepth": {
+      "type": "object",
+      "required": [
+        "layer1_terminal_sandbox",
+        "layer2_permission_engine",
+        "layer3_shadow_context_guard",
+        "layer4_deterministic_tcb"
+      ],
+      "properties": {
+        "layer1_terminal_sandbox": {
+          "type": "object",
+          "required": ["boundary", "objective"],
+          "properties": {
+            "boundary": { "type": "string", "minLength": 1 },
+            "objective": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "layer2_permission_engine": {
+          "type": "object",
+          "required": ["boundary", "objective", "precedence"],
+          "properties": {
+            "boundary": { "type": "string", "minLength": 1 },
+            "objective": { "type": "string", "minLength": 1 },
+            "precedence": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "layer3_shadow_context_guard": {
+          "type": "object",
+          "required": ["boundary", "objective", "hook"],
+          "properties": {
+            "boundary": { "type": "string", "minLength": 1 },
+            "objective": { "type": "string", "minLength": 1 },
+            "hook": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "layer4_deterministic_tcb": {
+          "type": "object",
+          "required": ["boundary", "objective", "module"],
+          "properties": {
+            "boundary": { "type": "string", "minLength": 1 },
+            "objective": { "type": "string", "minLength": 1 },
+            "module": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "roles": {
+      "type": "object",
+      "required": [
+        "coordinator",
+        "discovery",
+        "verifiers",
+        "remediation"
+      ],
+      "properties": {
+        "coordinator": {
+          "type": "object",
+          "required": ["allow", "ask", "deny"],
+          "properties": {
+            "description": { "type": "string" },
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "ask": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "discovery": {
+          "type": "object",
+          "required": ["allow", "ask", "deny"],
+          "properties": {
+            "description": { "type": "string" },
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "ask": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "verifiers": {
+          "type": "object",
+          "required": ["allow", "ask", "deny"],
+          "properties": {
+            "description": { "type": "string" },
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "ask": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "remediation": {
+          "type": "object",
+          "required": ["allow", "ask", "deny"],
+          "properties": {
+            "description": { "type": "string" },
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "ask": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
