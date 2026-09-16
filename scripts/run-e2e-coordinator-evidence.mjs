@@ -314,7 +314,7 @@ export function createCoordinatorEvidenceEnvelope({
 export function resolveModelId(specifiedModel = null) {
   if (specifiedModel) return specifiedModel;
   if (process.env.AGY_MODEL) return process.env.AGY_MODEL;
-  return 'gemini-3.8-flash';
+  return 'gemini-3.8-flash-high';
 }
 
 /**
