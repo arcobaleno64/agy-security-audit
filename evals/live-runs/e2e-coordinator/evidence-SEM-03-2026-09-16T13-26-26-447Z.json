@@ -70,5 +70,14 @@
     "threeLensRequired": false,
     "reachedFinalization": false
   },
-  "envelopeDigest": "08f7f49225c20ca06e7a2ad3cd08be0b3a67b669d6974cf5e6f5c9f6591d4a8f"
+  "envelopeDigest": "62a7509e499aa10a219e6cba6a5aaf6cafb56658fbfdaf3751d10202af5a00ab",
+  "canonicalizationAlgorithm": "AGY-SA-C14N-v1",
+  "executionLane": "FUNCTIONAL_SKIP_PERMISSIONS",
+  "finalizer": {
+    "invoked": false,
+    "completed": false,
+    "exitStatus": null,
+    "artifactPath": null,
+    "artifactDigest": null
+  }
 }
