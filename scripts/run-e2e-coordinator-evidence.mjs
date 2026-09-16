@@ -7,10 +7,15 @@
  * to orchestrate threat modeling, discovery, and 3-lens verification against
  * a controlled fixture, producing reproducible, integrity-hashed evidence envelopes.
  *
+ * Canonicalization Specification:
+ *   - Algorithm: AGY-SA-C14N-v1
+ *   - Recursive lexicographical key sorting across all nested objects and arrays.
+ *   - SHA-256 cryptographic binding over normalized JSON representation.
+ *
  * Evidence Claim Hierarchy:
  *   - COORDINATOR_ORCHESTRATION_OBSERVED: Proves coordinator native mount and initial dispatch (Smoke).
  *   - FULL_PIPELINE_E2E_OBSERVED: Proves complete pipeline: threat modeling, discovery,
- *     conditional 3-lens verifier panel, and deterministic finalizer invocation.
+ *     conditional 3-lens verifier panel, and verified finalizer execution.
  */
 
 import fs from 'node:fs';
@@ -29,10 +34,49 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '..');
 
+export const CANONICALIZATION_ALGORITHM = 'AGY-SA-C14N-v1';
+
 export const CLAIM_TYPES = {
   ORCHESTRATION: 'COORDINATOR_ORCHESTRATION_OBSERVED',
   FULL_PIPELINE: 'FULL_PIPELINE_E2E_OBSERVED'
 };
+
+export const EXECUTION_LANES = {
+  FUNCTIONAL: 'FUNCTIONAL_SKIP_PERMISSIONS',
+  POLICY: 'POLICY_ENFORCED'
+};
+
+/**
+ * Recursively canonicalizes an object or array by sorting all keys lexicographically (AGY-SA-C14N-v1).
+ * @param {*} value - Target data to canonicalize.
+ * @returns {*} Canonical deep copy with sorted keys.
+ */
+export function canonicalize(value) {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  const sortedKeys = Object.keys(value).sort();
+  const result = {};
+  for (const key of sortedKeys) {
+    result[key] = canonicalize(value[key]);
+  }
+  return result;
+}
+
+/**
+ * Computes deterministic SHA-256 digest of canonicalized envelope data.
+ * @param {object} envelopeData - Envelope object excluding envelopeDigest itself.
+ * @returns {string} Hex SHA-256 hash.
+ */
+export function computeEnvelopeDigest(envelopeData) {
+  const { envelopeDigest, ...rest } = envelopeData;
+  const canonicalObj = canonicalize(rest);
+  const canonicalJson = JSON.stringify(canonicalObj, null, 2);
+  return crypto.createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
+}
 
 /**
  * Validates whether an AGY stream-json trace or transcript demonstrates coordinator orchestration.
@@ -40,13 +84,15 @@ export const CLAIM_TYPES = {
  * @param {string|null} conversationId - Optional conversation ID to probe disk transcript.
  * @param {string} targetClaim - Targeted claim type (ORCHESTRATION or FULL_PIPELINE).
  * @param {number|null} candidateCount - Optional candidate finding count for conditional 3-lens check.
+ * @param {string} repoRoot - Target repository root for checking finalizer artifacts.
  * @returns {object} Validation result and detailed audit metrics.
  */
 export function validateCoordinatorTrace(
   input,
   conversationId = null,
   targetClaim = CLAIM_TYPES.FULL_PIPELINE,
-  candidateCount = null
+  candidateCount = null,
+  repoRoot = DEFAULT_REPO_ROOT
 ) {
   let events = [];
   let rawNdjson = '';
@@ -70,9 +116,15 @@ export function validateCoordinatorTrace(
 
   const subagentInvocations = [];
   const toolsUsed = new Set();
-  let reachedFinalization = false;
   let coordinatorDispatched = false;
   let discoveredConversationId = conversationId;
+  let observedPermissionMode = null;
+
+  let finalizerInvoked = false;
+  let finalizerCompleted = false;
+  let finalizerArtifactPath = null;
+  let finalizerArtifactDigest = null;
+  let finalizerExitStatus = null;
 
   // 1. Process stream events
   for (const ev of events) {
@@ -83,6 +135,9 @@ export function validateCoordinatorTrace(
       }
       if (!discoveredConversationId && (initObj.conversation_id || initObj.conversationId)) {
         discoveredConversationId = initObj.conversation_id || initObj.conversationId;
+      }
+      if (initObj.permission_mode || initObj.permissionMode) {
+        observedPermissionMode = initObj.permission_mode || initObj.permissionMode;
       }
     }
 
@@ -122,11 +177,15 @@ export function validateCoordinatorTrace(
         }
       }
 
-      // Strict check: only exact finalize-scan.mjs script execution constitutes finalization
+      // Finalizer tracking
       if (toolName === 'run_command') {
         const cmd = callArgs?.CommandLine || callArgs?.command || '';
         if (typeof cmd === 'string' && cmd.includes('finalize-scan.mjs')) {
-          reachedFinalization = true;
+          finalizerInvoked = true;
+          // Inspect if tool execution step explicitly signaled error
+          if (step.state === 'DONE' && step.status !== 'ERROR') {
+            finalizerExitStatus = 0;
+          }
         }
       }
     }
@@ -179,7 +238,10 @@ export function validateCoordinatorTrace(
                 if (name === 'run_command') {
                   const cmd = args.CommandLine || args.command || '';
                   if (typeof cmd === 'string' && cmd.includes('finalize-scan.mjs')) {
-                    reachedFinalization = true;
+                    finalizerInvoked = true;
+                    if (stepObj.status === 'DONE') {
+                      finalizerExitStatus = 0;
+                    }
                   }
                 }
               }
@@ -190,7 +252,33 @@ export function validateCoordinatorTrace(
     }
   }
 
-  // 3. Evaluate criteria based on target claim tier
+  // 3. Check for physical canonical finalizer artifact on disk
+  const candidateArtifactPaths = [
+    path.join(repoRoot, 'scratch', 'scan-manifest.json'),
+    path.join(repoRoot, 'scratch', 'security-audit.sarif'),
+    path.join(repoRoot, 'scratch', 'canonical-findings.json')
+  ];
+
+  for (const artPath of candidateArtifactPaths) {
+    if (fs.existsSync(artPath)) {
+      try {
+        const content = fs.readFileSync(artPath, 'utf8');
+        const parsed = JSON.parse(content);
+        // Ensure manifest is complete if scan-manifest
+        if (artPath.endsWith('scan-manifest.json') && parsed.complete !== true) {
+          continue;
+        }
+        finalizerArtifactPath = path.relative(repoRoot, artPath).replace(/\\/g, '/');
+        finalizerArtifactDigest = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+        if (finalizerInvoked) {
+          finalizerCompleted = true;
+        }
+        break;
+      } catch {}
+    }
+  }
+
+  // 4. Evaluate criteria based on target claim tier
   let valid = false;
   let missingSubagents = [];
   let matchedRequired = [];
@@ -204,14 +292,12 @@ export function validateCoordinatorTrace(
     valid = coordinatorDispatched && matchedRequired.length >= 1;
     missingSubagents = matchedRequired.length === 0 ? ['threat-modeler-or-discovery'] : [];
   } else {
-    // Full Pipeline tier: threat-modeler + discovery-agent + conditional 3-lens + finalizer
+    // Full Pipeline tier: threat-modeler + discovery-agent + conditional 3-lens + verified finalizer completion
     const baseRoles = ['threat-modeler', 'discovery-agent'];
     const matchedBase = baseRoles.filter(req =>
       subagentInvocations.some(inv => inv && inv.toLowerCase().includes(req))
     );
 
-    // Conditional 3-lens: If candidates exist (>0 or unstated), 3-lens panel is mandatory.
-    // If candidateCount === 0 (clean/safe component), verifier panel is not required under Default-Deny.
     const isCleanComponent = candidateCount === 0;
     threeLensRequired = !isCleanComponent;
 
@@ -231,7 +317,7 @@ export function validateCoordinatorTrace(
 
     valid = coordinatorDispatched &&
             missingSubagents.length === 0 &&
-            reachedFinalization === true;
+            finalizerCompleted === true;
   }
 
   const traceDigest = crypto.createHash('sha256').update(rawNdjson, 'utf8').digest('hex');
@@ -241,18 +327,25 @@ export function validateCoordinatorTrace(
     targetClaim,
     coordinatorDispatched,
     conversationId: discoveredConversationId,
+    observedPermissionMode,
     toolsUsed: Array.from(toolsUsed),
     subagentInvocations,
     matchedRequiredSubagents: matchedRequired,
     missingSubagents,
     threeLensRequired,
-    reachedFinalization,
+    finalizer: {
+      invoked: finalizerInvoked,
+      completed: finalizerCompleted,
+      exitStatus: finalizerExitStatus,
+      artifactPath: finalizerArtifactPath,
+      artifactDigest: finalizerArtifactDigest
+    },
     traceDigest
   };
 }
 
 /**
- * Creates an integrity-hashed E2E Coordinator Evidence Envelope.
+ * Creates an integrity-hashed E2E Coordinator Evidence Envelope with AGY-SA-C14N-v1.
  */
 export function createCoordinatorEvidenceEnvelope({
   fixtureId,
@@ -262,6 +355,7 @@ export function createCoordinatorEvidenceEnvelope({
   rawTraceDigest,
   rawTraceRelativePath = null,
   targetClaim = CLAIM_TYPES.FULL_PIPELINE,
+  executionLane = EXECUTION_LANES.FUNCTIONAL,
   extraMetadata = {}
 }) {
   const isPublicationGrade = !environment.toolDirty && validation.valid;
@@ -272,6 +366,8 @@ export function createCoordinatorEvidenceEnvelope({
     targetClaim,
     evidenceGrade: isPublicationGrade ? 'PUBLICATION_GRADE' : 'DEVELOPMENT_SMOKE',
     publicationEligible: isPublicationGrade,
+    executionLane,
+    canonicalizationAlgorithm: CANONICALIZATION_ALGORITHM,
     recordedAt: new Date().toISOString(),
     environment,
     fixture: {
@@ -281,11 +377,18 @@ export function createCoordinatorEvidenceEnvelope({
     traceSummary: {
       coordinatorDispatched: traceSummary.coordinatorDispatched,
       conversationId: traceSummary.conversationId,
+      observedPermissionMode: traceSummary.observedPermissionMode || null,
       toolsUsed: traceSummary.toolsUsed,
       subagentInvocations: traceSummary.subagentInvocations,
-      reachedFinalization: traceSummary.reachedFinalization,
       tokenUsage: traceSummary.tokenUsage || {},
       durationSeconds: traceSummary.durationSeconds || null
+    },
+    finalizer: validation.finalizer || {
+      invoked: false,
+      completed: false,
+      exitStatus: null,
+      artifactPath: null,
+      artifactDigest: null
     },
     traceArtifact: {
       relativePath: rawTraceRelativePath,
@@ -296,15 +399,11 @@ export function createCoordinatorEvidenceEnvelope({
       targetClaim: validation.targetClaim,
       matchedRequiredSubagents: validation.matchedRequiredSubagents,
       missingSubagents: validation.missingSubagents,
-      threeLensRequired: validation.threeLensRequired,
-      reachedFinalization: validation.reachedFinalization
+      threeLensRequired: validation.threeLensRequired
     }
   };
 
-  const canonicalJson = JSON.stringify(envelope, Object.keys(envelope).sort(), 2);
-  const envelopeDigest = crypto.createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
-  envelope.envelopeDigest = envelopeDigest;
-
+  envelope.envelopeDigest = computeEnvelopeDigest(envelope);
   return envelope;
 }
 
@@ -332,7 +431,9 @@ export function executeLiveCoordinatorAudit({
 }) {
   const resolvedModel = resolveModelId(modelId);
   const env = probeEnvironment(repoRoot, { modelId: resolvedModel, modelProvider: 'google' });
-  console.log(`[E2E-COORDINATOR] Launching Live Coordinator Audit: Fixture=${fixtureId}, Claim=${targetClaim}, Model=${env.modelId}, PolicyEnforcement=${policyEnforcement}`);
+  const executionLane = policyEnforcement ? EXECUTION_LANES.POLICY : EXECUTION_LANES.FUNCTIONAL;
+
+  console.log(`[E2E-COORDINATOR] Launching Live Coordinator Audit: Fixture=${fixtureId}, Claim=${targetClaim}, Model=${env.modelId}, Lane=${executionLane}`);
 
   // Resolve fixture file
   const semanticGtPath = path.join(repoRoot, 'evals', 'semantic-benchmark', 'ground-truth.json');
@@ -381,7 +482,6 @@ export function executeLiveCoordinatorAudit({
   ];
   if (sandbox) agyArgs.push('--sandbox');
   if (!policyEnforcement) {
-    // Functional lane: Auto-approves tool authorizations in headless batch execution
     agyArgs.push('--dangerously-skip-permissions');
   }
   agyArgs.push('--model', resolvedModel);
@@ -406,10 +506,20 @@ export function executeLiveCoordinatorAudit({
 
   console.log(`[E2E-COORDINATOR] Process completed with exit code ${proc.status ?? (proc.error ? 1 : 0)} in ${durationSeconds.toFixed(1)}s`);
 
+  // Detect candidates from scratch if available
+  let candidateCount = null;
+  const manifestPath = path.join(repoRoot, 'scratch', 'scan-manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const parsedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      candidateCount = parsedManifest.findings?.length ?? parsedManifest.candidateCount ?? null;
+    } catch {}
+  }
+
   // Parse telemetry
   const parsedTrace = parseStreamJsonTrace(stdout);
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
-  const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim);
+  const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot);
 
   fs.mkdirSync(outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -429,9 +539,9 @@ export function executeLiveCoordinatorAudit({
     traceSummary: {
       coordinatorDispatched: validation.coordinatorDispatched,
       conversationId: validation.conversationId || discoveredConvId,
+      observedPermissionMode: validation.observedPermissionMode,
       toolsUsed: validation.toolsUsed,
       subagentInvocations: validation.subagentInvocations,
-      reachedFinalization: validation.reachedFinalization,
       tokenUsage: parsedTrace.telemetry?.tokenUsage || {},
       durationSeconds
     },
@@ -439,6 +549,7 @@ export function executeLiveCoordinatorAudit({
     rawTraceDigest,
     rawTraceRelativePath: path.join('evals', 'live-runs', 'e2e-coordinator', traceFilename).replace(/\\/g, '/'),
     targetClaim,
+    executionLane,
     extraMetadata: { fixture: fixtureInfo }
   });
 
@@ -479,7 +590,7 @@ Options:
   --claim=<type>          Target claim: 'orchestration' (smoke) or 'full-pipeline' (default: orchestration)
   --policy-enforcement    Run under policy enforcement lane (no skip permissions)
   --dry-run               Verify harness logic, trace parser, and envelope hashing
-  --model=<id>            Specify LLM model ID for AGY CLI (default: gemini-3.8-flash)
+  --model=<id>            Specify LLM model ID for AGY CLI (default: gemini-3.8-flash-high)
   --timeout=<ms>          Timeout per run in milliseconds (default: 420000)
   --help, -h              Show this help message
 `);
@@ -513,27 +624,32 @@ Options:
       process.exit(1);
     }
 
-    // 2. Test Full Pipeline Claim with False Positive Finalization Rejection
-    const prematureTrace = [
-      { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-premature' } },
+    // 2. Test Finalizer Invoked vs Completed distinction
+    const invOnlyTrace = [
+      { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-inv-only' } },
       {
         step_update: {
           tool_calls: [
             {
               name: 'run_command',
-              args: { CommandLine: 'node skills/security-audit/scripts/build-inventory.mjs --output-manifest scratch/scan-manifest.json' }
+              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
             }
           ]
         }
       }
     ];
-    const prematureVal = validateCoordinatorTrace(prematureTrace, null, CLAIM_TYPES.FULL_PIPELINE);
-    if (prematureVal.reachedFinalization) {
-      console.error('❌ Dry-run regression: scan-manifest.json falsely triggered finalization');
+    // With non-existent artifact, finalizerCompleted must be false
+    const invOnlyVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, path.join(DEFAULT_REPO_ROOT, 'scratch', 'non-existent-dir'));
+    if (!invOnlyVal.finalizer.invoked) {
+      console.error('❌ Dry-run: finalizerInvoked was false');
+      process.exit(1);
+    }
+    if (invOnlyVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true without valid artifact');
       process.exit(1);
     }
 
-    // 3. Test Full Pipeline Claim with Valid 3-Lens and Strict Finalizer
+    // 3. Test Full Pipeline Claim with Valid 3-Lens and Artifact Simulation
     const fullTrace = [
       { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-full' } },
       {
@@ -560,21 +676,28 @@ Options:
       }
     ];
 
-    const fullVal = validateCoordinatorTrace(fullTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1);
-    if (!fullVal.valid || !fullVal.reachedFinalization) {
+    // Mock artifact on scratch
+    const mockScratch = path.join(DEFAULT_REPO_ROOT, 'scratch', 'mock-test-harness');
+    fs.mkdirSync(mockScratch, { recursive: true });
+    const mockManifest = path.join(mockScratch, 'scratch', 'scan-manifest.json');
+    fs.mkdirSync(path.dirname(mockManifest), { recursive: true });
+    fs.writeFileSync(mockManifest, JSON.stringify({ complete: true, findings: [] }));
+
+    const fullVal = validateCoordinatorTrace(fullTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (!fullVal.valid || !fullVal.finalizer.completed) {
       console.error('❌ Dry-run full pipeline validation failed:', fullVal);
       process.exit(1);
     }
 
-    const envelope = createCoordinatorEvidenceEnvelope({
+    // 4. Test AGY-SA-C14N-v1 Recursive Mutation Resistance
+    const baseEnvelope = createCoordinatorEvidenceEnvelope({
       fixtureId: 'SEM-03-SYNTHETIC',
       environment: env,
       traceSummary: {
         coordinatorDispatched: fullVal.coordinatorDispatched,
         conversationId: fullVal.conversationId,
         toolsUsed: fullVal.toolsUsed,
-        subagentInvocations: fullVal.subagentInvocations,
-        reachedFinalization: fullVal.reachedFinalization
+        subagentInvocations: fullVal.subagentInvocations
       },
       validation: fullVal,
       rawTraceDigest: fullVal.traceDigest,
@@ -582,17 +705,32 @@ Options:
       targetClaim: CLAIM_TYPES.FULL_PIPELINE
     });
 
-    if (!envelope.envelopeDigest) {
-      console.error('❌ Dry-run envelope digest missing');
+    const d0 = baseEnvelope.envelopeDigest;
+    const dModelMut = computeEnvelopeDigest({ ...baseEnvelope, environment: { ...baseEnvelope.environment, modelId: 'MUTATED_MODEL' } });
+    const dTraceMut = computeEnvelopeDigest({ ...baseEnvelope, traceArtifact: { ...baseEnvelope.traceArtifact, sha256Digest: 'MUTATED_DIGEST' } });
+    const dFinalizerMut = computeEnvelopeDigest({ ...baseEnvelope, finalizer: { ...baseEnvelope.finalizer, artifactDigest: 'MUTATED_ART_DIGEST' } });
+
+    if (d0 === dModelMut) {
+      console.error('❌ C14N Mutation Failed: Mutating environment.modelId did NOT alter envelopeDigest');
+      process.exit(1);
+    }
+    if (d0 === dTraceMut) {
+      console.error('❌ C14N Mutation Failed: Mutating traceArtifact.sha256Digest did NOT alter envelopeDigest');
+      process.exit(1);
+    }
+    if (d0 === dFinalizerMut) {
+      console.error('❌ C14N Mutation Failed: Mutating finalizer.artifactDigest did NOT alter envelopeDigest');
       process.exit(1);
     }
 
-    console.log('✔ Dry-run harness self-test passed successfully across all claim tiers:', {
+    console.log('✔ Dry-run harness self-test passed successfully across all claim tiers & C14N mutation tests:', {
       smokeClaim: smokeVal.valid,
-      falsePositiveFinalizationPrevented: !prematureVal.reachedFinalization,
+      finalizerInvokedVsCompletedVerified: !invOnlyVal.finalizer.completed && fullVal.finalizer.completed,
       fullPipelineClaim: fullVal.valid,
-      envelopeDigest: envelope.envelopeDigest,
-      evidenceGrade: envelope.evidenceGrade
+      c14nMutationResistant: true,
+      canonicalizationAlgorithm: baseEnvelope.canonicalizationAlgorithm,
+      envelopeDigest: baseEnvelope.envelopeDigest,
+      evidenceGrade: baseEnvelope.evidenceGrade
     });
     process.exit(0);
   }
