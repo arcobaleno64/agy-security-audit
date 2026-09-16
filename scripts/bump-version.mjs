@@ -22,6 +22,10 @@ const JSON_TARGETS = [
   {
     file: "skills/security-audit/tool-integrity-manifest.json",
     values: [{ label: "toolVersion", get: (json) => json.toolVersion, set: (json, version) => { json.toolVersion = version; } }]
+  },
+  {
+    file: "recommended-security-audit-permissions.json",
+    values: [{ label: "version", get: (json) => json.version, set: (json, version) => { json.version = version; } }]
   }
 ];
 

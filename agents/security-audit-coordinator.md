@@ -3,7 +3,7 @@ name: security-audit-coordinator
 description: Primary security audit orchestrator coordinating threat modeling, discovery, 3-lens verification, and deterministic finalization under Default-Deny.
 mainAgent: true
 subagent: false
-commandExecutionPolicy: allow-required
+commandExecutionPolicy: sandbox
 tools:
   - invoke_subagent
   - send_message

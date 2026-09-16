@@ -413,6 +413,26 @@ export function validateBenchmarkRunEnvelope(envelope) {
     }
   }
 
+  if (envelope.provenanceScope !== undefined) {
+    if (!envelope.provenanceScope || typeof envelope.provenanceScope !== 'object' || Array.isArray(envelope.provenanceScope)) {
+      errors.push('provenanceScope must be a non-null object');
+    } else {
+      const ps = envelope.provenanceScope;
+      if (ps.appliesToVersion !== undefined && typeof ps.appliesToVersion !== 'string') {
+        errors.push('provenanceScope.appliesToVersion must be a string');
+      }
+      if (ps.sourceRevision !== undefined && typeof ps.sourceRevision !== 'string' && ps.sourceRevision !== null) {
+        errors.push('provenanceScope.sourceRevision must be a string or null');
+      }
+      if (ps.isHistoricalBaseline !== undefined && typeof ps.isHistoricalBaseline !== 'boolean') {
+        errors.push('provenanceScope.isHistoricalBaseline must be a boolean');
+      }
+      if (ps.runtimeCapabilities !== undefined && (!Array.isArray(ps.runtimeCapabilities) || !ps.runtimeCapabilities.every(c => typeof c === 'string'))) {
+        errors.push('provenanceScope.runtimeCapabilities must be an array of strings');
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors
@@ -824,6 +844,10 @@ export function createBenchmarkRunEnvelope(options = {}) {
     envelope.executionTelemetry = options.executionTelemetry;
   }
 
+  if (options.provenanceScope !== undefined) {
+    envelope.provenanceScope = options.provenanceScope;
+  }
+
   const validation = validateBenchmarkRunEnvelope(envelope);
   if (!validation.valid) {
     throw new Error(`Invalid benchmark run envelope: ${validation.errors.join('; ')}`);
@@ -901,3 +925,307 @@ if (isDirectExecution) {
     process.stdout.write(serialized + '\n');
   }
 }
+
+// -----------------------------------------------------------------------------
+// AGY Agent Contract Conformance & Native Frontmatter Validation
+// -----------------------------------------------------------------------------
+
+export const AGY_COMMAND_EXECUTION_POLICIES = Object.freeze(['off', 'auto', 'eager', 'sandbox']);
+
+export const EXPECTED_COORDINATOR_FILE = 'security-audit-coordinator.md';
+export const EXPECTED_COORDINATOR_NAME = 'security-audit-coordinator';
+export const EXPECTED_SUBAGENT_FILES = Object.freeze([
+  'discovery-agent.md',
+  'threat-modeler.md',
+  'verifier-reachability.md',
+  'verifier-defenses.md',
+  'verifier-impact.md'
+]);
+export const EXPECTED_SUBAGENT_NAMES = Object.freeze(
+  EXPECTED_SUBAGENT_FILES.map(f => f.replace(/\.md$/, ''))
+);
+export const ALL_EXPECTED_AGENT_FILES = Object.freeze([
+  EXPECTED_COORDINATOR_FILE,
+  ...EXPECTED_SUBAGENT_FILES
+].sort());
+
+/**
+ * Strips inline YAML comment while preserving '#' within quotes.
+ */
+function stripInlineComment(val) {
+  let inQuote = null;
+  for (let i = 0; i < val.length; i++) {
+    const ch = val[i];
+    if ((ch === '"' || ch === "'") && (i === 0 || val[i - 1] !== '\\')) {
+      if (inQuote === ch) inQuote = null;
+      else if (!inQuote) inQuote = ch;
+    } else if (ch === '#' && !inQuote) {
+      return val.slice(0, i).trim();
+    }
+  }
+  return val.trim();
+}
+
+/**
+ * Parses YAML frontmatter from an agent markdown file.
+ * Returns parsed object or null if frontmatter is absent or malformed.
+ */
+export function parseAgentFrontmatter(content) {
+  if (typeof content !== 'string') return null;
+  const sanitized = content.replace(/^\uFEFF/, '');
+  const match = sanitized.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return null;
+  const yamlText = match[1];
+  const lines = yamlText.split(/\r?\n/);
+  const result = {};
+  const seenKeys = new Set();
+  let currentKey = null;
+  let pendingEmptyKey = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // List item match: supports 0 or more leading spaces before '-'
+    const listMatch = line.match(/^\s*-\s+(.*)$/);
+    if (listMatch && currentKey) {
+      pendingEmptyKey = null;
+      if (!Array.isArray(result[currentKey])) {
+        result[currentKey] = [];
+      }
+      let rawVal = stripInlineComment(listMatch[1]);
+      if ((rawVal.startsWith('"') && rawVal.endsWith('"')) || (rawVal.startsWith("'") && rawVal.endsWith("'"))) {
+        rawVal = rawVal.slice(1, -1);
+      }
+      result[currentKey].push(rawVal);
+      continue;
+    }
+
+    const kvMatch = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
+    if (kvMatch) {
+      const key = kvMatch[1];
+      if (seenKeys.has(key)) {
+        // Fail-closed on duplicate mapping keys to prevent config smuggling
+        return null;
+      }
+      seenKeys.add(key);
+
+      if (pendingEmptyKey && pendingEmptyKey !== key) {
+        if (pendingEmptyKey !== 'tools' && Array.isArray(result[pendingEmptyKey]) && result[pendingEmptyKey].length === 0) {
+          result[pendingEmptyKey] = '';
+        }
+        pendingEmptyKey = null;
+      }
+
+      currentKey = key;
+      let rawVal = stripInlineComment(kvMatch[2]);
+
+      // Flow sequence support: e.g. [view_file, list_dir]
+      if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
+        const inner = rawVal.slice(1, -1).trim();
+        if (!inner) {
+          result[key] = [];
+        } else {
+          result[key] = inner.split(',').map(item => {
+            let s = item.trim();
+            if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+              s = s.slice(1, -1);
+            }
+            return s;
+          }).filter(Boolean);
+        }
+      } else if (rawVal === '') {
+        pendingEmptyKey = key;
+        result[key] = [];
+      } else if (rawVal === 'true') {
+        result[key] = true;
+      } else if (rawVal === 'false') {
+        result[key] = false;
+      } else if (!isNaN(Number(rawVal)) && rawVal !== '') {
+        result[key] = Number(rawVal);
+      } else {
+        let s = rawVal;
+        if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+          s = s.slice(1, -1);
+        }
+        result[key] = s;
+      }
+    }
+  }
+
+  if (pendingEmptyKey && pendingEmptyKey !== 'tools' && Array.isArray(result[pendingEmptyKey]) && result[pendingEmptyKey].length === 0) {
+    result[pendingEmptyKey] = '';
+  }
+
+  return result;
+}
+
+/**
+ * Validates a single agent contract against AGY agent specifications.
+ */
+export function validateAgentContract(agent, filename = '') {
+  const errors = [];
+  if (!agent || typeof agent !== 'object' || Array.isArray(agent)) {
+    return { valid: false, errors: ['Agent contract must be a non-null object'] };
+  }
+
+  if (typeof agent.name !== 'string' || !agent.name.trim()) {
+    errors.push('Missing or empty agent name');
+  }
+
+  if (!AGY_COMMAND_EXECUTION_POLICIES.includes(agent.commandExecutionPolicy)) {
+    errors.push(`Invalid commandExecutionPolicy: '${agent.commandExecutionPolicy}'. Expected one of ${AGY_COMMAND_EXECUTION_POLICIES.join(', ')}`);
+  }
+
+  if (typeof agent.mainAgent !== 'boolean') {
+    errors.push('agent.mainAgent must be a boolean');
+  }
+  if (typeof agent.subagent !== 'boolean') {
+    errors.push('agent.subagent must be a boolean');
+  }
+
+  if (agent.mainAgent === agent.subagent) {
+    errors.push('agent.mainAgent and agent.subagent cannot have the same boolean value');
+  }
+
+  const baseFilename = filename ? path.basename(filename) : '';
+  const isCoordinator = agent.name === EXPECTED_COORDINATOR_NAME ||
+    baseFilename === EXPECTED_COORDINATOR_FILE ||
+    agent.mainAgent === true;
+
+  if (isCoordinator) {
+    if (agent.name !== EXPECTED_COORDINATOR_NAME) {
+      errors.push(`Coordinator agent name must be '${EXPECTED_COORDINATOR_NAME}', got '${agent.name}'`);
+    }
+    if (baseFilename && baseFilename !== EXPECTED_COORDINATOR_FILE) {
+      errors.push(`Coordinator agent file must be named '${EXPECTED_COORDINATOR_FILE}', got '${baseFilename}'`);
+    }
+    if (agent.mainAgent !== true || agent.subagent !== false) {
+      errors.push('Coordinator agent must declare mainAgent: true and subagent: false');
+    }
+    if (agent.commandExecutionPolicy !== 'sandbox') {
+      errors.push(`Coordinator agent must declare commandExecutionPolicy: 'sandbox', got '${agent.commandExecutionPolicy}'`);
+    }
+    const requiredCoordinatorTools = ['invoke_subagent', 'send_message', 'manage_subagents', 'view_file', 'list_dir', 'run_command'];
+    if (!Array.isArray(agent.tools)) {
+      errors.push('Coordinator agent must declare tools array');
+    } else {
+      for (const t of requiredCoordinatorTools) {
+        if (!agent.tools.includes(t)) {
+          errors.push(`Coordinator agent tools missing required tool: '${t}'`);
+        }
+      }
+    }
+  } else {
+    // Subagent assertions under Default-Deny
+    if (agent.mainAgent !== false || agent.subagent !== true) {
+      errors.push(`Subagent '${agent.name || filename}' must declare mainAgent: false and subagent: true`);
+    }
+    if (agent.commandExecutionPolicy !== 'off') {
+      errors.push(`Subagent '${agent.name || filename}' must declare commandExecutionPolicy: 'off' (Default-Deny)`);
+    }
+    if (!EXPECTED_SUBAGENT_NAMES.includes(agent.name)) {
+      errors.push(`Unrecognized or unauthorized subagent name: '${agent.name}'`);
+    }
+    if (baseFilename) {
+      if (!baseFilename.endsWith('.md')) {
+        errors.push(`Subagent file must have .md extension, got '${baseFilename}'`);
+      } else {
+        const expectedFile = `${agent.name}.md`;
+        if (baseFilename !== expectedFile) {
+          errors.push(`Subagent file '${baseFilename}' does not match agent name '${agent.name}'`);
+        }
+      }
+    }
+    if (!Array.isArray(agent.tools)) {
+      errors.push(`Subagent '${agent.name || filename}' must declare tools array`);
+    } else {
+      const allowedSubagentTools = new Set(['view_file', 'list_dir', 'grep_search', 'find_by_name']);
+      for (const t of agent.tools) {
+        if (!allowedSubagentTools.has(t)) {
+          errors.push(`Subagent '${agent.name || filename}' allows prohibited tool: '${t}' (must be strictly read-only)`);
+        }
+        if (t === 'run_command' || t.startsWith('run_command') || t.includes('command') || t.includes('exec')) {
+          errors.push(`Subagent '${agent.name || filename}' violates Default-Deny: command execution tool '${t}' prohibited`);
+        }
+        if (t === 'write_to_file' || t === 'replace_file_content' || t.includes('write') || t.includes('replace')) {
+          errors.push(`Subagent '${agent.name || filename}' violates Default-Deny: write tool '${t}' prohibited`);
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validates all agent contracts within the agents directory.
+ */
+export function validateAllAgentContracts(agentsDir) {
+  const errors = [];
+  if (!fs.existsSync(agentsDir)) {
+    return { valid: false, errors: [`Agents directory does not exist: ${agentsDir}`] };
+  }
+  const files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md')).sort();
+  if (files.length === 0) {
+    return { valid: false, errors: ['No agent definition files found'] };
+  }
+
+  // Completeness check: all expected agent files must be present
+  for (const expected of ALL_EXPECTED_AGENT_FILES) {
+    if (!files.includes(expected)) {
+      errors.push(`Missing mandatory agent definition file: ${expected}`);
+    }
+  }
+
+  // Authorization check: no unexpected / extraneous agent files allowed in agents/
+  for (const f of files) {
+    if (!ALL_EXPECTED_AGENT_FILES.includes(f)) {
+      errors.push(`Unauthorized or unexpected agent definition file in agents/: ${f}`);
+    }
+  }
+
+  let mainAgentCount = 0;
+  let mainAgentName = null;
+  const verifiedAgents = [];
+
+  for (const f of files) {
+    const filePath = path.join(agentsDir, f);
+    const content = fs.readFileSync(filePath, 'utf8');
+    const parsed = parseAgentFrontmatter(content);
+    if (!parsed) {
+      errors.push(`Failed to parse frontmatter in agent file: ${f}`);
+      continue;
+    }
+
+    const singleRes = validateAgentContract(parsed, f);
+    if (!singleRes.valid) {
+      for (const err of singleRes.errors) {
+        errors.push(`[${f}] ${err}`);
+      }
+    }
+
+    if (parsed.mainAgent === true) {
+      mainAgentCount++;
+      mainAgentName = parsed.name || f;
+    }
+    verifiedAgents.push({ file: f, name: parsed.name, policy: parsed.commandExecutionPolicy });
+  }
+
+  if (mainAgentCount !== 1) {
+    errors.push(`Expected exactly ONE agent with mainAgent: true, found ${mainAgentCount}`);
+  }
+  if (mainAgentName !== EXPECTED_COORDINATOR_NAME) {
+    errors.push(`Expected mainAgent to be '${EXPECTED_COORDINATOR_NAME}', found '${mainAgentName}'`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    verifiedAgents
+  };
+}
+

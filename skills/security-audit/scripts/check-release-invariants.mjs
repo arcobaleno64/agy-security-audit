@@ -77,7 +77,7 @@ import { buildThreatModel, detectRepositoryInventory, generateDiscoveryMatrix } 
 import { HARDENED_GIT_ENV, getHardenedGitProvenance, resolveGitCommitRef } from './safe-git.mjs';
 import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from './run-discovery-eval.mjs';
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, validatePermissionsProfile } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, validatePermissionsProfile, validateAllAgentContracts } from './record-benchmark-run.mjs';
 
 const REQUIRED_FILES = [
   'LICENSE',
@@ -1759,6 +1759,17 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const secContent = fs.readFileSync(secPath, 'utf8');
         if (!secContent.includes('4-Layer Defense-in-Depth Execution Model')) {
           throw new Error('SECURITY.md missing Section 2.8 4-Layer Defense-in-Depth Execution Model');
+        }
+      }
+    },
+    {
+      id: 'SEC-INV-40',
+      name: 'AGY Custom-Agent Contract Conformance Invariant',
+      check: () => {
+        const agentsDir = path.resolve(repoRoot, 'agents');
+        const validation = validateAllAgentContracts(agentsDir);
+        if (!validation.valid) {
+          throw new Error(`Agent contract validation failed: ${validation.errors.join('; ')}`);
         }
       }
     }

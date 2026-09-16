@@ -104,7 +104,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval, runHoldoutEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet, parseStreamJsonTrace, validatePermissionsProfile } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet, parseStreamJsonTrace, validatePermissionsProfile, AGY_COMMAND_EXECUTION_POLICIES, parseAgentFrontmatter, validateAgentContract, validateAllAgentContracts } from './record-benchmark-run.mjs';
 
 
 
@@ -5356,11 +5356,24 @@ export default appName;`;
     throw new Error('P0-118 VIOLATION: Expected agent missing: agents/security-audit-coordinator.md');
   }
   const coordContent = fs.readFileSync(coordPath, 'utf8');
-  if (!coordContent.includes('mainAgent: true') || !coordContent.includes('subagent: false')) {
+  const coordFrontmatter = parseAgentFrontmatter(coordContent);
+  if (!coordFrontmatter) {
+    throw new Error('P0-118 VIOLATION: Failed to parse YAML frontmatter of security-audit-coordinator.md');
+  }
+  if (coordFrontmatter.name !== 'security-audit-coordinator') {
+    throw new Error(`P0-118 VIOLATION: Expected agent name 'security-audit-coordinator', got '${coordFrontmatter.name}'`);
+  }
+  if (coordFrontmatter.mainAgent !== true || coordFrontmatter.subagent !== false) {
     throw new Error('P0-118 VIOLATION: security-audit-coordinator must declare mainAgent: true and subagent: false');
   }
-  if (!coordContent.includes('commandExecutionPolicy: allow-required')) {
-    throw new Error('P0-118 VIOLATION: security-audit-coordinator must declare commandExecutionPolicy: allow-required');
+  if (!AGY_COMMAND_EXECUTION_POLICIES.includes(coordFrontmatter.commandExecutionPolicy) || coordFrontmatter.commandExecutionPolicy !== 'sandbox') {
+    throw new Error(`P0-118 VIOLATION: security-audit-coordinator commandExecutionPolicy must be in [${AGY_COMMAND_EXECUTION_POLICIES.join(', ')}] and specifically equal 'sandbox', got '${coordFrontmatter.commandExecutionPolicy}'`);
+  }
+  const expectedCoordTools = ['invoke_subagent', 'send_message', 'manage_subagents', 'view_file', 'list_dir', 'run_command'];
+  for (const t of expectedCoordTools) {
+    if (!Array.isArray(coordFrontmatter.tools) || !coordFrontmatter.tools.includes(t)) {
+      throw new Error(`P0-118 VIOLATION: security-audit-coordinator tools must include '${t}'`);
+    }
   }
 
   // Test parseStreamJsonTrace against mock NDJSON trace
@@ -5588,7 +5601,200 @@ export default appName;`;
 
   console.log('✔ 119. P0 Invariant: Recommended Role Permissions Profile & 4-Layer Defense-in-Depth Sandbox Model.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (119/119).');
+  // ---------------------------------------------------------------------------
+  // 120. P0 Invariant: AGY Custom-Agent Contract Conformance & Native Frontmatter Validation
+  // ---------------------------------------------------------------------------
+  const agentsDir120 = path.resolve(process.cwd(), 'agents');
+  const allAgentsRes120 = validateAllAgentContracts(agentsDir120);
+  if (!allAgentsRes120.valid) {
+    throw new Error(`P0-120 VIOLATION: Agent contracts validation failed: ${allAgentsRes120.errors.join('; ')}`);
+  }
+
+  // Iterate over all .md files in agents/ and verify contracts
+  const allMdFiles120 = fs.readdirSync(agentsDir120).filter(f => f.endsWith('.md')).sort();
+  const expectedSubagents120 = [
+    'discovery-agent.md',
+    'threat-modeler.md',
+    'verifier-reachability.md',
+    'verifier-defenses.md',
+    'verifier-impact.md'
+  ];
+
+  let mainCount120 = 0;
+  for (const agentFile of allMdFiles120) {
+    const agentPath = path.join(agentsDir120, agentFile);
+    const parsed = parseAgentFrontmatter(fs.readFileSync(agentPath, 'utf8'));
+    if (!parsed) {
+      throw new Error(`P0-120 VIOLATION: Could not parse frontmatter in ${agentFile}`);
+    }
+    if (agentFile === 'security-audit-coordinator.md') {
+      mainCount120++;
+      if (parsed.mainAgent !== true || parsed.subagent !== false) {
+        throw new Error(`P0-120 VIOLATION: ${agentFile} must have mainAgent: true and subagent: false`);
+      }
+      if (parsed.commandExecutionPolicy !== 'sandbox') {
+        throw new Error(`P0-120 VIOLATION: ${agentFile} must have commandExecutionPolicy: sandbox`);
+      }
+      if (parsed.name !== 'security-audit-coordinator') {
+        throw new Error(`P0-120 VIOLATION: ${agentFile} must have name: security-audit-coordinator`);
+      }
+    } else {
+      if (!expectedSubagents120.includes(agentFile)) {
+        throw new Error(`P0-120 VIOLATION: Unexpected agent file ${agentFile} in agents/`);
+      }
+      if (parsed.mainAgent !== false || parsed.subagent !== true) {
+        throw new Error(`P0-120 VIOLATION: ${agentFile} must have mainAgent: false and subagent: true`);
+      }
+      if (parsed.commandExecutionPolicy !== 'off') {
+        throw new Error(`P0-120 VIOLATION: ${agentFile} must have commandExecutionPolicy: off`);
+      }
+      const allowedSubTools = new Set(['view_file', 'list_dir', 'grep_search', 'find_by_name']);
+      for (const t of parsed.tools || []) {
+        if (!allowedSubTools.has(t)) {
+          throw new Error(`P0-120 VIOLATION: ${agentFile} contains non-readonly tool '${t}'`);
+        }
+      }
+    }
+  }
+
+  if (mainCount120 !== 1) {
+    throw new Error(`P0-120 VIOLATION: Exactly one coordinator required, found ${mainCount120}`);
+  }
+
+  // Fail-closed tamper tests against frontmatter violations
+  // 1. Invalid policy enum
+  const badPolicyAgent = {
+    name: 'discovery-agent',
+    mainAgent: false,
+    subagent: true,
+    commandExecutionPolicy: 'invalid-policy',
+    tools: ['view_file']
+  };
+  if (validateAgentContract(badPolicyAgent, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted invalid commandExecutionPolicy enum');
+  }
+
+  // 2. Subagent declaring mainAgent: true
+  const subagentAsMain = {
+    name: 'discovery-agent',
+    mainAgent: true,
+    subagent: false,
+    commandExecutionPolicy: 'off',
+    tools: ['view_file']
+  };
+  if (validateAgentContract(subagentAsMain, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted subagent declaring mainAgent: true');
+  }
+
+  // 3. Subagent allowing run_command (including zero-indent syntax)
+  const subagentWithCmd = {
+    name: 'discovery-agent',
+    mainAgent: false,
+    subagent: true,
+    commandExecutionPolicy: 'off',
+    tools: ['view_file', 'run_command']
+  };
+  if (validateAgentContract(subagentWithCmd, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted subagent with run_command');
+  }
+  const zeroIndentCmdParsed = parseAgentFrontmatter('---\nname: discovery-agent\nmainAgent: false\nsubagent: true\ncommandExecutionPolicy: off\ntools:\n- view_file\n- run_command\n---\n');
+  if (!zeroIndentCmdParsed || validateAgentContract(zeroIndentCmdParsed, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: Zero-indent run_command bypassed frontmatter validation');
+  }
+
+  // 4. Subagent allowing write tools
+  const subagentWithWrite = {
+    name: 'discovery-agent',
+    mainAgent: false,
+    subagent: true,
+    commandExecutionPolicy: 'off',
+    tools: ['view_file', 'write_to_file']
+  };
+  if (validateAgentContract(subagentWithWrite, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted subagent with write_to_file');
+  }
+
+  const subagentWithReplace = {
+    name: 'discovery-agent',
+    mainAgent: false,
+    subagent: true,
+    commandExecutionPolicy: 'off',
+    tools: ['view_file', 'replace_file_content']
+  };
+  if (validateAgentContract(subagentWithReplace, 'discovery-agent.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted subagent with replace_file_content');
+  }
+
+  // 5. Coordinator without sandbox policy
+  const coordBadPolicy = {
+    name: 'security-audit-coordinator',
+    mainAgent: true,
+    subagent: false,
+    commandExecutionPolicy: 'off',
+    tools: ['invoke_subagent', 'send_message', 'manage_subagents', 'view_file', 'list_dir', 'run_command']
+  };
+  if (validateAgentContract(coordBadPolicy, 'security-audit-coordinator.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted coordinator with commandExecutionPolicy: off');
+  }
+
+  // 6. Coordinator missing required orchestration tools
+  const coordMissingTools = {
+    name: 'security-audit-coordinator',
+    mainAgent: true,
+    subagent: false,
+    commandExecutionPolicy: 'sandbox',
+    tools: ['view_file', 'list_dir']
+  };
+  if (validateAgentContract(coordMissingTools, 'security-audit-coordinator.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted coordinator missing required orchestration tools');
+  }
+
+  // 7. Coordinator with invalid name inside coordinator file
+  const coordWrongName = {
+    name: 'rogue-coordinator',
+    mainAgent: true,
+    subagent: false,
+    commandExecutionPolicy: 'sandbox',
+    tools: ['invoke_subagent', 'send_message', 'manage_subagents', 'view_file', 'list_dir', 'run_command']
+  };
+  if (validateAgentContract(coordWrongName, 'security-audit-coordinator.md').valid) {
+    throw new Error('P0-120 VIOLATION: validateAgentContract accepted rogue coordinator name');
+  }
+
+  // 8. Duplicate YAML frontmatter keys rejected fail-closed
+  const dupKeyParsed = parseAgentFrontmatter('---\nname: discovery-agent\nmainAgent: false\nmainAgent: true\nsubagent: true\ncommandExecutionPolicy: off\ntools:\n  - view_file\n---\n');
+  if (dupKeyParsed !== null) {
+    throw new Error('P0-120 VIOLATION: parseAgentFrontmatter accepted duplicate mapping keys');
+  }
+
+  // 9. Directory-level tamper test: duplicate mainAgent rejected
+  const fakeAgentsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-agents-tamper-'));
+  try {
+    fs.writeFileSync(path.join(fakeAgentsDir, 'agent-1.md'), '---\nname: agent-1\nmainAgent: true\nsubagent: false\ncommandExecutionPolicy: sandbox\ntools:\n  - invoke_subagent\n  - send_message\n  - manage_subagents\n  - view_file\n  - list_dir\n  - run_command\n---\n', 'utf8');
+    fs.writeFileSync(path.join(fakeAgentsDir, 'agent-2.md'), '---\nname: agent-2\nmainAgent: true\nsubagent: false\ncommandExecutionPolicy: sandbox\ntools:\n  - invoke_subagent\n  - send_message\n  - manage_subagents\n  - view_file\n  - list_dir\n  - run_command\n---\n', 'utf8');
+    const dupRes = validateAllAgentContracts(fakeAgentsDir);
+    if (dupRes.valid) {
+      throw new Error('P0-120 VIOLATION: validateAllAgentContracts accepted multiple mainAgents');
+    }
+  } finally {
+    fs.rmSync(fakeAgentsDir, { recursive: true, force: true });
+  }
+
+  // 10. Directory-level tamper test: missing subagents rejected fail-closed
+  const missingSubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-agents-missing-'));
+  try {
+    fs.writeFileSync(path.join(missingSubDir, 'security-audit-coordinator.md'), '---\nname: security-audit-coordinator\nmainAgent: true\nsubagent: false\ncommandExecutionPolicy: sandbox\ntools:\n  - invoke_subagent\n  - send_message\n  - manage_subagents\n  - view_file\n  - list_dir\n  - run_command\n---\n', 'utf8');
+    const missingRes = validateAllAgentContracts(missingSubDir);
+    if (missingRes.valid) {
+      throw new Error('P0-120 VIOLATION: validateAllAgentContracts accepted directory missing mandatory subagents');
+    }
+  } finally {
+    fs.rmSync(missingSubDir, { recursive: true, force: true });
+  }
+
+  console.log('✔ 120. P0 Invariant: AGY Custom-Agent Contract Conformance & Native Frontmatter Validation.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (120/120).');
 
   } finally {
     gitFixture.cleanup();

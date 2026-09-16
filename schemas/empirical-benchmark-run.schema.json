@@ -164,6 +164,18 @@
         }
       }
     },
+    "provenanceScope": {
+      "type": "object",
+      "properties": {
+        "appliesToVersion": { "type": "string" },
+        "sourceRevision": { "type": ["string", "null"] },
+        "isHistoricalBaseline": { "type": "boolean" },
+        "runtimeCapabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "metadata": {
       "type": "object"
     }

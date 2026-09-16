@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -172,6 +173,135 @@ export function createDeterministicTarGz(entries) {
 }
 
 /**
+ * Creates a deterministic, zero-dependency .zip archive buffer.
+ * @param {Array<{ archivePath: string, content: Buffer|string }>} entries
+ * @returns {Buffer}
+ */
+export function createDeterministicZip(entries) {
+  // Sort entries alphabetically by archivePath for strict determinism
+  const sorted = [...entries].sort((a, b) => a.archivePath.localeCompare(b.archivePath));
+
+  const localChunks = [];
+  const cdChunks = [];
+  let offset = 0;
+
+  for (const entry of sorted) {
+    if (!entry.archivePath || typeof entry.archivePath !== 'string') {
+      throw new Error('ZIP entry missing valid archivePath');
+    }
+    if (entry.archivePath.startsWith('agy-plugin-cc') || entry.archivePath.includes('agy-plugin-cc/')) {
+      throw new Error(`Forbidden legacy directory in release archive: ${entry.archivePath}`);
+    }
+    if (!entry.archivePath.startsWith('agy-security-audit/')) {
+      throw new Error(`Release archive entry must be under root directory 'agy-security-audit/': ${entry.archivePath}`);
+    }
+    const rawContent = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, 'utf8');
+    const isDeflated = rawContent.length > 0;
+    const compressed = isDeflated ? zlib.deflateRawSync(rawContent, { level: 9 }) : Buffer.alloc(0);
+    const method = isDeflated ? 8 : 0;
+    const crc = zlib.crc32(rawContent);
+    const nameBuf = Buffer.from(entry.archivePath, 'utf8');
+
+    // Local file header (30 bytes + name length)
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); // Local header signature
+    lh.writeUInt16LE(20, 4);          // Version needed: 2.0
+    lh.writeUInt16LE(0x0800, 6);       // Flags: bit 11 = UTF-8 filename
+    lh.writeUInt16LE(method, 8);       // Compression method
+    lh.writeUInt16LE(0, 10);          // Last mod time: 00:00:00
+    lh.writeUInt16LE(0x0021, 12);      // Last mod date: 1980-01-01
+    lh.writeUInt32LE(crc, 14);         // CRC-32
+    lh.writeUInt32LE(compressed.length, 18); // Compressed size
+    lh.writeUInt32LE(rawContent.length, 22);  // Uncompressed size
+    lh.writeUInt16LE(nameBuf.length, 26);     // File name length
+    lh.writeUInt16LE(0, 28);                  // Extra field length
+
+    const localOffset = offset;
+    localChunks.push(lh, nameBuf, compressed);
+    offset += lh.length + nameBuf.length + compressed.length;
+
+    // Central directory header (46 bytes + name length)
+    const cdh = Buffer.alloc(46);
+    cdh.writeUInt32LE(0x02014b50, 0); // Central directory signature
+    cdh.writeUInt16LE(0x0314, 4);      // Version made by: UNIX v2.0
+    cdh.writeUInt16LE(20, 6);          // Version needed: 2.0
+    cdh.writeUInt16LE(0x0800, 8);      // Flags: UTF-8
+    cdh.writeUInt16LE(method, 10);     // Compression method
+    cdh.writeUInt16LE(0, 12);         // Last mod time
+    cdh.writeUInt16LE(0x0021, 14);     // Last mod date
+    cdh.writeUInt32LE(crc, 16);        // CRC-32
+    cdh.writeUInt32LE(compressed.length, 20); // Compressed size
+    cdh.writeUInt32LE(rawContent.length, 24); // Uncompressed size
+    cdh.writeUInt16LE(nameBuf.length, 28);    // File name length
+    cdh.writeUInt16LE(0, 30);                 // Extra field length
+    cdh.writeUInt16LE(0, 32);                 // Comment length
+    cdh.writeUInt16LE(0, 34);                 // Disk number start
+    cdh.writeUInt16LE(0, 36);                 // Internal file attributes
+    cdh.writeUInt32LE((0o100644 << 16) >>> 0, 38); // External attributes (regular file 0644)
+    cdh.writeUInt32LE(localOffset, 42);       // Relative offset of local header
+
+    cdChunks.push(cdh, nameBuf);
+  }
+
+  const cdBuffer = Buffer.concat(cdChunks);
+  const cdOffset = offset;
+  const cdSize = cdBuffer.length;
+
+  // End of central directory record (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // EOCD signature
+  eocd.writeUInt16LE(0, 4);          // Disk number
+  eocd.writeUInt16LE(0, 6);          // Disk with start of CD
+  eocd.writeUInt16LE(entries.length, 8);  // Entries on this disk
+  eocd.writeUInt16LE(entries.length, 10); // Total entries
+  eocd.writeUInt32LE(cdSize, 12);         // CD size
+  eocd.writeUInt32LE(cdOffset, 16);       // CD offset
+  eocd.writeUInt16LE(0, 20);              // Comment length
+
+  return Buffer.concat([...localChunks, cdBuffer, eocd]);
+}
+
+/**
+ * Discovers repository files to include in release archive.
+ * Returns relative POSIX paths sorted alphabetically.
+ */
+export function getReleaseArchiveFiles(repoRoot = REPO_ROOT) {
+  let files = [];
+  try {
+    const res = spawnSync('git', ['ls-files'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    if (res.status === 0 && res.stdout) {
+      files = res.stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    }
+  } catch {}
+
+  if (files.length === 0) {
+    const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'scratch', 'release-evidence']);
+    function walk(dir, relPrefix = '') {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.isDirectory()) {
+          if (!EXCLUDED_DIRS.has(ent.name)) {
+            walk(path.join(dir, ent.name), path.join(relPrefix, ent.name));
+          }
+        } else if (ent.isFile()) {
+          files.push(path.join(relPrefix, ent.name).replace(/\\/g, '/'));
+        }
+      }
+    }
+    walk(repoRoot);
+  }
+
+  return files
+    .filter(f => !f.startsWith('scratch/') && !f.startsWith('release-evidence/') && !f.startsWith('.git/'))
+    .sort();
+}
+
+/**
  * Validates that all required evidence files exist and are non-empty.
  * @param {string} repoRoot
  * @returns {{ valid: boolean, errors: string[], checkedFiles: string[] }}
@@ -241,10 +371,51 @@ export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
     }
   }
 
+  // 3. Check release archive completeness
+  let releaseArchive = null;
+  const pkgPath = path.resolve(repoRoot, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    errors.push('Missing package.json for release archive packaging');
+  } else {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.name !== '@arcobaleno64/agy-security-audit') {
+        errors.push(`package.json name must be '@arcobaleno64/agy-security-audit', found '${pkg.name}'`);
+      }
+      if (!pkg.version || typeof pkg.version !== 'string') {
+        errors.push('package.json missing version for release archive packaging');
+      } else {
+        const archiveFiles = getReleaseArchiveFiles(repoRoot);
+        if (archiveFiles.length === 0) {
+          errors.push('Release archive contains 0 files to package');
+        } else {
+          for (const f of archiveFiles) {
+            const filePath = path.resolve(repoRoot, f);
+            if (!fs.existsSync(filePath)) {
+              errors.push(`Release archive file missing on disk: ${f}`);
+            }
+            if (f.startsWith('agy-plugin-cc/') || f.includes('agy-plugin-cc')) {
+              errors.push(`Release archive contains forbidden legacy path: ${f}`);
+            }
+          }
+          const releaseZipName = `agy-security-audit-v${pkg.version}.zip`;
+          releaseArchive = {
+            name: releaseZipName,
+            rootDir: 'agy-security-audit/',
+            filesCount: archiveFiles.length
+          };
+        }
+      }
+    } catch (err) {
+      errors.push(`package.json is not valid JSON: ${err.message}`);
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
-    checkedFiles
+    checkedFiles,
+    releaseArchive
   };
 }
 
@@ -313,10 +484,39 @@ export function bundleReleaseEvidence(outDir, repoRoot = REPO_ROOT) {
     sha256: tarGzHash
   });
 
+  // 3. Package clean release archive agy-security-audit-v${version}.zip
+  const pkgPath = path.resolve(repoRoot, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const version = pkg.version;
+  const releaseZipName = `agy-security-audit-v${version}.zip`;
+
+  const archiveFiles = getReleaseArchiveFiles(repoRoot);
+  const zipEntries = [];
+  for (const f of archiveFiles) {
+    const filePath = path.resolve(repoRoot, f);
+    if (!fs.existsSync(filePath)) continue;
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) continue;
+    const content = fs.readFileSync(filePath);
+    const archivePath = `agy-security-audit/${f}`.replace(/\\/g, '/');
+    zipEntries.push({ archivePath, content });
+  }
+
+  const releaseZipBuffer = createDeterministicZip(zipEntries);
+  const releaseZipDest = path.join(targetDir, releaseZipName);
+  fs.writeFileSync(releaseZipDest, releaseZipBuffer);
+
+  const releaseZipHash = crypto.createHash('sha256').update(releaseZipBuffer).digest('hex');
+  stagedAssets.push({
+    name: releaseZipName,
+    sizeBytes: releaseZipBuffer.length,
+    sha256: releaseZipHash
+  });
+
   // Sort staged assets alphabetically for deterministic SHA256SUMS.txt
   stagedAssets.sort((a, b) => a.name.localeCompare(b.name));
 
-  // 3. Write SHA256SUMS.txt (POSIX LF, standard 2-space separator)
+  // 4. Write SHA256SUMS.txt (POSIX LF, standard 2-space separator)
   const shaSumsLines = stagedAssets.map(asset => `${asset.sha256}  ${asset.name}`);
   const shaSumsContent = shaSumsLines.join('\n') + '\n';
   const shaSumsPath = path.join(targetDir, 'SHA256SUMS.txt');
@@ -387,6 +587,9 @@ export function runCli(args = process.argv.slice(2)) {
     console.log(`Release evidence check PASSED (${result.checkedFiles.length} files verified):`);
     for (const f of result.checkedFiles) {
       console.log(`  ✔ ${f}`);
+    }
+    if (result.releaseArchive) {
+      console.log(`  ✔ Release archive packaging verified: ${result.releaseArchive.name} (${result.releaseArchive.filesCount} files under '${result.releaseArchive.rootDir}')`);
     }
     process.exit(0);
   }
