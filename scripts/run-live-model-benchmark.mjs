@@ -47,6 +47,25 @@ export function sleepSync(ms) {
 }
 
 /**
+ * Atomically writes JSON content to target file using a temporary file and rename.
+ */
+export function writeJsonAtomic(filePath, data) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+/**
+ * Checks whether an error or output string indicates upstream rate limiting / resource exhaustion.
+ */
+export function isRateLimitError(str) {
+  if (!str || typeof str !== 'string') return false;
+  return /429|resource[_\s]?exhausted|quota[_\s]?exceeded|rate[_\s]?limit|too many requests/i.test(str);
+}
+
+/**
  * Fixture Partitioning Specification:
  * Explicit separation between development/calibration fixtures and holdout fixtures.
  */
@@ -236,7 +255,9 @@ export function computeSafeControlMetrics({
       for (const res of fixResults) {
         const isSafe = res.split === 'SAFE_CONTROL' || res.fixtureId?.endsWith('-SAFE') || (res.file && res.file.includes('/safe/'));
         if (!isSafe) continue;
-        const candCount = Array.isArray(res.candidates) ? res.candidates.length : 0;
+        const candCount = Array.isArray(res.candidates)
+          ? res.candidates.length
+          : (typeof res.candidateCount === 'number' ? res.candidateCount : 0);
         if (candCount > 0) {
           exposuresWithFPCount++;
           totalSpuriousCandidates += candCount;
@@ -652,6 +673,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       error = 'Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
     }
 
+    const isRateLimit = isRateLimitError(stderr) || isRateLimitError(stdout) || isRateLimitError(error);
+
     lastResult = {
       fixtureId: fixture.id,
       file: fixture.file,
@@ -668,8 +691,18 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     }
 
     if (attempt < maxAttempts) {
-      console.warn(`  ⚠ Attempt ${attempt} failed on [${fixture.id}]: ${(error || '').trim()}. Retrying in 1s...`);
-      sleepSync(1000);
+      let backoffMs = 1000;
+      if (isRateLimit) {
+        // Exponential backoff for HTTP 429 / ResourceExhausted: 5s, 10s, 20s
+        backoffMs = 5000 * Math.pow(2, attempt - 1);
+        if (options.mock) {
+          backoffMs = Math.min(25, backoffMs);
+        }
+        console.warn(`  ⚠ Rate limit / ResourceExhausted detected on [${fixture.id}] (Attempt ${attempt}/${maxAttempts}). Backing off for ${backoffMs / 1000}s...`);
+      } else {
+        console.warn(`  ⚠ Attempt ${attempt} failed on [${fixture.id}]: ${(error || '').trim()}. Retrying in 1s...`);
+      }
+      sleepSync(backoffMs);
     }
   }
 
@@ -740,7 +773,9 @@ export function computePartitionedMetrics(stabilityResult, groundTruth = [], spl
     ? Number((holdoutRecurrences.reduce((acc, r) => acc + r.reliabilityRate, 0) / holdoutRecurrences.length).toFixed(4))
     : 0;
 
-  const safeCount = groundTruth.filter(gt => gt.expectedVerdict === 'SAFE').length || 10;
+  const safeCount = extra.safeFixtureCount !== undefined
+    ? extra.safeFixtureCount
+    : (groundTruth.filter(gt => gt.expectedVerdict === 'SAFE').length || 10);
   const totalPasses = extra.totalPasses || (stabilityResult.pairwiseJaccard ? stabilityResult.pairwiseJaccard.length + 1 : 1);
   const safeMetrics = computeSafeControlMetrics({
     safeRecurrences,
@@ -1013,6 +1048,14 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   }
   console.log('================================================================\n');
 
+  const isResume = Boolean(options.resume);
+  const defaultCheckpointsDir = options.mock
+    ? 'scratch/mock-benchmark/checkpoints'
+    : 'scratch/live-benchmark/checkpoints';
+  const checkpointsBaseDir = options.checkpointsDir
+    ? path.resolve(repoRoot, options.checkpointsDir)
+    : path.resolve(repoRoot, defaultCheckpointsDir);
+
   if (outDir) {
     fs.mkdirSync(outDir, { recursive: true });
   }
@@ -1027,15 +1070,80 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   const allPassResults = [];
 
   for (let p = 1; p <= passes; p++) {
+    const runId = passes > 1 ? `run-pass-${p}` : (options.runId || `run-pass-${p}`);
+    const passFilePath = outDir
+      ? path.join(outDir, `${runId}.json`)
+      : (options.output ? path.resolve(repoRoot, options.output) : null);
+
+    // 1. Idempotent Pass Resume: If pass envelope exists and is valid for all targetFixtures
+    if (isResume && passFilePath && fs.existsSync(passFilePath)) {
+      try {
+        const rawPass = fs.readFileSync(passFilePath, 'utf8');
+        const parsedEnvelope = JSON.parse(rawPass);
+        const valResult = validateBenchmarkRunEnvelope(parsedEnvelope);
+        const expectedOrigin = options.mock ? 'SYNTHETIC' : 'MODEL_OBSERVED';
+        if (valResult.valid && parsedEnvelope.evidenceOrigin === expectedOrigin) {
+          const auditedIds = new Set((parsedEnvelope.metadata?.fixtureResults || []).map(r => r.fixtureId));
+          const hasAllFixtures = targetFixtures.every(f => auditedIds.has(f.id));
+          if (hasAllFixtures) {
+            console.log(`\n>>> [RESUME] Pass ${p} of ${passes} already complete and valid (${passFilePath}). Skipping model invocation.`);
+            envelopes.push(parsedEnvelope);
+            allPassResults.push({
+              passIndex: p,
+              fixtureResults: parsedEnvelope.metadata?.fixtureResults || [],
+              candidateCount: parsedEnvelope.findings?.candidates?.length || 0
+            });
+            continue;
+          }
+        }
+      } catch (err) {
+        console.warn(`  ⚠ Existing pass file unreadable or invalid (${passFilePath}): ${err.message}. Re-running pass.`);
+      }
+    }
+
     console.log(`\n>>> Starting Pass ${p} of ${passes}...`);
     const passStartTime = Date.now();
     const fixtureResults = [];
     const passCandidates = [];
+    const passCheckpointDir = path.join(checkpointsBaseDir, `pass-${p}`);
+    fs.mkdirSync(passCheckpointDir, { recursive: true });
 
     for (let i = 0; i < targetFixtures.length; i++) {
       const fix = targetFixtures[i];
-      console.log(`[Pass ${p}/${passes}] Auditing fixture [${fix.id}]: ${fix.file}...`);
-      const res = runAgyDiscoveryOnFixture(fix, repoRoot, { ...options, fixtureSplits: activeSplits, passIndex: p, modelId });
+      const checkpointFile = path.join(passCheckpointDir, `${fix.id}.json`);
+      let res = null;
+
+      // 2. Per-fixture checkpoint resume
+      if (isResume && fs.existsSync(checkpointFile)) {
+        try {
+          const rawCheckpoint = fs.readFileSync(checkpointFile, 'utf8');
+          const parsedCheckpoint = JSON.parse(rawCheckpoint);
+          const isMockCheckpoint = parsedCheckpoint?.executionTelemetry?.format === 'SIMULATED_MOCK';
+          const formatCompatible = options.mock ? isMockCheckpoint : !isMockCheckpoint;
+
+          if (parsedCheckpoint && parsedCheckpoint.fixtureId === fix.id && Array.isArray(parsedCheckpoint.candidates) && formatCompatible) {
+            res = parsedCheckpoint;
+            console.log(`[Pass ${p}/${passes}] [RESUME] Checkpoint restored for [${fix.id}] from ${checkpointFile}`);
+          }
+        } catch (err) {
+          console.warn(`  ⚠ Checkpoint for [${fix.id}] invalid (${checkpointFile}): ${err.message}. Re-auditing.`);
+        }
+      }
+
+      if (!res) {
+        console.log(`[Pass ${p}/${passes}] Auditing fixture [${fix.id}]: ${fix.file}...`);
+        res = runAgyDiscoveryOnFixture(fix, repoRoot, { ...options, fixtureSplits: activeSplits, passIndex: p, modelId });
+        try {
+          writeJsonAtomic(checkpointFile, res);
+        } catch (err) {
+          console.warn(`  ⚠ Failed to write checkpoint for [${fix.id}]: ${err.message}`);
+        }
+
+        if (delayMs > 0 && i < targetFixtures.length - 1) {
+          sleepSync(delayMs);
+        }
+      }
+
       fixtureResults.push(res);
       passCandidates.push(...res.candidates);
 
@@ -1043,14 +1151,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         console.warn(`  ⚠ Discovery execution error on [${fix.id}]: ${res.error.trim()}`);
       }
       console.log(`  -> Found ${res.candidates.length} candidate(s) in ${res.durationMs}ms [${res.split}]`);
-
-      if (delayMs > 0 && i < targetFixtures.length - 1) {
-        sleepSync(delayMs);
-      }
     }
 
     const passDurationMs = Date.now() - passStartTime;
-    const runId = passes > 1 ? `run-pass-${p}` : (options.runId || `run-pass-${p}`);
 
     const telemList = fixtureResults.map(r => r.executionTelemetry).filter(Boolean);
     let passTelemetry = null;
@@ -1149,7 +1252,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
     if (outDir) {
       const passFilePath = path.join(outDir, `${runId}.json`);
-      fs.writeFileSync(passFilePath, JSON.stringify(envelope, null, 2), 'utf8');
+      writeJsonAtomic(passFilePath, envelope);
       console.log(`  ✔ Pass ${p} envelope written to: ${passFilePath}`);
     }
 
@@ -1168,9 +1271,11 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   if (passes >= 2) {
     stabilityResult = evaluateStability(envelopes, repoRoot, { groundTruth });
+    const targetSafeCount = targetFixtures.filter(f => f.expectedVerdict === 'SAFE' || f.id?.endsWith('-SAFE')).length;
     partitionedMetrics = computePartitionedMetrics(stabilityResult, groundTruth, activeSplits, {
       allPassResults,
-      totalPasses: passes
+      totalPasses: passes,
+      safeFixtureCount: targetSafeCount > 0 ? targetSafeCount : undefined
     });
 
     console.log('\n================================================================');
@@ -1359,6 +1464,99 @@ const y = 2;`;
   }
   console.log('  ✔ Test 5: runLiveModelBenchmark executes safe-only mock passes cleanly.');
 
+  // Test 6: isRateLimitError detection
+  if (!isRateLimitError('HTTP 429 Too Many Requests') ||
+      !isRateLimitError('ResourceExhausted: Quota exceeded for model') ||
+      !isRateLimitError('RESOURCE_EXHAUSTED') ||
+      !isRateLimitError('rate limit exceeded') ||
+      isRateLimitError('SyntaxError: unexpected token') ||
+      isRateLimitError('')) {
+    throw new Error('isRateLimitError failed on expected status strings');
+  }
+  console.log('  ✔ Test 6: isRateLimitError correctly identifies rate-limit and resource-exhaustion patterns.');
+
+  // Test 7: Atomic per-fixture checkpointing and idempotent resume
+  const testCheckpointsDir = path.resolve(repoRoot, 'scratch/test-harness-checkpoints');
+  const testOutDir = path.resolve(repoRoot, 'scratch/test-harness-out');
+  try {
+    fs.rmSync(testCheckpointsDir, { recursive: true, force: true });
+    fs.rmSync(testOutDir, { recursive: true, force: true });
+  } catch {}
+
+  // 7a. Test atomic writing
+  const sampleData = { test: 'data', timestamp: 12345 };
+  const sampleFilePath = path.join(testCheckpointsDir, 'atomic-test.json');
+  writeJsonAtomic(sampleFilePath, sampleData);
+  const readBack = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+  if (readBack.test !== 'data' || readBack.timestamp !== 12345) {
+    throw new Error('writeJsonAtomic data corrupted on write/read');
+  }
+
+  // 7b. Pre-seed a per-fixture checkpoint for SEM-01-SAFE in pass-1
+  const pass1Dir = path.join(testCheckpointsDir, 'pass-1');
+  const seededCheckpoint = {
+    fixtureId: 'SEM-01-SAFE',
+    file: 'evals/semantic-benchmark/safe/01-authz-bypass.js',
+    durationMs: 12,
+    candidates: [],
+    rawOutput: '{"schemaVersion":"1.0.0","candidates":[]}',
+    error: null,
+    split: 'SAFE_CONTROL',
+    executionTelemetry: null
+  };
+  writeJsonAtomic(path.join(pass1Dir, 'SEM-01-SAFE.json'), seededCheckpoint);
+
+  // 7c. Run live model benchmark with mock and resume
+  const resumeRun1 = runLiveModelBenchmark(repoRoot, {
+    safeOnly: true,
+    mock: true,
+    passes: 1,
+    resume: true,
+    outDir: testOutDir,
+    checkpointsDir: 'scratch/test-harness-checkpoints'
+  });
+
+  if (resumeRun1.envelopes.length !== 1) {
+    throw new Error('resumeRun1 failed to produce pass envelope');
+  }
+
+  // Verify that all 10 safe checkpoints exist now
+  for (let i = 1; i <= 10; i++) {
+    const padId = `SEM-${String(i).padStart(2, '0')}-SAFE`;
+    const cpFile = path.join(pass1Dir, `${padId}.json`);
+    if (!fs.existsSync(cpFile)) {
+      throw new Error(`Expected checkpoint missing: ${cpFile}`);
+    }
+  }
+
+  // Verify pass file was written to testOutDir
+  const pass1File = path.join(testOutDir, 'run-pass-1.json');
+  if (!fs.existsSync(pass1File)) {
+    throw new Error(`Expected pass file missing: ${pass1File}`);
+  }
+
+  // 7d. Run again with resume: true; should load existing pass-1 envelope directly without re-auditing
+  const resumeRun2 = runLiveModelBenchmark(repoRoot, {
+    safeOnly: true,
+    mock: true,
+    passes: 1,
+    resume: true,
+    outDir: testOutDir,
+    checkpointsDir: 'scratch/test-harness-checkpoints'
+  });
+
+  if (resumeRun2.envelopes.length !== 1) {
+    throw new Error('resumeRun2 failed to load pass envelope');
+  }
+
+  // Cleanup test artifacts
+  try {
+    fs.rmSync(testCheckpointsDir, { recursive: true, force: true });
+    fs.rmSync(testOutDir, { recursive: true, force: true });
+  } catch {}
+
+  console.log('  ✔ Test 7: Atomic per-fixture checkpointing and idempotent pass resume verified.');
+
   console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
 }
 
@@ -1393,6 +1591,7 @@ Options:
   --report <path>      Path to write formal Markdown empirical baseline report
   --delay-ms <ms>      Throttle delay between fixture dispatches in milliseconds (default: 1000)
   --timeout <ms>       Execution timeout per fixture in milliseconds (default: 120000)
+  --resume             Resume benchmark from existing pass envelopes or fixture checkpoints
   --sandbox            Enable OS terminal sandbox (passes --sandbox to agy)
   --mock, --dry-run    Run with simulated fixture candidate generator (offline CI mode)
   --help, -h           Show this help message
@@ -1411,6 +1610,7 @@ Options:
   const passes = passesArg ? parseInt(passesArg, 10) : 1;
   const includeSafe = args.includes('--include-safe');
   const isSafeOnly = args.includes('--safe-only');
+  const isResume = args.includes('--resume');
   const shuffleSeed = getArg('--shuffle-seed') || getArg('--seed');
   const noLabelBlind = args.includes('--no-label-blind');
   const fixtureId = getArg('--fixture');
@@ -1443,6 +1643,7 @@ Options:
       passes,
       includeSafe,
       safeOnly: isSafeOnly,
+      resume: isResume,
       shuffleSeed,
       labelBlind: !noLabelBlind,
       fixtureId,
