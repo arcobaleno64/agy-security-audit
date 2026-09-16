@@ -235,6 +235,7 @@ export function executeLiveCoordinatorAudit({
     '--output-format', 'stream-json'
   ];
   if (sandbox) agyArgs.push('--sandbox');
+  agyArgs.push('--dangerously-skip-permissions');
   if (modelId) agyArgs.push('--model', modelId);
   agyArgs.push('--print', prompt);
 
