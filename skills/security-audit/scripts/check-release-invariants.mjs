@@ -125,7 +125,9 @@ const REQUIRED_FILES = [
   'schemas/scan-manifest.schema.json',
   'schemas/threat-model.schema.json',
   'schemas/candidate.schema.json',
+  'schemas/candidate-set.schema.json',
   'schemas/verifier-ballot.schema.json',
+  'schemas/verifier-ballot-set.schema.json',
   'schemas/canonical-finding.schema.json',
   'schemas/execution-attestation.schema.json',
   'schemas/audit-baseline.schema.json',
@@ -1003,12 +1005,14 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           throw new Error('deriveReasonCode produced non-standard reason codes');
         }
 
-        // 4. Validate all 7 schemas in schemas/ are valid JSON and define schemaVersion
+        // 4. Validate all 9 schemas in schemas/ are valid JSON and define schemaVersion
         const schemaFiles = [
           'scan-manifest.schema.json',
           'threat-model.schema.json',
           'candidate.schema.json',
+          'candidate-set.schema.json',
           'verifier-ballot.schema.json',
+          'verifier-ballot-set.schema.json',
           'canonical-finding.schema.json',
           'execution-attestation.schema.json',
           'audit-baseline.schema.json'

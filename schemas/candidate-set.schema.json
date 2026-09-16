@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/candidate-set.schema.json",
+  "title": "Candidate Vulnerability Set Schema",
+  "type": "object",
+  "required": ["candidates"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "ruleId", "title", "securityProperty", "findingType", "proofKind", "location"],
+        "properties": {
+          "schemaVersion": { "type": "string", "enum": ["1", "1.0.0"] },
+          "id": { "type": "string" },
+          "ruleId": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "securityProperty": { "type": "string", "minLength": 1 },
+          "violation": { "type": "string" },
+          "findingType": { "type": "string", "enum": ["VULNERABILITY", "HARDENING", "INFORMATIONAL"] },
+          "proofKind": {
+            "type": "string",
+            "enum": [
+              "STATIC_TRACE",
+              "UNIT_TEST",
+              "BENIGN_REPRODUCTION",
+              "CONFIG_EVIDENCE",
+              "DEPENDENCY_EVIDENCE",
+              "EXTERNAL_SCANNER_EVIDENCE",
+              "MANUAL_ATTESTATION"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNRATED"] },
+          "location": {
+            "type": "object",
+            "required": ["uri", "startLine"],
+            "properties": {
+              "uri": { "type": "string" },
+              "startLine": { "type": "integer", "minimum": 1 },
+              "endLine": { "type": "integer", "minimum": 1 },
+              "lineSnippet": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "symbol": { "type": "string" },
+          "proof": { "type": ["string", "object"] },
+          "attackPath": { "type": ["object", "null"] },
+          "evidence": { "type": ["object", "array", "string"] },
+          "lineageId": { "type": "string" },
+          "lineage": { "type": "object" },
+          "component": { "type": "string" },
+          "family": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "discoveryMetadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

@@ -120,6 +120,140 @@ export function validateBenchmarkRunEnvelope(envelope) {
   };
 }
 
+const VALID_FINDING_TYPES = new Set(['VULNERABILITY', 'HARDENING', 'INFORMATIONAL']);
+const VALID_PROOF_KINDS = new Set([
+  'STATIC_TRACE',
+  'UNIT_TEST',
+  'BENIGN_REPRODUCTION',
+  'CONFIG_EVIDENCE',
+  'DEPENDENCY_EVIDENCE',
+  'EXTERNAL_SCANNER_EVIDENCE',
+  'MANUAL_ATTESTATION'
+]);
+const VALID_SEVERITIES = new Set(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNRATED']);
+const ALLOWED_ROOT_PROPERTIES = new Set(['schemaVersion', 'candidates', 'discoveryMetadata']);
+const ALLOWED_CANDIDATE_PROPERTIES = new Set([
+  'schemaVersion',
+  'id',
+  'ruleId',
+  'title',
+  'description',
+  'securityProperty',
+  'violation',
+  'findingType',
+  'proofKind',
+  'severity',
+  'location',
+  'symbol',
+  'proof',
+  'attackPath',
+  'evidence',
+  'lineageId',
+  'lineage',
+  'component',
+  'family'
+]);
+const ALLOWED_LOCATION_PROPERTIES = new Set(['uri', 'startLine', 'endLine', 'lineSnippet']);
+
+/**
+ * Validates candidate set structured output against candidate-set.schema.json.
+ * Zero external dependencies.
+ *
+ * @param {any} data - Parsed candidate set object to validate.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateCandidateSet(data) {
+  const errors = [];
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { valid: false, errors: ['Candidate set must be a non-null object'] };
+  }
+
+  for (const key of Object.keys(data)) {
+    if (!ALLOWED_ROOT_PROPERTIES.has(key)) {
+      errors.push(`Unexpected root property '${key}' (additionalProperties: false)`);
+    }
+  }
+
+  if (data.schemaVersion !== undefined && data.schemaVersion !== '1' && data.schemaVersion !== '1.0.0') {
+    errors.push(`Invalid schemaVersion: expected '1' or '1.0.0', got '${data.schemaVersion}'`);
+  }
+
+  if (!Array.isArray(data.candidates)) {
+    errors.push('Candidate set missing required candidates array');
+    return { valid: false, errors };
+  }
+
+  if (data.discoveryMetadata !== undefined && (typeof data.discoveryMetadata !== 'object' || data.discoveryMetadata === null || Array.isArray(data.discoveryMetadata))) {
+    errors.push('discoveryMetadata must be an object if specified');
+  }
+
+  for (let i = 0; i < data.candidates.length; i++) {
+    const cand = data.candidates[i];
+    const prefix = `candidates[${i}]`;
+    if (!cand || typeof cand !== 'object' || Array.isArray(cand)) {
+      errors.push(`${prefix} must be a non-null object`);
+      continue;
+    }
+
+    for (const key of Object.keys(cand)) {
+      if (!ALLOWED_CANDIDATE_PROPERTIES.has(key)) {
+        errors.push(`${prefix} has unexpected property '${key}' (additionalProperties: false)`);
+      }
+    }
+
+    if (typeof cand.id !== 'string' || !cand.id.trim()) {
+      errors.push(`${prefix}.id must be a non-empty string`);
+    }
+    if (typeof cand.ruleId !== 'string' || !cand.ruleId.trim()) {
+      errors.push(`${prefix}.ruleId must be a non-empty string`);
+    }
+    if (typeof cand.title !== 'string' || !cand.title.trim()) {
+      errors.push(`${prefix}.title must be a non-empty string`);
+    }
+    if (typeof cand.securityProperty !== 'string' || !cand.securityProperty.trim()) {
+      errors.push(`${prefix}.securityProperty must be a non-empty string`);
+    }
+    if (!VALID_FINDING_TYPES.has(cand.findingType)) {
+      errors.push(`${prefix}.findingType must be one of: ${Array.from(VALID_FINDING_TYPES).join(', ')} (got '${cand.findingType}')`);
+    }
+    if (!VALID_PROOF_KINDS.has(cand.proofKind)) {
+      errors.push(`${prefix}.proofKind must be one of: ${Array.from(VALID_PROOF_KINDS).join(', ')} (got '${cand.proofKind}')`);
+    }
+
+    if (cand.severity !== undefined && !VALID_SEVERITIES.has(cand.severity)) {
+      errors.push(`${prefix}.severity must be one of: ${Array.from(VALID_SEVERITIES).join(', ')} (got '${cand.severity}')`);
+    }
+
+    if (!cand.location || typeof cand.location !== 'object' || Array.isArray(cand.location)) {
+      errors.push(`${prefix}.location must be an object`);
+    } else {
+      for (const locKey of Object.keys(cand.location)) {
+        if (!ALLOWED_LOCATION_PROPERTIES.has(locKey)) {
+          errors.push(`${prefix}.location has unexpected property '${locKey}' (additionalProperties: false)`);
+        }
+      }
+      if (typeof cand.location.uri !== 'string' || !cand.location.uri.trim()) {
+        errors.push(`${prefix}.location.uri must be a non-empty string`);
+      }
+      if (typeof cand.location.startLine !== 'number' || !Number.isInteger(cand.location.startLine) || cand.location.startLine < 1) {
+        errors.push(`${prefix}.location.startLine must be an integer >= 1`);
+      }
+      if (cand.location.endLine !== undefined) {
+        if (typeof cand.location.endLine !== 'number' || !Number.isInteger(cand.location.endLine) || cand.location.endLine < 1) {
+          errors.push(`${prefix}.location.endLine must be an integer >= 1`);
+        } else if (typeof cand.location.startLine === 'number' && cand.location.endLine < cand.location.startLine) {
+          errors.push(`${prefix}.location.endLine (${cand.location.endLine}) cannot be less than startLine (${cand.location.startLine})`);
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
 /**
  * Creates a schema-compliant empirical benchmark run envelope.
  */

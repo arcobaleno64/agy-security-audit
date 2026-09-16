@@ -104,7 +104,7 @@ import { evaluateDiscovery, generateSimulatedCandidates, runDiscoveryEval } from
 import { evaluateStability, computeJaccardSimilarity, generateSimulatedRuns, evaluateCorpusStability, runStabilityEval } from './run-stability-eval.mjs';
 import { runSemanticEval, runHoldoutEval } from './run-semantic-eval.mjs';
 import { isRealPathContained, safeReadFileContained, assertContainedPath } from './path-containment.mjs';
-import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment } from './record-benchmark-run.mjs';
+import { createBenchmarkRunEnvelope, validateBenchmarkRunEnvelope, probeEnvironment, validateCandidateSet } from './record-benchmark-run.mjs';
 
 
 
@@ -4533,7 +4533,8 @@ export default appName;`;
     // 109.5 Attestation upgrade: finalizeScan with guard-events upgrades contextIsolation to OBSERVED
     const finalWithHook = finalizeScan({
       candidates: [],
-      repoRoot: tempHookFixture
+      repoRoot: tempHookFixture,
+      contextPrep: prep109
     });
     if (finalWithHook.summary.execution.contextIsolation.status !== 'OBSERVED') {
       throw new Error(`HOOK VIOLATION: finalizeScan with guard telemetry expected OBSERVED, got ${finalWithHook.summary.execution.contextIsolation.status}`);
@@ -5249,7 +5250,107 @@ export default appName;`;
   }
   console.log('✔ 116. P0 Invariant: Holdout Generalization Benchmark Ground-Truth & Symmetrical Dual-Control.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (116/116).');
+  // 117. P0 Invariant: Hermetic Telemetry Isolation & Default-Deny on Untrusted Workspace Telemetry
+  const tempDir117 = fs.mkdtempSync(path.join(os.tmpdir(), 'test-hermetic-telemetry-'));
+  try {
+    const contextDir117 = path.join(tempDir117, 'scratch', 'context');
+    fs.mkdirSync(contextDir117, { recursive: true });
+    const eventsFile117 = path.join(contextDir117, 'guard-events.jsonl');
+    const dummyEvent = {
+      timestamp: new Date().toISOString(),
+      tool: 'view_file',
+      targetPath: 'src/app.js',
+      decision: 'deny',
+      action: 'ALLOWED_SHADOW',
+      reason: 'direct access blocked'
+    };
+    fs.writeFileSync(eventsFile117, JSON.stringify(dummyEvent) + '\n', 'utf8');
+
+    // finalizeScan without contextPrep must ignore ambient workspace guard telemetry
+    const scan117 = finalizeScan({ repoRoot: tempDir117 });
+    if (scan117.summary.execution.contextIsolation.status !== 'MANDATED') {
+      throw new Error(`P0-117 VIOLATION: Expected contextIsolation.status === 'MANDATED', got ${scan117.summary.execution.contextIsolation.status}`);
+    }
+    if (scan117.summary.execution.contextIsolation.guardTelemetry !== null) {
+      throw new Error('P0-117 VIOLATION: Expected guardTelemetry === null for unmanifested workspace telemetry');
+    }
+
+    // verifyGuardTelemetry directly with untrusted shadowRoot but no manifestDigest strictly rejects
+    const verifyRes117 = verifyGuardTelemetry({ shadowRoot: contextDir117 });
+    if (verifyRes117.verified !== false || verifyRes117.reason !== 'UNTRUSTED_TELEMETRY_REQUIRES_MANIFEST_BINDING') {
+      throw new Error(`P0-117 VIOLATION: Expected UNTRUSTED_TELEMETRY_REQUIRES_MANIFEST_BINDING, got ${JSON.stringify(verifyRes117)}`);
+    }
+
+    // validateCandidateSet: verify strict schema conformance and boundary rejections
+    const validCandidateSet = {
+      schemaVersion: '1.0.0',
+      candidates: [
+        {
+          id: 'CAND-01',
+          ruleId: 'CWE-89',
+          title: 'SQL Injection in Query Handler',
+          securityProperty: 'safe-resource-handling',
+          findingType: 'VULNERABILITY',
+          proofKind: 'STATIC_TRACE',
+          severity: 'HIGH',
+          location: {
+            uri: 'src/db.js',
+            startLine: 10,
+            endLine: 12
+          }
+        }
+      ]
+    };
+    const validRes = validateCandidateSet(validCandidateSet);
+    if (!validRes.valid || validRes.errors.length > 0) {
+      throw new Error(`P0-117 VIOLATION: Expected valid candidate set, got errors: ${validRes.errors.join('; ')}`);
+    }
+
+    // Rejection of unexpected root property
+    const extraRootRes = validateCandidateSet({ ...validCandidateSet, unexpectedField: 'bad' });
+    if (extraRootRes.valid || !extraRootRes.errors.some(e => e.includes('Unexpected root property'))) {
+      throw new Error('P0-117 VIOLATION: Expected rejection of unexpected root property');
+    }
+
+    // Rejection of candidate with unexpected property
+    const badCandObj = { ...validCandidateSet.candidates[0], maliciousField: true };
+    const extraCandPropRes = validateCandidateSet({ candidates: [badCandObj] });
+    if (extraCandPropRes.valid || !extraCandPropRes.errors.some(e => e.includes('unexpected property'))) {
+      throw new Error('P0-117 VIOLATION: Expected rejection of candidate with unexpected property');
+    }
+
+    // Rejection of invalid severity enum
+    const badSevCand = { ...validCandidateSet.candidates[0], severity: 'INVALID_SEV' };
+    const badSevRes = validateCandidateSet({ candidates: [badSevCand] });
+    if (badSevRes.valid || !badSevRes.errors.some(e => e.includes('severity must be one of'))) {
+      throw new Error('P0-117 VIOLATION: Expected rejection of invalid severity enum');
+    }
+
+    // Rejection of endLine < startLine
+    const invertedLineCand = {
+      ...validCandidateSet.candidates[0],
+      location: { uri: 'src/db.js', startLine: 10, endLine: 5 }
+    };
+    const invertedLineRes = validateCandidateSet({ candidates: [invertedLineCand] });
+    if (invertedLineRes.valid || !invertedLineRes.errors.some(e => e.includes('cannot be less than startLine'))) {
+      throw new Error('P0-117 VIOLATION: Expected rejection of endLine < startLine');
+    }
+
+    // Rejection of unexpected location property
+    const extraLocCand = {
+      ...validCandidateSet.candidates[0],
+      location: { uri: 'src/db.js', startLine: 10, extraLocField: 123 }
+    };
+    const extraLocRes = validateCandidateSet({ candidates: [extraLocCand] });
+    if (extraLocRes.valid || !extraLocRes.errors.some(e => e.includes('unexpected property'))) {
+      throw new Error('P0-117 VIOLATION: Expected rejection of unexpected location property');
+    }
+  } finally {
+    fs.rmSync(tempDir117, { recursive: true, force: true });
+  }
+  console.log('✔ 117. P0 Invariant: Hermetic Telemetry Isolation & Default-Deny on Untrusted Workspace Telemetry.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (117/117).');
 
   } finally {
     gitFixture.cleanup();

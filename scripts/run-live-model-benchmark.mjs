@@ -20,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import {
   createBenchmarkRunEnvelope,
   validateBenchmarkRunEnvelope,
+  validateCandidateSet,
   probeEnvironment
 } from '../skills/security-audit/scripts/record-benchmark-run.mjs';
 import {
@@ -157,24 +158,30 @@ Identify unmitigated software defects, specifically:
 - Safe resource handling, state integrity, and execution boundaries
 
 Safety & Defensive Reporting Instructions:
-1. Presumption of Non-Pass: Audit under Default-Deny. If no concrete defect or vulnerability is present, return [].
+1. Presumption of Non-Pass: Audit under Default-Deny. If no concrete defect or vulnerability is present, return an empty candidate set: {"schemaVersion": "1.0.0", "candidates": []}.
 2. Frame all finding descriptions purely as defensive code defects (e.g. "Missing key validation in recursive object merge", "Missing tenant check in lookup"). Do not include exploit payloads or offensive instructions.
-3. If defects exist, output ONLY a JSON array of candidate findings adhering to:
-[
-  {
-    "id": "CAND-<RULE>-<LINE>",
-    "ruleId": "CWE-XXX",
-    "title": "Concise defect description",
-    "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-    "location": {
-      "uri": "${fixtureRelPath}",
-      "startLine": 1,
-      "endLine": 1
-    },
-    "symbol": "<vulnerable sink call or function name, e.g. mockDatabase.find, fetch, recursiveMerge>"
-  }
-]
-Output ONLY raw JSON or markdown-fenced JSON. Do not include commentary outside the JSON.`;
+3. If defects exist, output ONLY structured JSON conforming to candidate-set.schema.json:
+{
+  "schemaVersion": "1.0.0",
+  "candidates": [
+    {
+      "id": "CAND-<RULE>-<LINE>",
+      "ruleId": "CWE-XXX",
+      "title": "Concise defect description",
+      "securityProperty": "<affected security property, e.g. input-validation, authorization, safe-resource-handling>",
+      "findingType": "VULNERABILITY" | "HARDENING" | "INFORMATIONAL",
+      "proofKind": "STATIC_TRACE" | "UNIT_TEST" | "BENIGN_REPRODUCTION" | "CONFIG_EVIDENCE" | "DEPENDENCY_EVIDENCE" | "EXTERNAL_SCANNER_EVIDENCE" | "MANUAL_ATTESTATION",
+      "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+      "location": {
+        "uri": "${fixtureRelPath}",
+        "startLine": 1,
+        "endLine": 1
+      },
+      "symbol": "<vulnerable sink call or function name, e.g. mockDatabase.find, fetch, recursiveMerge>"
+    }
+  ]
+}
+Output ONLY valid JSON matching the schema. Do not include commentary outside the JSON.`;
 }
 
 /**
@@ -194,33 +201,47 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   // Support simulated / offline mode for tests and CI
   if (options.mock || options.mockCandidates) {
     if (isSafeFixture) {
+      const safeCandidateSet = { schemaVersion: '1.0.0', candidates: [] };
       return {
         fixtureId: fixture.id,
         file: fixture.file,
         durationMs: 25,
         candidates: [],
-        rawOutput: '[]',
+        rawOutput: JSON.stringify(safeCandidateSet),
         error: null,
         split
       };
     }
 
     const passIdx = options.passIndex || 1;
-    const mockCands = options.mockCandidates || [
-      {
-        id: `CAND-${fixture.id}-P${passIdx}`,
-        ruleId: fixture.cwe || 'CWE-441',
-        title: `Simulated discovery finding for ${fixture.id}`,
-        severity: fixture.severity || 'HIGH',
-        location: {
-          uri: fixture.file,
-          startLine: (fixture.targetLine || 10) + (passIdx - 1) * 2,
-          endLine: (fixture.targetLine || 15) + (passIdx - 1) * 2
-        },
-        symbol: fixture.id
-      }
-    ];
+    let mockCands;
+    if (Array.isArray(options.mockCandidates)) {
+      mockCands = options.mockCandidates;
+    } else if (options.mockCandidates && Array.isArray(options.mockCandidates.candidates)) {
+      mockCands = options.mockCandidates.candidates;
+    } else {
+      mockCands = [
+        {
+          id: `CAND-${fixture.id}-P${passIdx}`,
+          ruleId: fixture.cwe || 'CWE-441',
+          title: `Simulated discovery finding for ${fixture.id}`,
+          securityProperty: 'safe-resource-handling',
+          findingType: 'VULNERABILITY',
+          proofKind: 'STATIC_TRACE',
+          severity: fixture.severity || 'HIGH',
+          location: {
+            uri: fixture.file,
+            startLine: (fixture.targetLine || 10) + (passIdx - 1) * 2,
+            endLine: (fixture.targetLine || 15) + (passIdx - 1) * 2
+          },
+          symbol: fixture.id
+        }
+      ];
+    }
     for (const cand of mockCands) {
+      if (!cand.securityProperty) cand.securityProperty = 'safe-resource-handling';
+      if (!cand.findingType) cand.findingType = 'VULNERABILITY';
+      if (!cand.proofKind) cand.proofKind = 'STATIC_TRACE';
       if (!cand.lineageId) {
         cand.lineageId = computeLineageFingerprint({
           ruleId: cand.ruleId || 'SEC-VULN',
@@ -229,12 +250,13 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
         });
       }
     }
+    const mockCandidateSet = { schemaVersion: '1.0.0', candidates: mockCands };
     return {
       fixtureId: fixture.id,
       file: fixture.file,
       durationMs: 50,
       candidates: mockCands,
-      rawOutput: JSON.stringify(mockCands),
+      rawOutput: JSON.stringify(mockCandidateSet),
       error: null,
       split
     };
@@ -250,9 +272,12 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startTime = Date.now();
+    const schemaPath = path.resolve(repoRoot, 'schemas/candidate-set.schema.json');
     const agyArgs = [
       '--mode', 'plan',
-      '--disable-slash-commands'
+      '--disable-slash-commands',
+      '--output-format', 'json',
+      '--json-schema', schemaPath
     ];
     if (modelId) {
       agyArgs.push('--model', modelId);
@@ -290,7 +315,25 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     }
 
     const durationMs = Date.now() - startTime;
-    const rawCandidates = parseModelJsonOutput(stdout);
+    let parsedOutput = null;
+    let rawCandidates = [];
+    let schemaError = null;
+
+    try {
+      parsedOutput = JSON.parse(stdout.trim());
+    } catch (err) {
+      schemaError = `SCHEMA_VIOLATION: Invalid JSON: ${err.message}`;
+    }
+
+    if (parsedOutput) {
+      const valResult = validateCandidateSet(parsedOutput);
+      if (!valResult.valid) {
+        schemaError = `SCHEMA_VIOLATION: ${valResult.errors.join('; ')}`;
+      } else {
+        rawCandidates = parsedOutput.candidates;
+      }
+    }
+
     const candidates = [];
 
     // Normalize candidate lineage IDs and sanitize
@@ -309,6 +352,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
 
     const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked");
     let error = exitCode !== 0 ? (stderr || `Process exited with code ${exitCode}`) : null;
+    if (!error && schemaError) {
+      error = schemaError;
+    }
     if (!error && isFilterBlocked) {
       error = 'Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
     }
@@ -335,6 +381,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
 
   return lastResult;
 }
+
+export const executeLiveDiscoveryPass = runAgyDiscoveryOnFixture;
 
 /**
  * Computes partitioned metrics separating the Development Set (SEM-03)

@@ -2610,6 +2610,14 @@ export function verifyGuardTelemetry({
     return { verified: false, reason: 'NO_TELEMETRY_FOUND' };
   }
 
+  // Under Default-Deny, untrusted workspace telemetry (!chosen.isTrusted) MUST NOT be accepted unless manifestDigest is non-null
+  if (!chosen.isTrusted && !manifestDigest) {
+    return {
+      verified: false,
+      reason: 'UNTRUSTED_TELEMETRY_REQUIRES_MANIFEST_BINDING'
+    };
+  }
+
   let lines = [];
   try {
     lines = fs.readFileSync(chosen.path, 'utf8')
@@ -2724,7 +2732,9 @@ export function finalizeScan({
   contextIsolation = null,
   artifactDirectoryPath = null,
   telemetryPath = null,
-  conversationId = null
+  conversationId = null,
+  shadowRoot = null,
+  contextPrep = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -3056,7 +3066,7 @@ export function finalizeScan({
   }
 
   // R5-P0-01: Context Preparation & Pre-Context Secret Protection Preflight
-  const contextPrep = prepareReviewContext(safeRepoRoot || process.cwd());
+  const effectiveContextPrep = contextPrep || prepareReviewContext(safeRepoRoot || process.cwd());
 
   // R5-P1-01 / R6-P1-01 / R6-P1-02: Tool Self-Integrity Verification Preflight (explicit opt-in only)
   const toolIntegrity = verifyToolSelfIntegrity(
@@ -3065,15 +3075,15 @@ export function finalizeScan({
     { allowSelfAudit: Boolean(allowSelfAudit) }
   );
 
-  const shadowRoot = contextPrep?.contextRoot || path.resolve(safeRepoRoot || process.cwd(), 'scratch/context');
+  const effectiveShadowRoot = shadowRoot || contextPrep?.contextRoot || null;
   const manifestDigest = contextPrep?.manifest?.manifestDigest || null;
   const telemetryVerification = verifyGuardTelemetry({
     telemetryPath,
     artifactDirectoryPath,
-    shadowRoot,
+    shadowRoot: effectiveShadowRoot,
     manifestDigest,
     conversationId,
-    scanStartedAt: contextPrep?.manifest?.createdAt || null
+    scanStartedAt: (contextPrep || effectiveContextPrep)?.manifest?.createdAt || (contextPrep || effectiveContextPrep)?.manifest?.generatedAt || null
   });
   const hasRuntimeGuardTelemetry = telemetryVerification.verified;
 
@@ -3100,9 +3110,9 @@ export function finalizeScan({
     effectiveContextIsolation = {
       status: hasRuntimeGuardTelemetry ? 'OBSERVED' : 'MANDATED',
       pipeline: hasRuntimeGuardTelemetry ? 'OBSERVED_SHADOW_CONTEXT_RUNTIME_GUARD' : 'MANDATED_SHADOW_CONTEXT_PIPELINE',
-      shadowContextRoot: contextPrep?.contextRoot || 'scratch/context',
-      tokenizedFilesCount: contextPrep?.manifest?.tokenizedFilesCount || 0,
-      totalSecretsTokenized: contextPrep?.manifest?.totalSecretsTokenized || 0,
+      shadowContextRoot: effectiveContextPrep?.contextRoot || 'scratch/context',
+      tokenizedFilesCount: effectiveContextPrep?.manifest?.tokenizedFilesCount || 0,
+      totalSecretsTokenized: effectiveContextPrep?.manifest?.totalSecretsTokenized || 0,
       guardTelemetry: hasRuntimeGuardTelemetry ? {
         source: telemetryVerification.telemetrySource,
         eventsCount: telemetryVerification.eventsCount,
@@ -3164,13 +3174,13 @@ export function finalizeScan({
   const matrixGate = Boolean(matrixValidation.valid && isMatrixComplete);
   const findingGate = (confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0);
   const contextGate = Boolean(
-    contextPrep
-    && contextPrep.success === true
-    && contextPrep.manifest
-    && typeof contextPrep.manifest.preparedFilesCount === 'number'
-    && typeof contextPrep.manifest.scannedFilesCount === 'number'
-    && contextPrep.manifest.preparedFilesCount >= contextPrep.manifest.scannedFilesCount
-    && !contextPrep.error
+    effectiveContextPrep
+    && effectiveContextPrep.success === true
+    && effectiveContextPrep.manifest
+    && typeof effectiveContextPrep.manifest.preparedFilesCount === 'number'
+    && typeof effectiveContextPrep.manifest.scannedFilesCount === 'number'
+    && effectiveContextPrep.manifest.preparedFilesCount >= effectiveContextPrep.manifest.scannedFilesCount
+    && !effectiveContextPrep.error
   );
   const executionGate = Boolean(
     execution
@@ -3328,7 +3338,7 @@ export function finalizeScan({
     modelProvenance: safeModelProvenance,
     toolProvenance: effectiveToolProvenance,
     toolIntegrity,
-    contextPreparation: contextPrep.manifest
+    contextPreparation: effectiveContextPrep?.manifest || null
   };
 
   // R10-P1-03: Persist verified baseline to .security-audit/baseline.json upon clean DISCOVERY scan
@@ -3365,7 +3375,7 @@ export function finalizeScan({
     modelProvenance: safeModelProvenance,
     toolProvenance: effectiveToolProvenance,
     toolIntegrity,
-    contextPreparation: contextPrep.manifest
+    contextPreparation: effectiveContextPrep?.manifest || null
   };
 
 }
