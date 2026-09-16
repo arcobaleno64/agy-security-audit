@@ -1,18 +1,21 @@
 {
   "schemaVersion": "1.0.0",
   "envelopeType": "E2E_COORDINATOR_EVIDENCE",
-  "recordedAt": "2026-09-16T12:39:49.103Z",
+  "targetClaim": "COORDINATOR_ORCHESTRATION_OBSERVED",
+  "evidenceGrade": "PUBLICATION_GRADE",
+  "publicationEligible": true,
+  "recordedAt": "2026-09-16T13:26:26.448Z",
   "environment": {
     "agyVersion": "1.2.4",
-    "modelId": "UNKNOWN",
-    "modelProvider": "UNKNOWN",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "fb60271f969989889712f7d948c1982b1d9bce16",
+    "skillRevision": "b3e25ae0e4ad275774ac7f0cfe027dca9ab19939",
     "toolVersion": "1.4.0-dev",
-    "toolRevision": "fb60271f969989889712f7d948c1982b1d9bce16",
+    "toolRevision": "b3e25ae0e4ad275774ac7f0cfe027dca9ab19939",
     "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
-    "toolDirty": true
+    "toolDirty": false
   },
   "fixture": {
     "fixtureId": "SEM-03",
@@ -32,36 +35,40 @@
   },
   "traceSummary": {
     "coordinatorDispatched": true,
-    "conversationId": "ac07e5d6-1237-471f-9d08-c4dcd1c6ac5d",
+    "conversationId": "56dc5799-5090-4ca0-8bd1-2fb0e624f8af",
     "toolsUsed": [
       "view_file",
       "list_dir",
       "run_command",
-      "schedule",
       "grep_search",
-      "invoke_subagent",
-      "manage_subagents"
+      "invoke_subagent"
     ],
     "subagentInvocations": [
       "threat-modeler"
     ],
-    "reachedFinalization": true,
+    "reachedFinalization": false,
     "tokenUsage": {
-      "inputTokens": 535319,
-      "outputTokens": 14108,
-      "thinkingTokens": 9648,
-      "cacheReadTokens": 2791521,
-      "totalTokens": 549427
+      "inputTokens": 416413,
+      "outputTokens": 14892,
+      "thinkingTokens": 10946,
+      "cacheReadTokens": 1904633,
+      "totalTokens": 431305
     },
-    "durationSeconds": 302.903
+    "durationSeconds": 303.445
+  },
+  "traceArtifact": {
+    "relativePath": "evals/live-runs/e2e-coordinator/trace-SEM-03-2026-09-16T13-26-26-447Z.ndjson",
+    "sha256Digest": "b1834aebf9238f370bafc06b95c97acd442316e136f1dc9b9bb3f1c005846106"
   },
   "validation": {
     "valid": true,
+    "targetClaim": "COORDINATOR_ORCHESTRATION_OBSERVED",
     "matchedRequiredSubagents": [
       "threat-modeler"
     ],
-    "missingSubagents": []
+    "missingSubagents": [],
+    "threeLensRequired": false,
+    "reachedFinalization": false
   },
-  "traceDigest": "9997a77ecbe14fd3494dea7773037d5eba9a930c350501a32faf2f04c53e23bf",
-  "envelopeDigest": "1d084d4cf64aae5e6870919bf6d728476ded740a1e0293a696b22f251fb8195e"
+  "envelopeDigest": "08f7f49225c20ca06e7a2ad3cd08be0b3a67b669d6974cf5e6f5c9f6591d4a8f"
 }
