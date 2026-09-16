@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0.0",
+  "envelopeType": "E2E_COORDINATOR_EVIDENCE",
+  "recordedAt": "2026-09-16T12:39:49.103Z",
+  "environment": {
+    "agyVersion": "1.2.4",
+    "modelId": "UNKNOWN",
+    "modelProvider": "UNKNOWN",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "fb60271f969989889712f7d948c1982b1d9bce16",
+    "toolVersion": "1.4.0-dev",
+    "toolRevision": "fb60271f969989889712f7d948c1982b1d9bce16",
+    "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
+    "toolDirty": true
+  },
+  "fixture": {
+    "fixtureId": "SEM-03",
+    "id": "SEM-03",
+    "name": "Confused Deputy via Credential-Forwarding Proxy",
+    "category": "confused-deputy",
+    "cwe": "CWE-441",
+    "file": "evals/semantic-benchmark/03-confused-deputy.js",
+    "targetLine": 13,
+    "expectedVerdict": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Internal service relay forwards ambient service-mesh credentials to arbitrary caller-specified destinations, acting as a confused deputy.",
+    "evidenceRoles": [
+      "entrypoint",
+      "sink"
+    ]
+  },
+  "traceSummary": {
+    "coordinatorDispatched": true,
+    "conversationId": "ac07e5d6-1237-471f-9d08-c4dcd1c6ac5d",
+    "toolsUsed": [
+      "view_file",
+      "list_dir",
+      "run_command",
+      "schedule",
+      "grep_search",
+      "invoke_subagent",
+      "manage_subagents"
+    ],
+    "subagentInvocations": [
+      "threat-modeler"
+    ],
+    "reachedFinalization": true,
+    "tokenUsage": {
+      "inputTokens": 535319,
+      "outputTokens": 14108,
+      "thinkingTokens": 9648,
+      "cacheReadTokens": 2791521,
+      "totalTokens": 549427
+    },
+    "durationSeconds": 302.903
+  },
+  "validation": {
+    "valid": true,
+    "matchedRequiredSubagents": [
+      "threat-modeler"
+    ],
+    "missingSubagents": []
+  },
+  "traceDigest": "9997a77ecbe14fd3494dea7773037d5eba9a930c350501a32faf2f04c53e23bf",
+  "envelopeDigest": "1d084d4cf64aae5e6870919bf6d728476ded740a1e0293a696b22f251fb8195e"
+}
