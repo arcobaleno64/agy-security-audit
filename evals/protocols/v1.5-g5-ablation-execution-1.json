@@ -1,0 +1,79 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/eval-protocol.schema.json",
+  "protocolId": "v1.5-g5-ablation-1",
+  "protocolVersion": "1.0.0",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "targetVersion": "1.5.0",
+  "status": "FROZEN",
+  "frozenAt": "2026-09-17T12:00:00Z",
+  "governance": {
+    "covenant": "Section 21 Holdout Covenant & Default-Deny Authority Invariant",
+    "rationale": "Execution protocol freeze establishes tamper-evident binding between reasoning profile ablation runs and experimental parameters before live execution."
+  },
+  "executionParameters": {
+    "suite": "holdout",
+    "corpus": "evals/holdout-benchmark",
+    "corpusType": "FROZEN_REPLICATION_CORPUS",
+    "fixtureCount": 20,
+    "vulnerableCount": 10,
+    "safeCount": 10,
+    "includeSafe": true,
+    "labelBlind": true,
+    "hermetic": true,
+    "passes": 3,
+    "shuffleSeed": "20260917",
+    "throttleDelayMs": 2000,
+    "timeoutMs": 240000,
+    "modelId": "gemini-3.8-flash-medium",
+    "baseModel": "gemini-3.8-flash",
+    "modelProvider": "google",
+    "modelFamily": "gemini-flash",
+    "reasoningProfile": "medium",
+    "identitySource": "CONFIG_DECLARED",
+    "groundTruthSha256": "93dfd88dbae5c44eb0d64a8f8996ff0beb91fe71152e89e45b530107718d6610",
+    "outDir": "evals/live-runs/reasoning-ablation/medium",
+    "referenceBaseline": {
+      "modelId": "gemini-3.8-flash-high",
+      "baseModel": "gemini-3.8-flash",
+      "reasoningProfile": "high",
+      "sourceRunDir": "evals/live-runs/holdout-paired",
+      "passes": 3
+    },
+    "evidenceClassification": "HISTORICAL_REFERENCE_ABLATION"
+  },
+  "experiments": {
+    "reasoningAblation": {
+      "id": "G5_REASONING_PROFILE_ABLATION_MEDIUM",
+      "name": "Medium Reasoning Profile Ablation under Controlled Hermetic Environment",
+      "suite": "holdout",
+      "corpus": "evals/holdout-benchmark",
+      "fixtureCount": 20,
+      "vulnerableCount": 10,
+      "safeCount": 10,
+      "includeSafe": true,
+      "labelBlind": true,
+      "hermetic": true,
+      "passes": 3,
+      "shuffleSeed": "20260917",
+      "throttleDelayMs": 2000,
+      "timeoutMs": 240000,
+      "modelId": "gemini-3.8-flash-medium",
+      "baseModel": "gemini-3.8-flash",
+      "modelProvider": "google",
+      "modelFamily": "gemini-flash",
+      "reasoningProfile": "medium",
+      "identitySource": "CONFIG_DECLARED",
+      "groundTruthSha256": "93dfd88dbae5c44eb0d64a8f8996ff0beb91fe71152e89e45b530107718d6610",
+      "outDir": "evals/live-runs/reasoning-ablation/medium",
+      "referenceBaseline": {
+        "modelId": "gemini-3.8-flash-high",
+        "baseModel": "gemini-3.8-flash",
+        "reasoningProfile": "high",
+        "sourceRunDir": "evals/live-runs/holdout-paired",
+        "passes": 3
+      },
+      "evidenceClassification": "HISTORICAL_REFERENCE_ABLATION"
+    }
+  },
+  "protocolDigest": "fcdc14ccbb623cb1bf97c9ba6d1432b5626c2f9ddb71eddc653a57278b568383"
+}

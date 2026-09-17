@@ -346,15 +346,24 @@ export function loadAndValidateProtocol(protocolPath, repoRoot = DEFAULT_REPO_RO
  * Validates that runner options comply with the frozen protocol specification.
  */
 export function verifyProtocolCompliance(options, protocol, experimentKey = 'holdoutPaired') {
-  if (!protocol || !protocol.experiments) return;
-  const exp = protocol.experiments[experimentKey];
+  if (!protocol) return;
+  let exp = null;
+  if (protocol.experiments && experimentKey && protocol.experiments[experimentKey]) {
+    exp = protocol.experiments[experimentKey];
+  } else if (protocol.executionParameters) {
+    exp = protocol.executionParameters;
+  } else if (protocol.experiments) {
+    exp = protocol.experiments.reasoningAblation || protocol.experiments.holdoutPaired || Object.values(protocol.experiments)[0];
+  } else {
+    exp = protocol;
+  }
   if (!exp) return;
 
   const errors = [];
   if (exp.suite && options.suite && options.suite !== exp.suite) {
     errors.push(`Suite mismatch: protocol expects '${exp.suite}', run specified '${options.suite}'`);
   }
-  if (exp.passes !== undefined && options.passes !== undefined && options.passes !== exp.passes) {
+  if (exp.passes !== undefined && options.passes !== undefined && Number(options.passes) !== Number(exp.passes)) {
     errors.push(`Passes count mismatch: protocol expects ${exp.passes}, run specified ${options.passes}`);
   }
   if (exp.shuffleSeed !== undefined && options.shuffleSeed && String(options.shuffleSeed) !== String(exp.shuffleSeed)) {
@@ -365,6 +374,34 @@ export function verifyProtocolCompliance(options, protocol, experimentKey = 'hol
   }
   if (exp.labelBlind !== undefined && options.labelBlind !== undefined && Boolean(options.labelBlind) !== Boolean(exp.labelBlind)) {
     errors.push(`Label-blind mode mismatch: protocol expects labelBlind=${exp.labelBlind}, run specified labelBlind=${options.labelBlind}`);
+  }
+  if (exp.includeSafe !== undefined && options.includeSafe !== undefined && Boolean(options.includeSafe) !== Boolean(exp.includeSafe)) {
+    errors.push(`Include-safe mode mismatch: protocol expects includeSafe=${exp.includeSafe}, run specified includeSafe=${options.includeSafe}`);
+  }
+  if (!options.mock && exp.throttleDelayMs !== undefined && options.delayMs !== undefined && Number(options.delayMs) !== Number(exp.throttleDelayMs)) {
+    errors.push(`Throttle delay mismatch: protocol expects ${exp.throttleDelayMs}ms, run specified ${options.delayMs}ms`);
+  }
+  if (exp.timeoutMs !== undefined && options.timeoutMs !== undefined && Number(options.timeoutMs) !== Number(exp.timeoutMs)) {
+    errors.push(`Timeout mismatch: protocol expects ${exp.timeoutMs}ms, run specified ${options.timeoutMs}ms`);
+  }
+  if (exp.modelId && options.modelId && options.modelId !== exp.modelId) {
+    errors.push(`Model ID mismatch: protocol expects '${exp.modelId}', run specified '${options.modelId}'`);
+  }
+  if (exp.baseModel && options.baseModel && options.baseModel !== exp.baseModel) {
+    errors.push(`Base model mismatch: protocol expects '${exp.baseModel}', run specified '${options.baseModel}'`);
+  }
+  if (exp.reasoningProfile && options.reasoningProfile && options.reasoningProfile !== exp.reasoningProfile) {
+    errors.push(`Reasoning profile mismatch: protocol expects '${exp.reasoningProfile}', run specified '${options.reasoningProfile}'`);
+  }
+  if (exp.outDir && options.outDir) {
+    const repo = options.repoRoot || DEFAULT_REPO_ROOT;
+    const resolvedExp = path.resolve(repo, exp.outDir).replace(/\\/g, '/').replace(/\/+$/, '');
+    const resolvedOut = path.resolve(repo, options.outDir).replace(/\\/g, '/').replace(/\/+$/, '');
+    const isWin = process.platform === 'win32';
+    const match = isWin ? (resolvedExp.toLowerCase() === resolvedOut.toLowerCase()) : (resolvedExp === resolvedOut);
+    if (!match) {
+      errors.push(`Output directory mismatch: protocol expects '${exp.outDir}', run specified '${options.rawOutDir || options.outDir}'`);
+    }
   }
 
   if (errors.length > 0) {
@@ -1230,6 +1267,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 
   const passes = options.passes ? parseInt(options.passes, 10) : 1;
   const delayMs = options.delayMs !== undefined ? options.delayMs : (options.mock ? 0 : 1000);
+  const timeoutMs = options.timeoutMs;
   const defaultOutDirName = isHoldout ? 'evals/holdout-live-runs' : 'evals/live-runs';
   const outDir = options.outDir !== undefined
     ? (options.outDir ? path.resolve(repoRoot, options.outDir) : null)
@@ -1243,13 +1281,23 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     activeProtocol = typeof options.protocol === 'object'
       ? options.protocol
       : loadAndValidateProtocol(options.protocol, repoRoot);
-    const expKey = options.experimentKey || (isHoldout ? 'holdoutPaired' : 'holdoutPaired');
+    const expKey = options.experimentKey || (activeProtocol.protocolId === 'v1.5-g5-ablation-1' ? 'reasoningAblation' : 'holdoutPaired');
     verifyProtocolCompliance({
       suite,
       passes,
+      includeSafe: Boolean(options.includeSafe || options.safeOnly),
       shuffleSeed: options.shuffleSeed,
       hermetic: options.hermetic !== false,
-      labelBlind: options.labelBlind !== false
+      labelBlind: options.labelBlind !== false,
+      delayMs,
+      timeoutMs,
+      modelId,
+      baseModel: options.baseModel,
+      reasoningProfile: options.reasoningProfile,
+      outDir,
+      rawOutDir: options.outDir,
+      repoRoot,
+      mock: Boolean(options.mock)
     }, activeProtocol, expKey);
   }
 
@@ -1258,6 +1306,12 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   console.log(`  Evidence Origin:       ${options.mock ? 'SYNTHETIC' : 'MODEL_OBSERVED'}`);
   console.log(`  Execution Kind:        ${options.mock ? 'SIMULATED_HARNESS' : 'LIVE_AGENT'}`);
   console.log(`  Model ID:              ${modelId}`);
+  if (options.baseModel) {
+    console.log(`  Base Model:            ${options.baseModel}`);
+  }
+  if (options.reasoningProfile) {
+    console.log(`  Reasoning Profile:     ${options.reasoningProfile}`);
+  }
   if (activeProtocol) {
     console.log(`  Protocol Bound:        ${activeProtocol.protocolId} (${activeProtocol.protocolDigest.slice(0, 16)}...)`);
   }
@@ -1290,9 +1344,16 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     fs.mkdirSync(outDir, { recursive: true });
   }
 
+  const explicitIdentitySource = (options.baseModel || options.reasoningProfile || options.identitySource === 'CONFIG_DECLARED')
+    ? 'CONFIG_DECLARED'
+    : (options.identitySource || undefined);
+
   const envProv = probeEnvironment(repoRoot, {
     modelId,
     modelProvider,
+    ...(options.baseModel ? { baseModel: options.baseModel } : {}),
+    ...(options.reasoningProfile ? { reasoningProfile: options.reasoningProfile } : {}),
+    ...(explicitIdentitySource ? { identitySource: explicitIdentitySource } : {}),
     ...(options.environment || {})
   });
 
@@ -1473,6 +1534,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         suite,
         protocolId: activeProtocol ? activeProtocol.protocolId : null,
         protocolDigest: activeProtocol ? activeProtocol.protocolDigest : null,
+        baseModel: options.baseModel || envProv.baseModel || null,
+        reasoningProfile: options.reasoningProfile || envProv.reasoningProfile || null,
+        identitySource: envProv.identitySource || null,
         fixtureSplits: activeSplits,
         includeSafe: Boolean(options.includeSafe || options.safeOnly),
         safeOnly: isSafeOnly,
@@ -1941,6 +2005,76 @@ const y = 2;`;
   }
   console.log('  ✔ Test 9: Evaluation Protocol Freeze & Integrity Validation (v1.5-eval-1) verified fail-closed.');
 
+  // Test 10: G5 Medium Ablation Execution Protocol (v1.5-g5-ablation-1) freeze & compliance verification
+  const ablationProtoFile = path.resolve(repoRoot, 'evals/protocols/v1.5-g5-ablation-execution-1.json');
+  const ablationProto = loadAndValidateProtocol(ablationProtoFile, repoRoot);
+  if (ablationProto.protocolId !== 'v1.5-g5-ablation-1' || ablationProto.status !== 'FROZEN') {
+    throw new Error('v1.5-g5-ablation-1 protocol failed freeze verification');
+  }
+
+  const validAblationOptions = {
+    suite: 'holdout',
+    passes: 3,
+    includeSafe: true,
+    shuffleSeed: '20260917',
+    hermetic: true,
+    labelBlind: true,
+    delayMs: 2000,
+    timeoutMs: 240000,
+    modelId: 'gemini-3.8-flash-medium',
+    baseModel: 'gemini-3.8-flash',
+    reasoningProfile: 'medium',
+    outDir: 'evals/live-runs/reasoning-ablation/medium',
+    repoRoot
+  };
+  verifyProtocolCompliance(validAblationOptions, ablationProto);
+
+  verifyProtocolCompliance({
+    ...validAblationOptions,
+    outDir: path.resolve(repoRoot, 'evals/live-runs/reasoning-ablation/medium')
+  }, ablationProto);
+
+  let outDirMismatchCaught = false;
+  try {
+    verifyProtocolCompliance({
+      ...validAblationOptions,
+      outDir: 'evals/live-runs/wrong-dir'
+    }, ablationProto);
+  } catch (err) {
+    if (err.message.includes('Output directory mismatch')) outDirMismatchCaught = true;
+  }
+  if (!outDirMismatchCaught) {
+    throw new Error('verifyProtocolCompliance failed to reject mismatched outDir');
+  }
+
+  let baseModelMismatchCaught = false;
+  try {
+    verifyProtocolCompliance({
+      ...validAblationOptions,
+      baseModel: 'gemini-3.8-pro'
+    }, ablationProto);
+  } catch (err) {
+    if (err.message.includes('Base model mismatch')) baseModelMismatchCaught = true;
+  }
+  if (!baseModelMismatchCaught) {
+    throw new Error('verifyProtocolCompliance failed to reject mismatched baseModel');
+  }
+
+  let profileMismatchCaught = false;
+  try {
+    verifyProtocolCompliance({
+      ...validAblationOptions,
+      reasoningProfile: 'high'
+    }, ablationProto);
+  } catch (err) {
+    if (err.message.includes('Reasoning profile mismatch')) profileMismatchCaught = true;
+  }
+  if (!profileMismatchCaught) {
+    throw new Error('verifyProtocolCompliance failed to reject mismatched reasoningProfile');
+  }
+
+  console.log('  ✔ Test 10: G5 Medium Ablation Execution Protocol & verifyProtocolCompliance verified fail-closed.');
+
   console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
 }
 
@@ -1974,6 +2108,8 @@ Options:
   --test               Run internal harness unit tests
   --fixture <id>       Run discovery only on a specific fixture (e.g. SEM-03)
   --model <modelId>    Override target model ID (default: gemini-3.8-flash-high)
+  --base-model <model> Base model architecture (e.g. gemini-3.8-flash)
+  --reasoning-profile <profile> Reasoning/thinking profile (e.g. medium, high, low)
   --out-dir <dir>      Directory to write benchmark envelope JSON files (default: evals/live-runs or evals/holdout-live-runs if passes > 1)
   --output <path>      Path to output JSON benchmark envelope (for single pass)
   --report <path>      Path to write formal Markdown empirical baseline report
@@ -2021,6 +2157,8 @@ Options:
   const outFile = getArg('--output');
   const reportPath = getArg('--report');
   const model = getArg('--model');
+  const baseModel = getArg('--base-model');
+  const reasoningProfile = getArg('--reasoning-profile');
   const retriesArg = getArg('--retries');
   const retries = retriesArg ? parseInt(retriesArg, 10) : undefined;
   const timeoutArg = getArg('--timeout') || getArg('--timeout-ms');
@@ -2053,6 +2191,9 @@ Options:
       protocol: protocolPath || undefined,
       fixtureId,
       modelId: model || undefined,
+      baseModel: baseModel || undefined,
+      reasoningProfile: reasoningProfile || undefined,
+      identitySource: (baseModel || reasoningProfile) ? 'CONFIG_DECLARED' : undefined,
       retries,
       timeoutMs,
       delayMs,
