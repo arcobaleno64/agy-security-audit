@@ -42,6 +42,11 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     description: '20-Fixture Paired Disposition Benchmark Report'
   },
   {
+    repoPath: 'reports/safe-control-baseline-report-2026-09-17.md',
+    stagedName: 'safe-control-baseline-report-2026-09-17.md',
+    description: 'Authentic Label-Blind Safe-Control Baseline Report'
+  },
+  {
     repoPath: 'evals/semantic-benchmark/ground-truth.json',
     stagedName: 'ground-truth.json',
     description: 'Authoritative 20-Fixture Paired Dataset'
