@@ -132,7 +132,27 @@ function runSuite() {
   const declaredB = normalizeModelTaxonomy('claude-3-7-sonnet', { identitySource: 'CONFIG_DECLARED' });
   const t3Declared = classifyComparisonExperiment(declaredA, declaredB, { failClosed: true });
   assert(t3Declared.tier === 3, 'CONFIG_DECLARED must satisfy independence authority');
-  console.log('  ✔ 1.6 Default-Deny Authority Invariant: PARSED_INFERRED rejected fail-closed on cross-model claims.\n');
+  console.log('  ✔ 1.6 Default-Deny Authority Invariant: PARSED_INFERRED rejected fail-closed on cross-model claims.');
+
+  // 1.7 Default-Deny Tier 1 Authority Invariant: PARSED_INFERRED cannot establish Tier 1 ablation
+  const unverifiedTier1A = normalizeModelTaxonomy('gemini-3.8-flash-high', { identitySource: 'PARSED_INFERRED' });
+  const unverifiedTier1B = normalizeModelTaxonomy('gemini-3.8-flash-low', { identitySource: 'PARSED_INFERRED' });
+  let tier1FailClosedTriggered = false;
+  try {
+    classifyComparisonExperiment(unverifiedTier1A, unverifiedTier1B, { failClosed: true });
+  } catch (err) {
+    if (err.message.includes('DEFAULT_DENY_TAXONOMY_VIOLATION')) {
+      tier1FailClosedTriggered = true;
+    }
+  }
+  assert(tier1FailClosedTriggered, 'Default-Deny must fail closed when Tier 1 claimed with PARSED_INFERRED');
+
+  // CONFIG_DECLARED satisfies Tier 1 authority
+  const declaredTier1A = normalizeModelTaxonomy('gemini-3.8-flash-high', { identitySource: 'CONFIG_DECLARED', baseModel: 'gemini-3.8-flash', reasoningProfile: 'high' });
+  const declaredTier1B = normalizeModelTaxonomy('gemini-3.8-flash-low', { identitySource: 'CONFIG_DECLARED', baseModel: 'gemini-3.8-flash', reasoningProfile: 'low' });
+  const t1Declared = classifyComparisonExperiment(declaredTier1A, declaredTier1B, { failClosed: true });
+  assert(t1Declared.tier === 1, 'CONFIG_DECLARED must satisfy Tier 1 ablation authority');
+  console.log('  ✔ 1.7 Default-Deny Tier 1 Authority Invariant: PARSED_INFERRED rejected fail-closed on Tier 1 ablation.\n');
 
   // ---------------------------------------------------------------------------
   // Suite 2: Dual-Tier Jaccard & Explicit Empty-Set Semantics
@@ -325,7 +345,25 @@ function runSuite() {
   const tampered2 = JSON.parse(JSON.stringify(proto));
   tampered2.taxonomy.tiers.TIER_1_REASONING_PROFILE_ABLATION.description = 'Hacked description';
   assert(computeProtocolDigest(tampered2) !== proto.protocolDigest, 'Tampered tier description must alter digest');
-  console.log('  ✔ 5.2 Tamper-evident binding rejects unauthorized modifications fail-closed.\n');
+  console.log('  ✔ 5.2 Tamper-evident binding rejects unauthorized modifications fail-closed.');
+
+  // 5.3 Verification of G5 Medium ablation execution protocol integrity and digest
+  const ablationProtoPath = 'evals/protocols/v1.5-g5-ablation-execution-1.json';
+  const ablationProto = loadAndValidateProtocol(ablationProtoPath, REPO_ROOT);
+
+  assert(ablationProto.protocolId === 'v1.5-g5-ablation-1', `Expected protocolId v1.5-g5-ablation-1, got ${ablationProto.protocolId}`);
+  assert(ablationProto.status === 'FROZEN', `Expected status FROZEN, got ${ablationProto.status}`);
+  assert(typeof ablationProto.protocolDigest === 'string' && ablationProto.protocolDigest.length === 64, 'Invalid protocolDigest format');
+
+  const computedAblationDigest = computeProtocolDigest(ablationProto);
+  assert(computedAblationDigest === ablationProto.protocolDigest, `Digest mismatch: computed ${computedAblationDigest} != declared ${ablationProto.protocolDigest}`);
+
+  // Tampering detection on ablation execution protocol
+  const tamperedAblation = JSON.parse(JSON.stringify(ablationProto));
+  tamperedAblation.executionParameters.throttleDelayMs = 1000;
+  assert(computeProtocolDigest(tamperedAblation) !== ablationProto.protocolDigest, 'Tampered throttleDelayMs must alter digest');
+
+  console.log(`  ✔ 5.3 G5 Medium Ablation Execution Protocol canonical SHA-256 digest verified fail-closed (${ablationProto.protocolDigest}).\n`);
 
   // ---------------------------------------------------------------------------
   // Suite 6: Comparative Specificity & Report Rendering

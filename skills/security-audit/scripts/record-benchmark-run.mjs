@@ -40,10 +40,17 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
   const modelProvider = overrides.modelProvider || process.env.AGY_MODEL_PROVIDER || 'UNKNOWN';
   const modelTaxonomy = overrides.modelTaxonomy || normalizeModelTaxonomy(modelId, { modelProvider, ...overrides });
 
+  const baseModel = overrides.baseModel || modelTaxonomy.baseModel;
+  const reasoningProfile = overrides.reasoningProfile !== undefined ? overrides.reasoningProfile : modelTaxonomy.reasoningProfile;
+  const identitySource = overrides.identitySource || modelTaxonomy.identitySource;
+
   return {
     agyVersion: agyVersion || 'UNKNOWN',
     modelId,
     modelProvider,
+    baseModel,
+    reasoningProfile,
+    identitySource,
     modelTaxonomy,
     os: `${process.platform} (${process.arch})`,
     nodeVersion: process.version,
@@ -168,11 +175,12 @@ export function normalizeModelTaxonomy(rawModelId, overrides = {}) {
  * @returns {{ valid: boolean, error: string|null }}
  */
 export function validateIndependenceAuthority(taxonomyA, taxonomyB, claimedTier) {
+  const isTier1 = claimedTier === 'REASONING_PROFILE_ABLATION' || claimedTier === 1;
   const isTier2 = claimedTier === 'INTRA_PROVIDER_MODEL_REPLICATION' || claimedTier === 2;
   const isTier3 = claimedTier === 'CROSS_PROVIDER_MODEL_REPLICATION' || claimedTier === 3;
   const isTier4 = claimedTier === 'CROSS_SYSTEM_REPLICATION' || claimedTier === 4;
 
-  if (isTier2 || isTier3 || isTier4) {
+  if (isTier1 || isTier2 || isTier3 || isTier4) {
     const validSources = new Set(['RUNTIME_ATTESTED', 'CONFIG_DECLARED']);
     if (!validSources.has(taxonomyA?.identitySource) || !validSources.has(taxonomyB?.identitySource)) {
       return {
