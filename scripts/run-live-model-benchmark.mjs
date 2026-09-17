@@ -54,7 +54,20 @@ export function writeJsonAtomic(filePath, data) {
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmpPath, filePath);
+  let retries = 5;
+  while (true) {
+    try {
+      fs.renameSync(tmpPath, filePath);
+      break;
+    } catch (err) {
+      retries--;
+      if (retries <= 0) {
+        try { fs.unlinkSync(tmpPath); } catch {}
+        throw err;
+      }
+      sleepSync(50);
+    }
+  }
 }
 
 /**
@@ -864,10 +877,13 @@ export function renderEmpiricalBaselineReport({
     ? 'Regression Baseline Calibration'
     : 'Uncalibrated (0 Fixtures per Section 21 Covenant)';
 
+  const pubDate = options.publicationDate ||
+    (envelopes[0]?.recordedAt ? envelopes[0].recordedAt.slice(0, 10) : '2026-09-17');
+
   return `# Empirical Baseline Evaluation Report: Model-Dependent Stochastic Discovery (N=${totalPasses})
 
 **Evaluation Harness**: Antigravity Security Audit Plugin (\`@arcobaleno64/agy-security-audit\`)  
-**Publication Date**: 2026-09-13  
+**Publication Date**: ${pubDate}  
 **Corpus**: ${corpusDesc}  
 **Governance Standard**: NIST SSDF (SP 800-218) / OWASP ASVS 5.0.0 / Section 21 Benchmark Protocol  
 **Principle**: ${principleDesc}
@@ -1094,7 +1110,11 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
               candidateCount: parsedEnvelope.findings?.candidates?.length || 0
             });
             continue;
+          } else {
+            console.log(`  ℹ Existing pass file at ${passFilePath} contains ${auditedIds.size}/${targetFixtures.length} target fixtures. Re-running pass.`);
           }
+        } else if (!valResult.valid) {
+          console.warn(`  ⚠ Existing pass file failed envelope schema validation (${passFilePath}): ${valResult.errors.join('; ')}. Re-running pass.`);
         }
       } catch (err) {
         console.warn(`  ⚠ Existing pass file unreadable or invalid (${passFilePath}): ${err.message}. Re-running pass.`);
@@ -1122,8 +1142,13 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
           const formatCompatible = options.mock ? isMockCheckpoint : !isMockCheckpoint;
 
           if (parsedCheckpoint && parsedCheckpoint.fixtureId === fix.id && Array.isArray(parsedCheckpoint.candidates) && formatCompatible) {
-            res = parsedCheckpoint;
-            console.log(`[Pass ${p}/${passes}] [RESUME] Checkpoint restored for [${fix.id}] from ${checkpointFile}`);
+            const candVal = validateCandidateSet({ candidates: parsedCheckpoint.candidates });
+            if (candVal.valid) {
+              res = parsedCheckpoint;
+              console.log(`[Pass ${p}/${passes}] [RESUME] Checkpoint restored for [${fix.id}] from ${checkpointFile}`);
+            } else {
+              console.warn(`  ⚠ Checkpoint for [${fix.id}] has invalid candidate schema (${checkpointFile}): ${candVal.errors.join('; ')}. Re-auditing.`);
+            }
           }
         } catch (err) {
           console.warn(`  ⚠ Checkpoint for [${fix.id}] invalid (${checkpointFile}): ${err.message}. Re-auditing.`);
@@ -1549,13 +1574,46 @@ const y = 2;`;
     throw new Error('resumeRun2 failed to load pass envelope');
   }
 
+  // 7e. Multi-pass resume expansion + invalid candidate schema rejection
+  const pass2Dir = path.join(testCheckpointsDir, 'pass-2');
+  const invalidCheckpoint = {
+    fixtureId: 'SEM-02-SAFE',
+    file: 'evals/semantic-benchmark/safe/02-cross-tenant-access.js',
+    durationMs: 10,
+    candidates: [{ malformedCandidate: true }],
+    rawOutput: '{"malformedCandidate":true}',
+    error: null,
+    split: 'SAFE_CONTROL',
+    executionTelemetry: { format: 'SIMULATED_MOCK' }
+  };
+  writeJsonAtomic(path.join(pass2Dir, 'SEM-02-SAFE.json'), invalidCheckpoint);
+
+  // Run with passes: 2; Pass 1 should load from disk, Pass 2 should reject invalid SEM-02-SAFE checkpoint, re-audit, and finish
+  const resumeRun3 = runLiveModelBenchmark(repoRoot, {
+    safeOnly: true,
+    mock: true,
+    passes: 2,
+    resume: true,
+    outDir: testOutDir,
+    checkpointsDir: 'scratch/test-harness-checkpoints'
+  });
+
+  if (resumeRun3.envelopes.length !== 2) {
+    throw new Error('resumeRun3 failed to produce 2 pass envelopes');
+  }
+  const repairedCp = JSON.parse(fs.readFileSync(path.join(pass2Dir, 'SEM-02-SAFE.json'), 'utf8'));
+  const repairedVal = validateCandidateSet({ candidates: repairedCp.candidates });
+  if (!repairedVal.valid) {
+    throw new Error('SEM-02-SAFE checkpoint was not repaired with valid candidates on re-audit');
+  }
+
   // Cleanup test artifacts
   try {
     fs.rmSync(testCheckpointsDir, { recursive: true, force: true });
     fs.rmSync(testOutDir, { recursive: true, force: true });
   } catch {}
 
-  console.log('  ✔ Test 7: Atomic per-fixture checkpointing and idempotent pass resume verified.');
+  console.log('  ✔ Test 7: Atomic per-fixture checkpointing, schema-validated candidate resume, and multi-pass expansion verified.');
 
   console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
 }

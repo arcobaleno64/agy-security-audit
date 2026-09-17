@@ -1,7 +1,7 @@
 # Empirical Baseline Evaluation Report: Model-Dependent Stochastic Discovery (N=3)
 
 **Evaluation Harness**: Antigravity Security Audit Plugin (`@arcobaleno64/agy-security-audit`)  
-**Publication Date**: 2026-09-13  
+**Publication Date**: 2026-09-17  
 **Corpus**: `evals/semantic-benchmark` (20-fixture paired semantic benchmark)  
 **Governance Standard**: NIST SSDF (SP 800-218) / OWASP ASVS 5.0.0 / Section 21 Benchmark Protocol  
 **Principle**: Default-Deny Presumption of Non-Pass; partitioned Development Set (`SEM-03`) vs. Holdout Generalization Set (`SEM-01..SEM-10`).
@@ -39,7 +39,7 @@ This evaluation establishes the project's first authentic, model-dependent empir
 
 ## 2. Multi-Pass Stochastic Stability & Jaccard Matrix (N=3)
 
-The pairwise Jaccard similarity metric $J(A, B) = rac{|A cap B|}{|A cup B|}$ measures candidate finding-set invariance across independent discovery passes on identical codebases.
+The pairwise Jaccard similarity metric $J(A, B) = \frac{|A \cap B|}{|A \cup B|}$ measures candidate finding-set invariance across independent discovery passes on identical codebases.
 
 ### Pairwise Comparison Matrix
 | Pass Comparison | Jaccard Similarity | Status (Threshold ≥ 80.0%) |
