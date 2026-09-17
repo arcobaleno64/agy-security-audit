@@ -1,0 +1,368 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-pass-3",
+  "recordedAt": "2026-09-17T09:32:00.299Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "target": {
+    "repositoryName": "evals/holdout-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "d98b017a8db25eda58122f4caa97963efd3c5d64",
+    "corpus": "holdout-benchmark"
+  },
+  "environment": {
+    "agyVersion": "1.2.5",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "d98b017a8db25eda58122f4caa97963efd3c5d64",
+    "toolVersion": "1.4.1",
+    "toolRevision": "d98b017a8db25eda58122f4caa97963efd3c5d64",
+    "toolIntegrityDigest": "a1672eaa288b5cdd73186b5ead62dfb06f0d661e63cc9f433e86bedc40b1e569",
+    "toolDirty": false
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-1336-18",
+        "ruleId": "CWE-1336",
+        "title": "Server-Side Template Injection via dynamic template string evaluation",
+        "securityProperty": "input-validation",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
+          "startLine": 18,
+          "endLine": 18
+        },
+        "symbol": "renderDynamicTemplate",
+        "lineageId": "d593b68c2453a8f81e0dadcf07f64824"
+      },
+      {
+        "id": "CAND-CWE-347-15",
+        "ruleId": "CWE-347",
+        "title": "JWT Verification Bypass via Algorithm Confusion",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/06-jwt-alg-confusion.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "symbol": "jwt.verify",
+        "lineageId": "5b2dfcf52c1e8c6ab627abb20787c1c8"
+      },
+      {
+        "id": "CAND-CWE-329-16",
+        "ruleId": "CWE-329",
+        "title": "Static hardcoded initialization vector reused across multiple ciphertexts in AES-CBC mode",
+        "securityProperty": "confidentiality",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
+          "startLine": 16,
+          "endLine": 16
+        },
+        "symbol": "createCipheriv",
+        "lineageId": "dfc83efd73b151e197270738d9c876c5"
+      },
+      {
+        "id": "CAND-CWE-113-11",
+        "ruleId": "CWE-113",
+        "title": "CRLF injection in Set-Cookie header allows HTTP response splitting",
+        "securityProperty": "BOUNDARY_DATA_VALIDATION",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/09-crlf-header-injection.js",
+          "startLine": 11,
+          "endLine": 11
+        },
+        "symbol": "setHeader",
+        "lineageId": "bf979cc7ccdb1e77e236d316c6f771dd"
+      }
+    ],
+    "verifiedFindings": null,
+    "unresolvedCandidates": null,
+    "suppressedCandidates": null
+  },
+  "summary": {
+    "candidateCount": 4,
+    "verifiedCount": null,
+    "deferredCount": null,
+    "suppressedCount": null,
+    "executionDurationMs": 1331479
+  },
+  "metadata": {
+    "passIndex": 3,
+    "totalPasses": 3,
+    "suite": "holdout",
+    "protocolId": "v1.5-eval-1",
+    "protocolDigest": "6597f36d0ceeee1dbe2ea01ec8f0cf41ba2e486871433f78f8148f5eb6ddc533",
+    "fixtureSplits": {
+      "developmentSet": {
+        "ids": [],
+        "role": "REGRESSION_BASELINE",
+        "rationale": "Holdout generalization benchmark suite has no development or calibrated fixtures (Section 21 covenant)."
+      },
+      "holdoutFixtures": {
+        "ids": [
+          "HLD-01",
+          "HLD-02",
+          "HLD-03",
+          "HLD-04",
+          "HLD-05",
+          "HLD-06",
+          "HLD-07",
+          "HLD-08",
+          "HLD-09",
+          "HLD-10"
+        ],
+        "role": "HOLDOUT_GENERALIZATION",
+        "rationale": "All 10 fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
+      }
+    },
+    "includeSafe": true,
+    "safeOnly": false,
+    "shuffleSeed": "20260917",
+    "labelBlind": true,
+    "hermetic": true,
+    "hermeticHarnessVersion": "HERMETIC_BENCHMARK_V1",
+    "throttleDelayMs": 2000,
+    "pacingPolicy": "2000ms inter-call throttle delay",
+    "fixtureResults": [
+      {
+        "fixtureId": "HLD-02",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 240025,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 240037,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-03",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 240032,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 240030,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 240024,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 240038,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 240030,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-08",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 240036,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-07",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 240036,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-10",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 240035,
+        "error": "spawnSync agy.exe ETIMEDOUT"
+      },
+      {
+        "fixtureId": "HLD-01",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 167973,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 100158,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 75578,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 111365,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-05",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 82298,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-04",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 118658,
+        "error": "SCHEMA_VIOLATION: Invalid JSON in stream result response: Unexpected token 'I', \"I have lau\"... is not valid JSON"
+      },
+      {
+        "fixtureId": "HLD-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 16103,
+        "error": "SCHEMA_VIOLATION: Invalid JSON in stream result response: Unexpected token 'T', \"This reque\"... is not valid JSON"
+      },
+      {
+        "fixtureId": "HLD-09",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 105812,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 48475,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-01-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 192596,
+        "error": null
+      }
+    ],
+    "governanceNote": "Holdout generalization benchmark: all 10 fixtures strictly uncalibrated per Section 21 covenant."
+  },
+  "executionTelemetry": {
+    "format": "AGY_STREAM_JSON_V1",
+    "conversationId": "a15248a7-f79a-4230-af95-ae3b5a12de5d",
+    "telemetryDigest": "0d1abf80ee4b440e5ce16a4e1aadef725d69792eae506906dbede91fd5e12851",
+    "totalEvents": 811,
+    "availableTools": [
+      "ask_custom_permission",
+      "ask_permission",
+      "ask_question",
+      "browser_click_element",
+      "browser_drag_pixel_to_pixel",
+      "browser_get_dom",
+      "browser_get_network_request",
+      "browser_input",
+      "browser_list_network_requests",
+      "browser_mouse_down",
+      "browser_mouse_up",
+      "browser_move_mouse",
+      "browser_press_key",
+      "browser_refresh_page",
+      "browser_resize_window",
+      "browser_scroll",
+      "browser_scroll_dom",
+      "browser_select_option",
+      "browser_subagent",
+      "call_mcp_tool",
+      "capture_browser_console_logs",
+      "capture_browser_screenshot",
+      "click_browser_pixel",
+      "command_status",
+      "define_subagent",
+      "delete_knowledge",
+      "execute_browser_javascript",
+      "find_by_name",
+      "finish",
+      "generate_image",
+      "grep_search",
+      "invoke_subagent",
+      "list_browser_pages",
+      "list_dir",
+      "list_permissions",
+      "list_resources",
+      "manage_inbox",
+      "manage_subagents",
+      "manage_task",
+      "multi_replace_file_content",
+      "notebook_edit",
+      "notebook_execution",
+      "open_browser_url",
+      "read_browser_page",
+      "read_resource",
+      "read_url_content",
+      "replace_file_content",
+      "run_command",
+      "schedule",
+      "search_web",
+      "sed_file",
+      "send_command_input",
+      "send_message",
+      "view_file",
+      "wait",
+      "wait_5_seconds",
+      "write_to_file"
+    ],
+    "toolsUsed": [
+      "view_file",
+      "grep_search",
+      "run_command",
+      "list_dir",
+      "find_by_name"
+    ],
+    "subagentsInvoked": [],
+    "permissionMode": "always-proceed",
+    "sandboxEnabled": false,
+    "tokenUsage": {
+      "inputTokens": 2060314,
+      "outputTokens": 132138,
+      "thinkingTokens": 106966,
+      "cacheReadTokens": 8933177,
+      "totalTokens": 2192452
+    },
+    "durationSeconds": 1331.479
+  }
+}
