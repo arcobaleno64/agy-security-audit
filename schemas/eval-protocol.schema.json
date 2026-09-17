@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/eval-protocol.schema.json",
+  "title": "Evaluation Protocol Specification Schema",
+  "type": "object",
+  "required": [
+    "protocolId",
+    "protocolVersion",
+    "targetSystem",
+    "targetVersion",
+    "status",
+    "frozenAt",
+    "governance",
+    "experiments",
+    "protocolDigest"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "protocolId": { "type": "string" },
+    "protocolVersion": { "type": "string" },
+    "targetSystem": { "type": "string" },
+    "targetVersion": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["DRAFT", "FROZEN", "SUPERSEDED", "REVOKED"]
+    },
+    "frozenAt": { "type": "string" },
+    "governance": {
+      "type": "object",
+      "required": ["covenant", "rationale"],
+      "properties": {
+        "covenant": { "type": "string" },
+        "rationale": { "type": "string" }
+      }
+    },
+    "experiments": {
+      "type": "object",
+      "required": ["holdoutPaired", "reasoningAblation", "runtimeConfinement"],
+      "properties": {
+        "holdoutPaired": { "type": "object" },
+        "reasoningAblation": { "type": "object" },
+        "runtimeConfinement": { "type": "object" }
+      }
+    },
+    "canonicalPromptRequirements": {
+      "type": "object"
+    },
+    "protocolDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}
