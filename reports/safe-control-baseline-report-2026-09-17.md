@@ -32,8 +32,13 @@ This evaluation establishes the project's first authentic, model-dependent empir
 - **Mean Pairwise Jaccard Similarity**: **5.6%**
 - **Unique Semantic Lineages Discovered**: **9**
 - **Consistently Recurrent Lineages (100% Passes)**: **0 / 9**
-- **Mean Candidate Recall**: **0.0%**
-- **Mean Discovery Precision**: **0.0%**
+- **Mean Candidate Recall**: **N/A (No vulnerable positives in safe-only corpus)**
+- **Mean Discovery Precision**: **N/A (Evaluates safe control false-positive exposure rather than vulnerability detection)**
+- **Exposure Specificity**: **70.0%**
+- **Run-Exposure False-Positive Rate**: **30.0%** (9/30)
+- **Fixture False-Positive Rate**: **40.0%** (4/10)
+- **FP Candidate Density**: **0.333**
+- **Max Lineage Recurrence**: **2 / 3** (66.7%)
 
 ---
 
@@ -106,7 +111,7 @@ The benchmark harness audited all 10 paired safe controls (`evals/semantic-bench
 Under Default-Deny, any candidate missed during discovery or exhibiting low recurrence is analyzed rather than masked:
 1. **Stochastic Line Variance**: Slight variations in reported start/end line bounds across runs are automatically normalized by the semantic lineage algorithm (`computeLineageFingerprint`), ensuring line-shift invariance.
 2. **Subtle Flaws & Multi-Step Logic**: Vulnerabilities involving complex multi-step taint tracking (e.g. `SEM-08` async message broker boundaries) or prototype pollution (`SEM-09`) exhibit the highest stochastic variance across model iterations.
-3. **Prompt Robustness**: The Default-Deny system prompt effectively suppresses spurious candidate generation while maintaining high recall across standard authorization and input validation vulnerabilities.
+3. **Safe-Control Exposure & Verification Necessity**: On safe controls with mock architectural patterns, raw model discovery exhibits an observed 30.0% run-exposure false positive rate (40.0% fixture false-positive rate). This empirical exposure demonstrates that upstream LLM discovery generates spurious candidate hypotheses on defensive boilerplate, underscoring why downstream 3-lens verifier panels and finalization under Default-Deny are strictly necessary to prevent unverified candidates from reaching authoritative reports.
 
 ---
 

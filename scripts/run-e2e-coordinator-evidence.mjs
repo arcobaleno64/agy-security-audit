@@ -92,8 +92,14 @@ export function validateCoordinatorTrace(
   conversationId = null,
   targetClaim = CLAIM_TYPES.FULL_PIPELINE,
   candidateCount = null,
-  repoRoot = DEFAULT_REPO_ROOT
+  repoRoot = DEFAULT_REPO_ROOT,
+  options = {}
 ) {
+  const opts = typeof options === 'object' && options !== null ? options : {};
+  const expectedRunId = opts.runId || null;
+  const expectedNonce = opts.nonce || null;
+  const invocationStartTime = typeof opts.invocationStartTime === 'number' ? opts.invocationStartTime : null;
+
   let events = [];
   let rawNdjson = '';
 
@@ -125,6 +131,7 @@ export function validateCoordinatorTrace(
   let finalizerArtifactPath = null;
   let finalizerArtifactDigest = null;
   let finalizerExitStatus = null;
+  let observedFinalizerSuccess = false;
 
   // 1. Process stream events
   for (const ev of events) {
@@ -182,8 +189,18 @@ export function validateCoordinatorTrace(
         const cmd = callArgs?.CommandLine || callArgs?.command || '';
         if (typeof cmd === 'string' && cmd.includes('finalize-scan.mjs')) {
           finalizerInvoked = true;
-          // Inspect if tool execution step explicitly signaled error
-          if (step.state === 'DONE' && step.status !== 'ERROR') {
+          const hasError = Boolean(
+            step.state === 'ERROR' ||
+            step.status === 'ERROR' ||
+            step.error ||
+            toolCall.error ||
+            step.tool_info?.error
+          );
+          if (hasError) {
+            finalizerExitStatus = 1;
+            observedFinalizerSuccess = false;
+          } else if (step.state === 'DONE' || step.status === 'SUCCESS' || step.status === 'DONE') {
+            observedFinalizerSuccess = true;
             finalizerExitStatus = 0;
           }
         }
@@ -239,7 +256,12 @@ export function validateCoordinatorTrace(
                   const cmd = args.CommandLine || args.command || '';
                   if (typeof cmd === 'string' && cmd.includes('finalize-scan.mjs')) {
                     finalizerInvoked = true;
-                    if (stepObj.status === 'DONE') {
+                    const hasError = Boolean(stepObj.status === 'ERROR' || stepObj.error || tc.error);
+                    if (hasError) {
+                      finalizerExitStatus = 1;
+                      observedFinalizerSuccess = false;
+                    } else if (stepObj.status === 'DONE' || stepObj.status === 'SUCCESS') {
+                      observedFinalizerSuccess = true;
                       finalizerExitStatus = 0;
                     }
                   }
@@ -252,28 +274,140 @@ export function validateCoordinatorTrace(
     }
   }
 
-  // 3. Check for physical canonical finalizer artifact on disk
+  // 3. Check for physical canonical finalizer artifact on disk with strict freshness, schema, and runId/nonce binding
   const candidateArtifactPaths = [
     path.join(repoRoot, 'scratch', 'scan-manifest.json'),
     path.join(repoRoot, 'scratch', 'security-audit.sarif'),
     path.join(repoRoot, 'scratch', 'canonical-findings.json')
   ];
 
+  const observedToolSuccess = finalizerInvoked && observedFinalizerSuccess && finalizerExitStatus === 0;
+  let artifactFresh = false;
+  let schemaValidated = false;
+  let boundRunId = null;
+  let boundNonce = null;
+
   for (const artPath of candidateArtifactPaths) {
     if (fs.existsSync(artPath)) {
       try {
-        const content = fs.readFileSync(artPath, 'utf8');
-        const parsed = JSON.parse(content);
-        // Ensure manifest is complete if scan-manifest
-        if (artPath.endsWith('scan-manifest.json') && parsed.complete !== true) {
+        const stats = fs.statSync(artPath);
+
+        // Freshness verification: artifact mtimeMs must be >= invocationStartTime to reject stale artifacts
+        if (invocationStartTime !== null && stats.mtimeMs < invocationStartTime) {
           continue;
         }
-        finalizerArtifactPath = path.relative(repoRoot, artPath).replace(/\\/g, '/');
-        finalizerArtifactDigest = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
-        if (finalizerInvoked) {
-          finalizerCompleted = true;
+
+        const content = fs.readFileSync(artPath, 'utf8');
+        const parsed = JSON.parse(content);
+
+        if (artPath.endsWith('scan-manifest.json')) {
+          // Schema validation for scan-manifest.json:
+          // 1. complete must be boolean true
+          if (parsed.complete !== true) {
+            continue;
+          }
+          // 2. completedAt must be a valid non-empty string
+          if (typeof parsed.completedAt !== 'string' || !parsed.completedAt.trim()) {
+            continue;
+          }
+          // 3. schemaVersion and mode must be defined and valid
+          if (typeof parsed.schemaVersion !== 'string' || typeof parsed.mode !== 'string') {
+            continue;
+          }
+          if (!['1', '1.0.0'].includes(parsed.schemaVersion) || !['scan', 'review'].includes(parsed.mode)) {
+            continue;
+          }
+          // 4. entries must be an array
+          if (!Array.isArray(parsed.entries)) {
+            continue;
+          }
+          // 5. canDeclareClean must be boolean
+          if (typeof parsed.canDeclareClean !== 'boolean') {
+            continue;
+          }
+
+          // 6. Consistent scan verdict
+          const reportableFindingsInCounts = (parsed.findingCounts && typeof parsed.findingCounts.reportable === 'number')
+            ? parsed.findingCounts.reportable
+            : 0;
+          const hasReportableFindings = (Array.isArray(parsed.findings) && parsed.findings.some(f => f.disposition === 'REPORTABLE')) || reportableFindingsInCounts > 0;
+
+          if (parsed.canDeclareClean === true) {
+            if (parsed.finalVerdict && !['CLEAN', 'NO_FINDINGS', 'SUPPRESSED'].includes(parsed.finalVerdict)) {
+              continue;
+            }
+            if (hasReportableFindings) {
+              continue;
+            }
+          } else if (parsed.canDeclareClean === false) {
+            if (parsed.finalVerdict === 'CLEAN') {
+              continue;
+            }
+          }
+          if (hasReportableFindings && parsed.finalVerdict === 'CLEAN') {
+            continue;
+          }
+
+          // 7. Bind to runId / nonce (fail-closed if expected but missing or mismatched)
+          const manifestRunId = parsed.scanRunId || parsed.runId || null;
+          const manifestNonce = parsed.nonce || parsed.taskCorrelationNonce || null;
+
+          if (expectedRunId && (!manifestRunId || manifestRunId !== expectedRunId)) {
+            continue;
+          }
+          if (expectedNonce && (!manifestNonce || manifestNonce !== expectedNonce)) {
+            continue;
+          }
+
+          boundRunId = manifestRunId;
+          boundNonce = manifestNonce;
+          artifactFresh = true;
+          schemaValidated = true;
+        } else if (artPath.endsWith('security-audit.sarif')) {
+          if (!parsed.version && !parsed.$schema) continue;
+          if (!Array.isArray(parsed.runs) || parsed.runs.length === 0) continue;
+
+          const sarifRunId = parsed.runs?.[0]?.automationDetails?.id || parsed.runs?.[0]?.properties?.scanRunId || parsed.runs?.[0]?.properties?.runId || null;
+          const sarifNonce = parsed.runs?.[0]?.properties?.nonce || null;
+
+          if (expectedRunId && (!sarifRunId || sarifRunId !== expectedRunId)) {
+            continue;
+          }
+          if (expectedNonce && (!sarifNonce || sarifNonce !== expectedNonce)) {
+            continue;
+          }
+
+          boundRunId = sarifRunId;
+          boundNonce = sarifNonce;
+          artifactFresh = true;
+          schemaValidated = true;
+        } else if (artPath.endsWith('canonical-findings.json')) {
+          if (!Array.isArray(parsed) && !Array.isArray(parsed.findings)) continue;
+
+          const canonRunId = (!Array.isArray(parsed) && (parsed.scanRunId || parsed.runId)) || null;
+          const canonNonce = (!Array.isArray(parsed) && (parsed.nonce || parsed.taskCorrelationNonce)) || null;
+
+          if (expectedRunId && (!canonRunId || canonRunId !== expectedRunId)) {
+            continue;
+          }
+          if (expectedNonce && (!canonNonce || canonNonce !== expectedNonce)) {
+            continue;
+          }
+
+          boundRunId = canonRunId;
+          boundNonce = canonNonce;
+          artifactFresh = true;
+          schemaValidated = true;
         }
-        break;
+
+        if (schemaValidated) {
+          finalizerArtifactPath = path.relative(repoRoot, artPath).replace(/\\/g, '/');
+          finalizerArtifactDigest = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+          if (observedToolSuccess) {
+            finalizerCompleted = true;
+          }
+          break;
+        }
       } catch {}
     }
   }
@@ -338,7 +472,12 @@ export function validateCoordinatorTrace(
       completed: finalizerCompleted,
       exitStatus: finalizerExitStatus,
       artifactPath: finalizerArtifactPath,
-      artifactDigest: finalizerArtifactDigest
+      artifactDigest: finalizerArtifactDigest,
+      observedToolSuccess,
+      freshnessVerified: artifactFresh,
+      schemaValidated,
+      boundRunId,
+      boundNonce
     },
     traceDigest
   };
@@ -519,7 +658,9 @@ export function executeLiveCoordinatorAudit({
   // Parse telemetry
   const parsedTrace = parseStreamJsonTrace(stdout);
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
-  const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot);
+  const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot, {
+    invocationStartTime: startTs
+  });
 
   fs.mkdirSync(outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -624,11 +765,12 @@ Options:
       process.exit(1);
     }
 
-    // 2. Test Finalizer Invoked vs Completed distinction
+    // 2. Test Finalizer Invoked vs Completed distinction & Hardening Checks
     const invOnlyTrace = [
       { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-inv-only' } },
       {
         step_update: {
+          state: 'DONE',
           tool_calls: [
             {
               name: 'run_command',
@@ -638,7 +780,7 @@ Options:
         }
       }
     ];
-    // With non-existent artifact, finalizerCompleted must be false
+    // Case 2a: With non-existent artifact, finalizerCompleted must be false
     const invOnlyVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, path.join(DEFAULT_REPO_ROOT, 'scratch', 'non-existent-dir'));
     if (!invOnlyVal.finalizer.invoked) {
       console.error('❌ Dry-run: finalizerInvoked was false');
@@ -649,11 +791,190 @@ Options:
       process.exit(1);
     }
 
+    // Mock artifact on scratch
+    const mockScratch = path.join(DEFAULT_REPO_ROOT, 'scratch', 'mock-test-harness');
+    fs.mkdirSync(mockScratch, { recursive: true });
+    const mockManifest = path.join(mockScratch, 'scratch', 'scan-manifest.json');
+    fs.mkdirSync(path.dirname(mockManifest), { recursive: true });
+
+    // Case 2b: Tool failure (state: ERROR) must fail finalizerCompleted
+    const toolErrTrace = [
+      { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-tool-err' } },
+      {
+        step_update: {
+          state: 'ERROR',
+          error: { message: 'Command failed' },
+          tool_calls: [
+            {
+              name: 'run_command',
+              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
+            }
+          ]
+        }
+      }
+    ];
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN',
+      findings: []
+    }));
+
+    const toolErrVal = validateCoordinatorTrace(toolErrTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (toolErrVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true despite tool failure');
+      process.exit(1);
+    }
+
+    // Case 2c: Stale artifact rejection (invocationStartTime > artifact mtimeMs)
+    const staleVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      invocationStartTime: Date.now() + 60000 // Future timestamp
+    });
+    if (staleVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with stale artifact');
+      process.exit(1);
+    }
+
+    // Case 2d: Incomplete manifest rejection
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      complete: false
+    }));
+    const incompleteVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (incompleteVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with incomplete manifest');
+      process.exit(1);
+    }
+
+    // Case 2e: RunId mismatch rejection
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'actual-run-id',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const mismatchVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      runId: 'expected-different-run-id'
+    });
+    if (mismatchVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with runId mismatch');
+      process.exit(1);
+    }
+
+    // Case 2f: RunId missing from manifest when runId is expected -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const missingRunIdVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      runId: 'expected-run-id-required'
+    });
+    if (missingRunIdVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true when expected runId was missing from manifest');
+      process.exit(1);
+    }
+
+    // Case 2g: RunId mismatch with alternative artifact present (e.g. security-audit.sarif) -> must reject
+    const mockSarif = path.join(mockScratch, 'scratch', 'security-audit.sarif');
+    fs.writeFileSync(mockSarif, JSON.stringify({
+      version: '2.1.0',
+      runs: [{ tool: { driver: { name: 'sec' } }, results: [] }]
+    }));
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'mismatched-run-id',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const sarifBypassVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      runId: 'expected-run-id'
+    });
+    if (sarifBypassVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true via SARIF bypass despite runId requirement');
+      process.exit(1);
+    }
+    try { fs.unlinkSync(mockSarif); } catch {}
+
+    // Case 2h: Nonce mismatch or missing when nonce is expected -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const missingNonceVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      nonce: 'nonce-12345'
+    });
+    if (missingNonceVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true when expected nonce was missing');
+      process.exit(1);
+    }
+
+    // Case 2i: Inconsistent scan verdict: canDeclareClean=true with findingCounts.reportable > 0 -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN',
+      findingCounts: { reportable: 1, deferred: 0, suppressed: 0 }
+    }));
+    const verdictInconsistentVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (verdictInconsistentVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with reportable finding count > 0 and canDeclareClean=true');
+      process.exit(1);
+    }
+
+    // Case 2j: Inconsistent scan verdict: finalVerdict='CLEAN' with findingCounts.reportable > 0 -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: false,
+      finalVerdict: 'CLEAN',
+      findingCounts: { reportable: 1 }
+    }));
+    const cleanWithReportableVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (cleanWithReportableVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with finalVerdict=CLEAN despite reportable findings');
+      process.exit(1);
+    }
+
     // 3. Test Full Pipeline Claim with Valid 3-Lens and Artifact Simulation
     const fullTrace = [
       { event: 'init', init: { agent: 'security-audit-coordinator', conversation_id: 'dry-run-full' } },
       {
         step_update: {
+          state: 'DONE',
           tool_calls: [
             {
               name: 'invoke_subagent',
@@ -676,15 +997,24 @@ Options:
       }
     ];
 
-    // Mock artifact on scratch
-    const mockScratch = path.join(DEFAULT_REPO_ROOT, 'scratch', 'mock-test-harness');
-    fs.mkdirSync(mockScratch, { recursive: true });
-    const mockManifest = path.join(mockScratch, 'scratch', 'scan-manifest.json');
-    fs.mkdirSync(path.dirname(mockManifest), { recursive: true });
-    fs.writeFileSync(mockManifest, JSON.stringify({ complete: true, findings: [] }));
+    const testStartTime = Date.now() - 1000;
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN',
+      findings: []
+    }));
 
-    const fullVal = validateCoordinatorTrace(fullTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
-    if (!fullVal.valid || !fullVal.finalizer.completed) {
+    const fullVal = validateCoordinatorTrace(fullTrace, 'dry-run-full', CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      invocationStartTime: testStartTime,
+      runId: 'dry-run-full'
+    });
+    if (!fullVal.valid || !fullVal.finalizer.completed || !fullVal.finalizer.artifactDigest) {
       console.error('❌ Dry-run full pipeline validation failed:', fullVal);
       process.exit(1);
     }
