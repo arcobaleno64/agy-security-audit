@@ -259,6 +259,46 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
     errors.push(`Multi-Run Stochastic Stability Benchmark failed: ${err.message}\n${err.stderr || ''}`);
   }
 
+  // 3.5 Check Cross-Model Comparative Validation Protocol & Suite (Milestone G5)
+  const crossModelTestPath = path.resolve(repoRoot, 'scripts/test-cross-model-protocol.mjs');
+  if (fs.existsSync(crossModelTestPath)) {
+    try {
+      const stdout = execFileSync(process.execPath, [crossModelTestPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      if (!stdout.includes('All cross-model comparative validation protocol tests passed successfully')) {
+        errors.push('Cross-Model Protocol Test Suite did not output clean pass signature');
+      }
+    } catch (err) {
+      errors.push(`Cross-Model Protocol Test Suite failed: ${err.message}\n${err.stderr || ''}`);
+    }
+  } else if (!process.env.IS_ZIP_CLEAN_SUBTEST) {
+    errors.push('Missing cross-model test script: scripts/test-cross-model-protocol.mjs');
+  }
+
+  // 3.6 Check Cross-Model Protocol Integrity Digest (Milestone G5)
+  const compareScriptPath = path.resolve(repoRoot, 'scripts/compare-model-benchmarks.mjs');
+  const crossModelProtoPath = path.resolve(repoRoot, 'evals/protocols/v1.5-cross-model-protocol.json');
+  if (fs.existsSync(compareScriptPath) && fs.existsSync(crossModelProtoPath)) {
+    try {
+      const stdout = execFileSync(process.execPath, [compareScriptPath, '--verify-protocol', crossModelProtoPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      if (!stdout.includes('integrity verified')) {
+        errors.push('Cross-Model Protocol Digest Verification did not output clean pass signature');
+      }
+    } catch (err) {
+      errors.push(`Cross-Model Protocol Digest Verification failed: ${err.message}\n${err.stderr || ''}`);
+    }
+  } else if (!process.env.IS_ZIP_CLEAN_SUBTEST) {
+    if (!fs.existsSync(compareScriptPath)) errors.push('Missing comparator engine: scripts/compare-model-benchmarks.mjs');
+    if (!fs.existsSync(crossModelProtoPath)) errors.push('Missing cross-model protocol: evals/protocols/v1.5-cross-model-protocol.json');
+  }
+
   // 4. Validate Plugin Custom Agents Capability & Tool Invariants (P0-04)
   const agentFiles = [
     'agents/threat-modeler.md',

@@ -36,10 +36,15 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
   const defaultToolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const toolProv = getToolProvenance(defaultToolRoot);
 
+  const modelId = overrides.modelId || process.env.AGY_MODEL || 'UNKNOWN';
+  const modelProvider = overrides.modelProvider || process.env.AGY_MODEL_PROVIDER || 'UNKNOWN';
+  const modelTaxonomy = overrides.modelTaxonomy || normalizeModelTaxonomy(modelId, { modelProvider, ...overrides });
+
   return {
     agyVersion: agyVersion || 'UNKNOWN',
-    modelId: overrides.modelId || process.env.AGY_MODEL || 'UNKNOWN',
-    modelProvider: overrides.modelProvider || process.env.AGY_MODEL_PROVIDER || 'UNKNOWN',
+    modelId,
+    modelProvider,
+    modelTaxonomy,
     os: `${process.platform} (${process.arch})`,
     nodeVersion: process.version,
     skillRevision: toolProv.toolRevision,
@@ -48,6 +53,136 @@ export function probeEnvironment(repoRoot = process.cwd(), overrides = {}) {
     toolIntegrityDigest: toolProv.toolIntegrityDigest,
     toolDirty: toolProv.toolDirty
   };
+}
+
+export const VALID_IDENTITY_SOURCES = Object.freeze([
+  'RUNTIME_ATTESTED',
+  'CONFIG_DECLARED',
+  'PARSED_INFERRED',
+  'UNKNOWN'
+]);
+
+export const VALID_TAXONOMY_TIERS = Object.freeze([
+  'REASONING_PROFILE_ABLATION',
+  'INTRA_PROVIDER_MODEL_REPLICATION',
+  'CROSS_PROVIDER_MODEL_REPLICATION',
+  'CROSS_SYSTEM_REPLICATION',
+  'IDENTITY_CONTROL'
+]);
+
+/**
+ * Normalizes raw model ID and environment parameters into an attested model taxonomy record.
+ * Supports attested identity precedence under Default-Deny.
+ *
+ * @param {string} rawModelId - Raw model identifier (e.g. 'gemini-3.8-flash-high')
+ * @param {object} [overrides={}] - Attested identity or configuration overrides
+ * @returns {object} Full taxonomy record conforming to protocol specification
+ */
+export function normalizeModelTaxonomy(rawModelId, overrides = {}) {
+  const raw = (typeof rawModelId === 'string' && rawModelId.trim()) ? rawModelId.trim() : (overrides.rawModelId || 'UNKNOWN');
+
+  // Determine identity source
+  let identitySource = overrides.identitySource || null;
+  if (!identitySource || !VALID_IDENTITY_SOURCES.includes(identitySource)) {
+    if (raw === 'UNKNOWN') {
+      identitySource = 'UNKNOWN';
+    } else if (overrides.modelProvider && overrides.baseModel && overrides.reasoningProfile !== undefined) {
+      identitySource = 'CONFIG_DECLARED';
+    } else {
+      identitySource = 'PARSED_INFERRED';
+    }
+  }
+
+  // Determine identity confidence
+  let identityConfidence = overrides.identityConfidence || null;
+  if (!identityConfidence) {
+    if (identitySource === 'RUNTIME_ATTESTED' || identitySource === 'CONFIG_DECLARED') {
+      identityConfidence = 'HIGH';
+    } else if (identitySource === 'PARSED_INFERRED') {
+      identityConfidence = 'MEDIUM';
+    } else {
+      identityConfidence = 'NONE';
+    }
+  }
+
+  // Heuristic parser for rawModelId when fields are not explicitly provided
+  let parsedProvider = 'unknown';
+  let parsedBaseModel = raw;
+  let parsedFamily = 'unknown';
+  let parsedProfile = 'standard';
+
+  const lowerRaw = raw.toLowerCase();
+
+  // 1. Provider & Family inference
+  if (lowerRaw.includes('gemini')) {
+    parsedProvider = 'google';
+    parsedFamily = lowerRaw.includes('pro') ? 'gemini-pro' : 'gemini-flash';
+  } else if (lowerRaw.includes('claude')) {
+    parsedProvider = 'anthropic';
+    if (lowerRaw.includes('opus')) parsedFamily = 'claude-opus';
+    else if (lowerRaw.includes('haiku')) parsedFamily = 'claude-haiku';
+    else parsedFamily = 'claude-sonnet';
+  } else if (lowerRaw.includes('gpt') || lowerRaw.startsWith('o1') || lowerRaw.startsWith('o3')) {
+    parsedProvider = 'openai';
+    parsedFamily = (lowerRaw.startsWith('o1') || lowerRaw.startsWith('o3')) ? 'o-series' : 'gpt-4';
+  }
+
+  // 2. Reasoning profile inference (e.g. -high, -medium, -low, -thinking)
+  const profileMatch = raw.match(/[-_](high|medium|low|none|thinking|default)$/i);
+  if (profileMatch) {
+    parsedProfile = profileMatch[1].toLowerCase();
+    parsedBaseModel = raw.slice(0, profileMatch.index);
+  } else {
+    parsedBaseModel = raw;
+  }
+
+  const baseModel = overrides.baseModel || parsedBaseModel;
+  const canonicalModelId = overrides.canonicalModelId || baseModel;
+  const modelFamily = overrides.modelFamily || parsedFamily;
+  const modelProvider = overrides.modelProvider || parsedProvider;
+  const reasoningProfile = overrides.reasoningProfile || parsedProfile;
+  const runtimeId = overrides.runtimeId || 'agy';
+  const runtimeAdapter = overrides.runtimeAdapter || 'native';
+
+  return {
+    rawModelId: raw,
+    canonicalModelId,
+    baseModel,
+    modelFamily,
+    modelProvider,
+    reasoningProfile,
+    runtimeId,
+    runtimeAdapter,
+    identitySource,
+    identityConfidence
+  };
+}
+
+/**
+ * Validates whether model independence claims for Class B/C (Tiers 2, 3, 4)
+ * meet the Default-Deny attested identity threshold.
+ *
+ * @param {object} taxonomyA - Attested taxonomy for configuration A
+ * @param {object} taxonomyB - Attested taxonomy for configuration B
+ * @param {string|number} claimedTier - Claimed tier name or number
+ * @returns {{ valid: boolean, error: string|null }}
+ */
+export function validateIndependenceAuthority(taxonomyA, taxonomyB, claimedTier) {
+  const isTier2 = claimedTier === 'INTRA_PROVIDER_MODEL_REPLICATION' || claimedTier === 2;
+  const isTier3 = claimedTier === 'CROSS_PROVIDER_MODEL_REPLICATION' || claimedTier === 3;
+  const isTier4 = claimedTier === 'CROSS_SYSTEM_REPLICATION' || claimedTier === 4;
+
+  if (isTier2 || isTier3 || isTier4) {
+    const validSources = new Set(['RUNTIME_ATTESTED', 'CONFIG_DECLARED']);
+    if (!validSources.has(taxonomyA?.identitySource) || !validSources.has(taxonomyB?.identitySource)) {
+      return {
+        valid: false,
+        error: `Default-Deny Authority Violation: Tier '${claimedTier}' independence claim requires RUNTIME_ATTESTED or CONFIG_DECLARED identitySource (got A: '${taxonomyA?.identitySource}', B: '${taxonomyB?.identitySource}')`
+      };
+    }
+  }
+
+  return { valid: true, error: null };
 }
 
 /**
