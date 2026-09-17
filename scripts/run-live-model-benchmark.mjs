@@ -1262,6 +1262,8 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         safeOnly: isSafeOnly,
         shuffleSeed: options.shuffleSeed || null,
         labelBlind: options.labelBlind !== false,
+        throttleDelayMs: delayMs,
+        pacingPolicy: `${delayMs}ms inter-call throttle delay`,
         fixtureResults: fixtureResults.map(r => ({
           fixtureId: r.fixtureId,
           split: r.split,

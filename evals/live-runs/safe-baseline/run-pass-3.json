@@ -1,14 +1,14 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-pass-2",
-  "recordedAt": "2026-09-16T17:08:16.679Z",
+  "runId": "run-pass-3",
+  "recordedAt": "2026-09-17T00:09:57.837Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "commitSha": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "corpus": "semantic-benchmark"
   },
   "environment": {
@@ -17,18 +17,18 @@
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "skillRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "toolVersion": "1.4.0-dev",
-    "toolRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "toolRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
     "toolDirty": false
   },
   "findings": {
     "candidates": [
       {
-        "id": "CAND-CWE-285-9",
-        "ruleId": "CWE-285",
-        "title": "Broken authorization via hardcoded admin role in verifyAdmin",
+        "id": "CAND-CWE-863-9",
+        "ruleId": "CWE-863",
+        "title": "Incorrect authorization check due to hardcoded admin role assignment",
         "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
@@ -39,7 +39,39 @@
           "endLine": 9
         },
         "symbol": "verifyAdmin",
-        "lineageId": "05cfb8bc749d695bab9146db61529b07"
+        "lineageId": "7d2ff052b107e6de6cc3d977592adcca"
+      },
+      {
+        "id": "CAND-CWE-284-9",
+        "ruleId": "CWE-284",
+        "title": "Broken tenancy boundary allowing unauthorized access via spoofed X-Tenant-Id header",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/02-cross-tenant-access.js",
+          "startLine": 9,
+          "endLine": 10
+        },
+        "symbol": "mockDatabase.find",
+        "lineageId": "0d7da191ef8bc1d2a2e6906908c9bc70"
+      },
+      {
+        "id": "CAND-CWE-285-13",
+        "ruleId": "CWE-285",
+        "title": "Prototype property lookup allows authorization bypass of task dispatch allowlist",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/08-multistep-attack-path.js",
+          "startLine": 13,
+          "endLine": 17
+        },
+        "symbol": "handler",
+        "lineageId": "9a8c0e7690e2ea987f02ece5758f4736"
       }
     ],
     "verifiedFindings": null,
@@ -47,14 +79,14 @@
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 1,
+    "candidateCount": 3,
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 139669
+    "executionDurationMs": 583622
   },
   "metadata": {
-    "passIndex": 2,
+    "passIndex": 3,
     "totalPasses": 3,
     "suite": "semantic",
     "fixtureSplits": {
@@ -90,17 +122,82 @@
         "fixtureId": "SEM-01-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 1,
-        "durationMs": 139667,
+        "durationMs": 99621,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 89534,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 73151,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 20806,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 40234,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 25553,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 19412,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 64978,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 42623,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 89606,
         "error": null
       }
     ],
-    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization."
+    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization.",
+    "throttleDelayMs": 2000,
+    "pacingPolicy": "2000ms inter-call delay"
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "9759100f-9f01-41d6-857b-0bcaedca1df1",
-    "telemetryDigest": "67cf78184b8bbc10a56fd71d5c9102ef0a89edd4c39d6682f1041c7b1f265760",
-    "totalEvents": 32,
+    "conversationId": "66894759-0b27-43e7-90ed-526a2ad9c676",
+    "telemetryDigest": "8cafcdb42ec9198c9f7861a007994bb5999116c96689b576f4666fc7b03bd55e",
+    "totalEvents": 169,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -161,18 +258,19 @@
       "write_to_file"
     ],
     "toolsUsed": [
-      "view_file"
+      "view_file",
+      "run_command"
     ],
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "sandboxEnabled": false,
     "tokenUsage": {
-      "inputTokens": 19690,
-      "outputTokens": 31210,
-      "thinkingTokens": 30991,
-      "cacheReadTokens": 24070,
-      "totalTokens": 50900
+      "inputTokens": 148161,
+      "outputTokens": 151996,
+      "thinkingTokens": 149599,
+      "cacheReadTokens": 476549,
+      "totalTokens": 300157
     },
-    "durationSeconds": 139.669
+    "durationSeconds": 583.622
   }
 }

@@ -6,6 +6,7 @@ reports/*
 !reports/empirical-benchmark-20-paired-report-2026-09-13.md
 !reports/safe-control-baseline-report-2026-09-17.md
 !evals/live-runs/safe-smoke/
+!evals/live-runs/safe-baseline/
 codeql-db/
 .semgrep/
 coverage/
