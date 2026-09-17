@@ -1342,9 +1342,15 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     console.log(`  Candidate True Pos (TP):         ${discoveryEval.candidateTP}`);
     console.log(`  Candidate False Pos (FP):        ${discoveryEval.candidateFP}`);
     console.log(`  Candidate False Neg (FN):        ${discoveryEval.candidateFN}`);
-    console.log(`  Discovery Precision:             ${(discoveryEval.precision * 100).toFixed(1)}%`);
-    console.log(`  Discovery Recall:                ${(discoveryEval.recall * 100).toFixed(1)}%`);
-    console.log(`  Discovery F1 Score:              ${discoveryEval.f1.toFixed(3)}`);
+    if (isSafeOnly) {
+      console.log(`  Discovery Precision:             N/A (Evaluates safe control false-positive exposure rather than vulnerability detection)`);
+      console.log(`  Discovery Recall:                N/A (No vulnerable positives in safe-only corpus)`);
+      console.log(`  Discovery F1 Score:              N/A`);
+    } else {
+      console.log(`  Discovery Precision:             ${(discoveryEval.precision * 100).toFixed(1)}%`);
+      console.log(`  Discovery Recall:                ${(discoveryEval.recall * 100).toFixed(1)}%`);
+      console.log(`  Discovery F1 Score:              ${discoveryEval.f1.toFixed(3)}`);
+    }
     console.log('================================================================\n');
   }
 
@@ -1377,9 +1383,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
 - **True Positives (TP)**: ${discoveryEval?.candidateTP ?? 0}
 - **False Positives (FP)**: ${discoveryEval?.candidateFP ?? 0}
 - **False Negatives (FN)**: ${discoveryEval?.candidateFN ?? 0}
-- **Discovery Precision**: ${discoveryEval ? (discoveryEval.precision * 100).toFixed(1) : '0.0'}%
-- **Discovery Recall**: ${discoveryEval ? (discoveryEval.recall * 100).toFixed(1) : '0.0'}%
-- **Discovery F1 Score**: ${discoveryEval ? discoveryEval.f1.toFixed(3) : '0.000'}
+${isSafeOnly
+  ? `- **Discovery Precision**: **N/A (Evaluates safe control false-positive exposure rather than vulnerability detection)**\n- **Discovery Recall**: **N/A (No vulnerable positives in safe-only corpus)**\n- **Discovery F1 Score**: **N/A**`
+  : `- **Discovery Precision**: ${discoveryEval ? (discoveryEval.precision * 100).toFixed(1) : '0.0'}%\n- **Discovery Recall**: ${discoveryEval ? (discoveryEval.recall * 100).toFixed(1) : '0.0'}%\n- **Discovery F1 Score**: ${discoveryEval ? discoveryEval.f1.toFixed(3) : '0.000'}`}
 `;
     }
 

@@ -310,20 +310,33 @@ export function validateCoordinatorTrace(
           if (typeof parsed.completedAt !== 'string' || !parsed.completedAt.trim()) {
             continue;
           }
-          // 3. schemaVersion and mode must be defined
+          // 3. schemaVersion and mode must be defined and valid
           if (typeof parsed.schemaVersion !== 'string' || typeof parsed.mode !== 'string') {
+            continue;
+          }
+          if (!['1', '1.0.0'].includes(parsed.schemaVersion) || !['scan', 'review'].includes(parsed.mode)) {
             continue;
           }
           // 4. entries must be an array
           if (!Array.isArray(parsed.entries)) {
             continue;
           }
-          // 5. Consistent scan verdict
+          // 5. canDeclareClean must be boolean
+          if (typeof parsed.canDeclareClean !== 'boolean') {
+            continue;
+          }
+
+          // 6. Consistent scan verdict
+          const reportableFindingsInCounts = (parsed.findingCounts && typeof parsed.findingCounts.reportable === 'number')
+            ? parsed.findingCounts.reportable
+            : 0;
+          const hasReportableFindings = (Array.isArray(parsed.findings) && parsed.findings.some(f => f.disposition === 'REPORTABLE')) || reportableFindingsInCounts > 0;
+
           if (parsed.canDeclareClean === true) {
             if (parsed.finalVerdict && !['CLEAN', 'NO_FINDINGS', 'SUPPRESSED'].includes(parsed.finalVerdict)) {
               continue;
             }
-            if (Array.isArray(parsed.findings) && parsed.findings.some(f => f.disposition === 'REPORTABLE')) {
+            if (hasReportableFindings) {
               continue;
             }
           } else if (parsed.canDeclareClean === false) {
@@ -331,15 +344,18 @@ export function validateCoordinatorTrace(
               continue;
             }
           }
+          if (hasReportableFindings && parsed.finalVerdict === 'CLEAN') {
+            continue;
+          }
 
-          // 6. Bind to runId / nonce
+          // 7. Bind to runId / nonce (fail-closed if expected but missing or mismatched)
           const manifestRunId = parsed.scanRunId || parsed.runId || null;
           const manifestNonce = parsed.nonce || parsed.taskCorrelationNonce || null;
 
-          if (expectedRunId && manifestRunId && manifestRunId !== expectedRunId) {
+          if (expectedRunId && (!manifestRunId || manifestRunId !== expectedRunId)) {
             continue;
           }
-          if (expectedNonce && manifestNonce && manifestNonce !== expectedNonce) {
+          if (expectedNonce && (!manifestNonce || manifestNonce !== expectedNonce)) {
             continue;
           }
 
@@ -350,10 +366,36 @@ export function validateCoordinatorTrace(
         } else if (artPath.endsWith('security-audit.sarif')) {
           if (!parsed.version && !parsed.$schema) continue;
           if (!Array.isArray(parsed.runs) || parsed.runs.length === 0) continue;
+
+          const sarifRunId = parsed.runs?.[0]?.automationDetails?.id || parsed.runs?.[0]?.properties?.scanRunId || parsed.runs?.[0]?.properties?.runId || null;
+          const sarifNonce = parsed.runs?.[0]?.properties?.nonce || null;
+
+          if (expectedRunId && (!sarifRunId || sarifRunId !== expectedRunId)) {
+            continue;
+          }
+          if (expectedNonce && (!sarifNonce || sarifNonce !== expectedNonce)) {
+            continue;
+          }
+
+          boundRunId = sarifRunId;
+          boundNonce = sarifNonce;
           artifactFresh = true;
           schemaValidated = true;
         } else if (artPath.endsWith('canonical-findings.json')) {
           if (!Array.isArray(parsed) && !Array.isArray(parsed.findings)) continue;
+
+          const canonRunId = (!Array.isArray(parsed) && (parsed.scanRunId || parsed.runId)) || null;
+          const canonNonce = (!Array.isArray(parsed) && (parsed.nonce || parsed.taskCorrelationNonce)) || null;
+
+          if (expectedRunId && (!canonRunId || canonRunId !== expectedRunId)) {
+            continue;
+          }
+          if (expectedNonce && (!canonNonce || canonNonce !== expectedNonce)) {
+            continue;
+          }
+
+          boundRunId = canonRunId;
+          boundNonce = canonNonce;
           artifactFresh = true;
           schemaValidated = true;
         }
@@ -617,8 +659,7 @@ export function executeLiveCoordinatorAudit({
   const parsedTrace = parseStreamJsonTrace(stdout);
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
   const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot, {
-    invocationStartTime: startTs,
-    runId: discoveredConvId
+    invocationStartTime: startTs
   });
 
   fs.mkdirSync(outDir, { recursive: true });
@@ -828,6 +869,103 @@ Options:
     });
     if (mismatchVal.finalizer.completed) {
       console.error('❌ Dry-run regression: finalizer completed was true with runId mismatch');
+      process.exit(1);
+    }
+
+    // Case 2f: RunId missing from manifest when runId is expected -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const missingRunIdVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      runId: 'expected-run-id-required'
+    });
+    if (missingRunIdVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true when expected runId was missing from manifest');
+      process.exit(1);
+    }
+
+    // Case 2g: RunId mismatch with alternative artifact present (e.g. security-audit.sarif) -> must reject
+    const mockSarif = path.join(mockScratch, 'scratch', 'security-audit.sarif');
+    fs.writeFileSync(mockSarif, JSON.stringify({
+      version: '2.1.0',
+      runs: [{ tool: { driver: { name: 'sec' } }, results: [] }]
+    }));
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'mismatched-run-id',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const sarifBypassVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      runId: 'expected-run-id'
+    });
+    if (sarifBypassVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true via SARIF bypass despite runId requirement');
+      process.exit(1);
+    }
+    try { fs.unlinkSync(mockSarif); } catch {}
+
+    // Case 2h: Nonce mismatch or missing when nonce is expected -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN'
+    }));
+    const missingNonceVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
+      nonce: 'nonce-12345'
+    });
+    if (missingNonceVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true when expected nonce was missing');
+      process.exit(1);
+    }
+
+    // Case 2i: Inconsistent scan verdict: canDeclareClean=true with findingCounts.reportable > 0 -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: true,
+      finalVerdict: 'CLEAN',
+      findingCounts: { reportable: 1, deferred: 0, suppressed: 0 }
+    }));
+    const verdictInconsistentVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (verdictInconsistentVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with reportable finding count > 0 and canDeclareClean=true');
+      process.exit(1);
+    }
+
+    // Case 2j: Inconsistent scan verdict: finalVerdict='CLEAN' with findingCounts.reportable > 0 -> must reject
+    fs.writeFileSync(mockManifest, JSON.stringify({
+      schemaVersion: '1.0.0',
+      mode: 'scan',
+      entries: [],
+      scanRunId: 'dry-run-full',
+      complete: true,
+      completedAt: new Date().toISOString(),
+      canDeclareClean: false,
+      finalVerdict: 'CLEAN',
+      findingCounts: { reportable: 1 }
+    }));
+    const cleanWithReportableVal = validateCoordinatorTrace(invOnlyTrace, null, CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch);
+    if (cleanWithReportableVal.finalizer.completed) {
+      console.error('❌ Dry-run regression: finalizer completed was true with finalVerdict=CLEAN despite reportable findings');
       process.exit(1);
     }
 
