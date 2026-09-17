@@ -279,6 +279,103 @@ export function cleanHermeticSandbox(sandboxAbsDir) {
 }
 
 /**
+ * Deterministically stringifies a JSON-compatible value with sorted object keys.
+ */
+export function canonicalJsonStringify(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(canonicalJsonStringify).join(',') + ']';
+  }
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalJsonStringify(obj[k])).join(',') + '}';
+}
+
+/**
+ * Computes canonical SHA-256 digest of an evaluation protocol specification (excluding protocolDigest).
+ */
+export function computeProtocolDigest(protocol) {
+  if (!protocol || typeof protocol !== 'object') return null;
+  const clone = { ...protocol };
+  delete clone.protocolDigest;
+  const canonical = canonicalJsonStringify(clone);
+  return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+/**
+ * Loads, parses, and validates the integrity of a frozen evaluation protocol specification (Fail-Closed).
+ */
+export function loadAndValidateProtocol(protocolPath, repoRoot = DEFAULT_REPO_ROOT) {
+  const fullPath = path.resolve(repoRoot, protocolPath);
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`Protocol file not found: ${fullPath}`);
+  }
+  const content = fs.readFileSync(fullPath, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    throw new Error(`Invalid JSON in protocol file (${fullPath}): ${err.message}`);
+  }
+
+  if (!parsed.protocolId || typeof parsed.protocolId !== 'string') {
+    throw new Error(`Protocol missing required protocolId: ${fullPath}`);
+  }
+  if (parsed.status !== 'FROZEN') {
+    throw new Error(`Protocol status must be 'FROZEN', got '${parsed.status}' (${fullPath})`);
+  }
+  if (!parsed.protocolDigest || typeof parsed.protocolDigest !== 'string') {
+    throw new Error(`Protocol missing required protocolDigest: ${fullPath}`);
+  }
+
+  const computedDigest = computeProtocolDigest(parsed);
+  if (computedDigest !== parsed.protocolDigest) {
+    throw new Error(
+      `PROTOCOL_INTEGRITY_VIOLATION: Digest mismatch for protocol '${parsed.protocolId}'.\n` +
+      `  Expected (stamped): ${parsed.protocolDigest}\n` +
+      `  Computed (actual):  ${computedDigest}\n` +
+      `Fail-Closed: Protocol specification has been altered post-freeze!`
+    );
+  }
+
+  return parsed;
+}
+
+/**
+ * Validates that runner options comply with the frozen protocol specification.
+ */
+export function verifyProtocolCompliance(options, protocol, experimentKey = 'holdoutPaired') {
+  if (!protocol || !protocol.experiments) return;
+  const exp = protocol.experiments[experimentKey];
+  if (!exp) return;
+
+  const errors = [];
+  if (exp.suite && options.suite && options.suite !== exp.suite) {
+    errors.push(`Suite mismatch: protocol expects '${exp.suite}', run specified '${options.suite}'`);
+  }
+  if (exp.passes !== undefined && options.passes !== undefined && options.passes !== exp.passes) {
+    errors.push(`Passes count mismatch: protocol expects ${exp.passes}, run specified ${options.passes}`);
+  }
+  if (exp.shuffleSeed !== undefined && options.shuffleSeed && String(options.shuffleSeed) !== String(exp.shuffleSeed)) {
+    errors.push(`Shuffle seed mismatch: protocol expects '${exp.shuffleSeed}', run specified '${options.shuffleSeed}'`);
+  }
+  if (exp.hermetic !== undefined && options.hermetic !== undefined && Boolean(options.hermetic) !== Boolean(exp.hermetic)) {
+    errors.push(`Hermetic mode mismatch: protocol expects hermetic=${exp.hermetic}, run specified hermetic=${options.hermetic}`);
+  }
+  if (exp.labelBlind !== undefined && options.labelBlind !== undefined && Boolean(options.labelBlind) !== Boolean(exp.labelBlind)) {
+    errors.push(`Label-blind mode mismatch: protocol expects labelBlind=${exp.labelBlind}, run specified labelBlind=${options.labelBlind}`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      `PROTOCOL_NON_COMPLIANCE: Benchmark execution deviates from frozen protocol '${protocol.protocolId}':\n` +
+      errors.map(e => `  - ${e}`).join('\n')
+    );
+  }
+}
+
+/**
  * Deterministically shuffles an array using Mulberry32 PRNG given a seed.
  */
 export function shuffleArrayWithSeed(array, seed) {
@@ -1141,11 +1238,29 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   const modelId = options.modelId || process.env.AGY_MODEL || 'gemini-3.8-flash-high';
   const modelProvider = options.modelProvider || process.env.AGY_MODEL_PROVIDER || 'google';
 
+  let activeProtocol = null;
+  if (options.protocol) {
+    activeProtocol = typeof options.protocol === 'object'
+      ? options.protocol
+      : loadAndValidateProtocol(options.protocol, repoRoot);
+    const expKey = options.experimentKey || (isHoldout ? 'holdoutPaired' : 'holdoutPaired');
+    verifyProtocolCompliance({
+      suite,
+      passes,
+      shuffleSeed: options.shuffleSeed,
+      hermetic: options.hermetic !== false,
+      labelBlind: options.labelBlind !== false
+    }, activeProtocol, expKey);
+  }
+
   console.log('================================================================');
   console.log('Authentic Model Discovery Benchmark Runner (AGY Multi-Pass)');
   console.log(`  Evidence Origin:       ${options.mock ? 'SYNTHETIC' : 'MODEL_OBSERVED'}`);
   console.log(`  Execution Kind:        ${options.mock ? 'SIMULATED_HARNESS' : 'LIVE_AGENT'}`);
   console.log(`  Model ID:              ${modelId}`);
+  if (activeProtocol) {
+    console.log(`  Protocol Bound:        ${activeProtocol.protocolId} (${activeProtocol.protocolDigest.slice(0, 16)}...)`);
+  }
   console.log(`  Evaluation Passes (N): ${passes}`);
   console.log(`  Target Fixtures:       ${targetFixtures.length} (${isSafeOnly ? safeFixtures.length + ' safe controls only' : vulnerableFixtures.length + ' vuln' + (options.includeSafe ? ', ' + safeFixtures.length + ' safe controls' : '')})`);
   if (options.shuffleSeed) {
@@ -1356,6 +1471,8 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         passIndex: p,
         totalPasses: passes,
         suite,
+        protocolId: activeProtocol ? activeProtocol.protocolId : null,
+        protocolDigest: activeProtocol ? activeProtocol.protocolDigest : null,
         fixtureSplits: activeSplits,
         includeSafe: Boolean(options.includeSafe || options.safeOnly),
         safeOnly: isSafeOnly,
@@ -1761,6 +1878,69 @@ const y = 2;`;
   cleanHermeticSandbox(sandboxMeta.sandboxAbsDir);
   console.log('  ✔ Test 8: Hermetic Sandbox Harness (HERMETIC_BENCHMARK_V1) strictly isolates workspace and metadata.');
 
+  // Test 9: Evaluation Protocol Freeze & Integrity Validation (v1.5-eval-1)
+  const protoFile = 'evals/protocols/v1.5-eval-1.json';
+  const protoObj = loadAndValidateProtocol(protoFile, repoRoot);
+  if (protoObj.protocolId !== 'v1.5-eval-1' || protoObj.status !== 'FROZEN') {
+    throw new Error('loadAndValidateProtocol failed on valid protocol v1.5-eval-1');
+  }
+
+  // Test 9b: Tampering rejection (Fail-Closed)
+  const tamperedProto = JSON.parse(JSON.stringify(protoObj));
+  tamperedProto.experiments.holdoutPaired.passes = 999;
+  let tamperingCaught = false;
+  try {
+    const computed = computeProtocolDigest(tamperedProto);
+    if (computed === tamperedProto.protocolDigest) {
+      throw new Error('Tampered protocol produced identical digest');
+    }
+    if (computeProtocolDigest(tamperedProto) !== tamperedProto.protocolDigest) {
+      tamperingCaught = true;
+    }
+  } catch {
+    tamperingCaught = true;
+  }
+  if (!tamperingCaught) {
+    throw new Error('loadAndValidateProtocol failed to reject tampered protocol');
+  }
+
+  // Test 9c: Non-compliance rejection (Fail-Closed)
+  let nonComplianceCaught = false;
+  try {
+    verifyProtocolCompliance({
+      suite: 'holdout',
+      passes: 1, // Protocol expects 3
+      shuffleSeed: '20260917',
+      hermetic: true,
+      labelBlind: true
+    }, protoObj, 'holdoutPaired');
+  } catch (err) {
+    if (err.message.includes('PROTOCOL_NON_COMPLIANCE') && err.message.includes('Passes count mismatch')) {
+      nonComplianceCaught = true;
+    }
+  }
+  if (!nonComplianceCaught) {
+    throw new Error('verifyProtocolCompliance failed to reject non-compliant passes count');
+  }
+
+  // Test 9d: Runner integration with protocol binding
+  const mockProtocolRun = runLiveModelBenchmark(repoRoot, {
+    suite: 'holdout',
+    safeOnly: true,
+    mock: true,
+    passes: 3,
+    shuffleSeed: '20260917',
+    hermetic: true,
+    labelBlind: true,
+    protocol: protoFile,
+    experimentKey: 'holdoutPaired'
+  });
+  if (mockProtocolRun.envelopes[0].metadata?.protocolId !== 'v1.5-eval-1' ||
+      mockProtocolRun.envelopes[0].metadata?.protocolDigest !== protoObj.protocolDigest) {
+    throw new Error('Benchmark envelope failed to record protocol binding metadata');
+  }
+  console.log('  ✔ Test 9: Evaluation Protocol Freeze & Integrity Validation (v1.5-eval-1) verified fail-closed.');
+
   console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
 }
 
@@ -1789,6 +1969,8 @@ Options:
   --no-label-blind     Disable label-blind case materialization (defaults to enabled)
   --hermetic           Enable hermetic benchmark sandbox isolation (default: enabled)
   --no-hermetic        Disable hermetic sandbox isolation, falling back to legacy repoRoot workspace
+  --protocol <path>    Bind benchmark run to a frozen evaluation protocol specification
+  --check-protocol <path> Validate integrity and digest of a frozen evaluation protocol
   --test               Run internal harness unit tests
   --fixture <id>       Run discovery only on a specific fixture (e.g. SEM-03)
   --model <modelId>    Override target model ID (default: gemini-3.8-flash-high)
@@ -1803,6 +1985,18 @@ Options:
   --help, -h           Show this help message
 `);
     process.exit(0);
+  }
+
+  const checkProtocolPath = getArg('--check-protocol');
+  if (checkProtocolPath) {
+    try {
+      const p = loadAndValidateProtocol(checkProtocolPath, DEFAULT_REPO_ROOT);
+      console.log(`✔ Protocol [${p.protocolId}] integrity verified (SHA-256: ${p.protocolDigest})`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`❌ Protocol verification failed: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   if (args.includes('--test')) {
@@ -1821,6 +2015,7 @@ Options:
   const noLabelBlind = args.includes('--no-label-blind');
   const noHermetic = args.includes('--no-hermetic');
   const isHermetic = !noHermetic;
+  const protocolPath = getArg('--protocol');
   const fixtureId = getArg('--fixture');
   const outDirArg = getArg('--out-dir') || getArg('--output-dir');
   const outFile = getArg('--output');
@@ -1855,6 +2050,7 @@ Options:
       shuffleSeed,
       labelBlind: !noLabelBlind,
       hermetic: isHermetic,
+      protocol: protocolPath || undefined,
       fixtureId,
       modelId: model || undefined,
       retries,
