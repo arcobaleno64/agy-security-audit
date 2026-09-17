@@ -26,7 +26,7 @@ This evaluation establishes the project's first authentic, model-dependent empir
 | **Tool Dirty State** | `CLEAN (false)` |
 | **Repository Revision (SHA)** | `8fa9cfdaf27ae9d6e8e9dc57c928e6935ced7fd6` |
 | **Total Evaluation Passes (N)** | `5` |
-| **Safe Controls Audited** | `NO (vulnerable fixtures only)` |
+| **Safe Controls Audited** | `NO (vulnerable fixtures SEM-01..10 only - safe controls not measured in this run)` |
 
 ### Key Benchmark Metrics
 - **Mean Pairwise Jaccard Similarity**: **92.7%**
@@ -89,9 +89,9 @@ Under Section 21 governance, benchmark fixtures are strictly segregated to avoid
 
 ---
 
-## 4. Safe Control False Positive Immunity
+## 4. Safe Controls Not Measured
 
-Safe control auditing was disabled for this run (`--include-safe` not active). False-positive immunity was verified via the deterministic invariant test suite (`npm test` invariant 70/74).
+Safe controls not measured in this run (the live N=5 run evaluated vulnerable fixtures SEM-01..10 only). Safe-control false-positive exposure, fixture FP rates, and specificity baseline are measured in dedicated safe-control benchmarks (`reports/safe-control-baseline-report-2026-09-17.md`).
 
 ---
 

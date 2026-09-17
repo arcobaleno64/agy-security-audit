@@ -914,7 +914,15 @@ This evaluation establishes the project's first authentic, model-dependent empir
 - **Mean Pairwise Jaccard Similarity**: **${(stabilityResult.meanJaccardSimilarity * 100).toFixed(1)}%**
 - **Unique Semantic Lineages Discovered**: **${stabilityResult.totalUniqueLineages}**
 - **Consistently Recurrent Lineages (100% Passes)**: **${stabilityResult.perfectRecurrenceCount} / ${stabilityResult.totalUniqueLineages}**
-${stabilityResult.empiricalEfficacy ? `- **Mean Candidate Recall**: **${(stabilityResult.empiricalEfficacy.meanCandidateRecall * 100).toFixed(1)}%**\n- **Mean Discovery Precision**: **${(stabilityResult.empiricalEfficacy.meanPrecision * 100).toFixed(1)}%**` : ''}
+${options.safeOnly
+  ? `- **Mean Candidate Recall**: **N/A (No vulnerable positives in safe-only corpus)**
+- **Mean Discovery Precision**: **N/A (Evaluates safe control false-positive exposure rather than vulnerability detection)**
+- **Exposure Specificity**: **${((safeMetrics.exposureSpecificity !== undefined ? safeMetrics.exposureSpecificity : 1) * 100).toFixed(1)}%**
+- **Run-Exposure False-Positive Rate**: **${((safeMetrics.runExposureFPRate || 0) * 100).toFixed(1)}%** (${safeMetrics.exposuresWithFP || 0}/${totalSafeExposures})
+- **Fixture False-Positive Rate**: **${((safeMetrics.fixtureFPRate || 0) * 100).toFixed(1)}%** (${safeMetrics.fixturesWithFP || 0}/${safeCount})
+- **FP Candidate Density**: **${(safeMetrics.fpCandidateDensity || 0).toFixed(3)}**
+- **Max Lineage Recurrence**: **${safeMetrics.maxLineageRecurrence || 0} / ${totalPasses}** (${((safeMetrics.maxLineageRecurrenceRate || 0) * 100).toFixed(1)}%)`
+  : (stabilityResult.empiricalEfficacy ? `- **Mean Candidate Recall**: **${(stabilityResult.empiricalEfficacy.meanCandidateRecall * 100).toFixed(1)}%**\n- **Mean Discovery Precision**: **${(stabilityResult.empiricalEfficacy.meanPrecision * 100).toFixed(1)}%**` : '')}
 
 ---
 
@@ -977,7 +985,9 @@ ${hasSafeControls ? `The benchmark harness audited all ${safeCount} paired safe 
 Under Default-Deny, any candidate missed during discovery or exhibiting low recurrence is analyzed rather than masked:
 1. **Stochastic Line Variance**: Slight variations in reported start/end line bounds across runs are automatically normalized by the semantic lineage algorithm (\`computeLineageFingerprint\`), ensuring line-shift invariance.
 2. **Subtle Flaws & Multi-Step Logic**: Vulnerabilities involving complex multi-step taint tracking (e.g. \`SEM-08\` async message broker boundaries) or prototype pollution (\`SEM-09\`) exhibit the highest stochastic variance across model iterations.
-3. **Prompt Robustness**: The Default-Deny system prompt effectively suppresses spurious candidate generation while maintaining high recall across standard authorization and input validation vulnerabilities.
+${options.safeOnly
+  ? `3. **Safe-Control Exposure & Verification Necessity**: On safe controls with mock architectural patterns, raw model discovery exhibits an observed ${((safeMetrics.runExposureFPRate || 0) * 100).toFixed(1)}% run-exposure false positive rate (${((safeMetrics.fixtureFPRate || 0) * 100).toFixed(1)}% fixture false-positive rate). This empirical exposure demonstrates that upstream LLM discovery generates spurious candidate hypotheses on defensive boilerplate, underscoring why downstream 3-lens verifier panels and finalization under Default-Deny are strictly necessary to prevent unverified candidates from reaching authoritative reports.`
+  : `3. **Prompt Robustness**: The Default-Deny system prompt effectively suppresses spurious candidate generation while maintaining high recall across standard authorization and input validation vulnerabilities.`}
 
 ---
 

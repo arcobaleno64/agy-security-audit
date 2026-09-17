@@ -1,48 +1,49 @@
-# Empirical Discovery Stability & Efficacy Benchmark Report: 20-Fixture Paired Dual Benchmark (v1.2.0 Milestone)
+# Synthetic Verification & Stability Benchmark Report: 20-Fixture Paired Dual Benchmark (v1.2.0 Milestone)
 
 **Date**: 2026-09-13  
 **Benchmark Suite**: `evals/semantic-benchmark/` (20 Paired Fixtures: 10 Vulnerable Archetypes + 10 Guarded Safe Controls)  
 **Run Envelopes Directory**: `evals/recorded-runs/`  
 **Engine & Skill Version**: `@arcobaleno64/agy-security-audit` v1.1.1  
-**Milestone Transition**: Phase 1 (Deterministic Invariants) &rarr; Phase 2 (Evidence-Driven Empirical Ground Truth across Symmetrical 1:1 Paired Controls)  
+**Milestone Transition**: Phase 1 (Deterministic Invariants) &rarr; Phase 2 (Synthetic Verification across Symmetrical 1:1 Paired Controls)  
 **Evaluated Git Commit**: `bebed2a`  
 **Tool Integrity Digest (TCB Digest)**: `a8bbe669f9ba4801a65ca9a2bf868c1a16c53cf8883172b158850ccc7384f76f`  
+**Provenance Classification**: `RECORDED_SYNTHETIC` (Deterministic Synthetic Harness Verification; Not Live LLM Discovery)  
 
 ---
 
 ## 1. Executive Summary & Milestone Transition
 
-This publication-grade empirical report establishes the definitive, multi-pass empirical verification baseline for `@arcobaleno64/agy-security-audit`. Prior engine validations (Invariants 1–114) established mathematical determinism, safe Git execution, patch jail containment, and 3-lens ballot reconciliation under synthetic test harnesses. With commit `bebed2a`, the project formally transitions into **Phase 2 (v1.2.0 Evidence-Driven Milestone)** by expanding the empirical benchmark from 12 fixtures into a balanced **20-fixture 1:1 symmetrical evaluation surface** (10 authentic vulnerable archetypes and 10 matched guarded safe controls).
+This deterministic synthetic harness verification record documents decision logic compliance and stability for `@arcobaleno64/agy-security-audit` using simulated candidates, rather than live LLM discovery. Prior engine validations (Invariants 1–114) established mathematical determinism, safe Git execution, patch jail containment, and 3-lens ballot reconciliation under synthetic test harnesses. With commit `bebed2a`, the project expanded the verification surface from 12 fixtures into a balanced **20-fixture 1:1 symmetrical evaluation surface** (10 authentic vulnerable archetypes and 10 matched guarded safe controls) to verify deterministic finalizer and stability invariant behavior under simulated candidate inputs.
 
-Three independent, end-to-end discovery and 3-lens verification passes ($N=3$) were executed over the 20 test fixtures in `evals/semantic-benchmark/`. Every execution was serialized into an immutable, schema-compliant JSON envelope conforming to `schemas/empirical-benchmark-run.schema.json` in `evals/recorded-runs/`.
+Three deterministic synthetic verification passes ($N=3$) were recorded over the 20 test fixtures in `evals/semantic-benchmark/` using simulated candidate injections. Every execution was serialized into an immutable, schema-compliant JSON envelope conforming to `schemas/empirical-benchmark-run.schema.json` in `evals/recorded-runs/` with `evidenceOrigin: SYNTHETIC` and `executionKind: SIMULATED_HARNESS`.
 
-### Key Empirical Stability & Efficacy Metrics
+### Key Synthetic Stability & Decision Efficacy Metrics
 
 | Metric | Measured Value | Benchmark Target / Gate | Status |
 | :--- | :--- | :--- | :--- |
 | **Mean Finding-Set Jaccard Similarity** | **100.0%** ($1.0000$) | $\ge 80.0\%$ | ✔ **PASS** |
 | **100% Reliable Lineages** | **10 / 10** ($100.0\%$) | $\ge 75.0\%$ | ✔ **PASS** |
-| **Mean Candidate Recall** | **100.0%** ($1.0000$) | $\ge 85.0\%$ | ✔ **PASS** |
-| **Mean Verified Recall** | **100.0%** ($1.0000$) | $\ge 85.0\%$ | ✔ **PASS** |
-| **Mean Precision (Zero False-Positive Policy)** | **100.0%** ($1.0000$) | $100.0\%$ | ✔ **PASS** |
-| **Specificity / True Negative Rate** | **100.0%** ($TN=10/10$) | $100.0\%$ | ✔ **PASS** |
-| **Spurious Noise Rate on Safe Controls** | **0.0%** ($FP=0$) | $0.0\%$ | ✔ **PASS** |
+| **Simulated Candidate Verification Rate** | **100.0%** ($1.0000$) | $\ge 85.0\%$ | ✔ **PASS** |
 | **Decision Invariant Rate** | **100.0%** ($20/20$ deterministically passed) | $100.0\%$ | ✔ **PASS** |
 | **Decision F1 Score** | **1.000** | $1.000$ | ✔ **PASS** |
 | **Line-Shift Lineage Invariance** | **100.0%** | $100.0\%$ | ✔ **PASS** |
 
 > [!NOTE]
-> **Presumption of Non-Pass & Evidence-Driven Symmetrical Control**:
-> In strict accordance with the Project Working Agreements (Section 2) and the Presumption of Non-Pass, all authority claims (candidate findings, patches, and coverage completeness claims) are unverified by default until conclusive affirmative proof is established. Safe controls are evaluated under identical discovery and verification scrutiny as vulnerable candidates. Across all 3 passes ($N=3$), zero spurious candidates were generated on safe controls ($FP=0$), yielding $100\%$ precision and $100\%$ specificity alongside $100\%$ recall on vulnerable fixtures.
+> **Deterministic Decision Logic Verification Notice**:
+> This report documents deterministic synthetic harness verification of decision logic compliance on simulated candidates, not live LLM discovery. Safe controls here demonstrate finalizer suppression logic on pre-formed candidates under simulated execution, which is distinct from evaluating live LLM discovery false-positive exposure (which was subsequently measured in dedicated live safe-control baselines).
 
 ---
 
 ## 2. Benchmark Configuration & Authoritative Provenance
 
-Authoritative runtime and tool provenance was captured across all run envelopes via `scripts/record-eval-pass.mjs` and verified by `skills/security-audit/scripts/run-stability-eval.mjs`:
+Authoritative provenance was captured across all run envelopes via `scripts/record-eval-pass.mjs` and verified by `skills/security-audit/scripts/run-stability-eval.mjs`:
 
 ### Runtime Host & Environment
-- **Evaluated Model**: `gemini-2.5-flash`
+- **Provenance Classification**: `RECORDED_SYNTHETIC`
+- **Execution Kind**: `SIMULATED_HARNESS`
+- **Evidence Origin**: `SYNTHETIC`
+- **Model-Dependent Run**: `NO (Deterministic Synthetic Generator)`
+- **Evaluated Model Reference**: `gemini-2.5-flash` (Harness Simulated Mode)
 - **Model Provider**: `google`
 - **AGY CLI Version**: `1.2.2` (`agy --version`)
 - **Runtime Host**: `win32 (x64)`, Node.js `v24.14.1`
@@ -92,13 +93,13 @@ The benchmark evaluates 20 fixtures arranged in 10 symmetrical 1:1 pairs. Each p
 
 ---
 
-## 4. Multi-Pass Empirical Discovery & Stability Results ($N=3$)
+## 4. Multi-Pass Synthetic Verification & Stability Results ($N=3$)
 
-Three independent discovery passes were executed against the expanded 20-fixture suite. Results were serialized directly to immutable JSON envelopes in `evals/recorded-runs/`.
+Three independent deterministic synthetic verification passes were recorded against the 20-fixture suite using simulated candidate injections to verify decision logic compliance and line-shift invariance. Results were serialized directly to immutable JSON envelopes in `evals/recorded-runs/`.
 
 ### Run Summary Table
 
-| Run ID | Filename | Candidates | Verified | Suppressed | Deferred | Recall | Precision | F1 Score | Duration |
+| Run ID | Filename | Candidates | Verified | Suppressed | Deferred | Decision Recall | Decision Precision | F1 Score | Duration |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `run-pass-1` | `run-pass-1.json` | 10 | 10 | 0 | 0 | 100.0% | 100.0% | 1.000 | 916 ms |
 | `run-pass-2` | `run-pass-2.json` | 10 | 10 | 0 | 0 | 100.0% | 100.0% | 1.000 | 947 ms |
@@ -119,16 +120,16 @@ Three independent discovery passes were executed against the expanded 20-fixture
 | **SEM-08** | `multistep-attack-path` | ✔ CONFIRMED | ✔ CONFIRMED | ✔ CONFIRMED | 3 / 3 | **100.0%** | `6790b19f78e77aa9c431b89c7f0a9537` |
 | **SEM-09** | `prototype-pollution` | ✔ CONFIRMED | ✔ CONFIRMED | ✔ CONFIRMED | 3 / 3 | **100.0%** | `d0f765869dacfce21852ec99d1c63459` |
 | **SEM-10** | `concurrency-toctou` | ✔ CONFIRMED | ✔ CONFIRMED | ✔ CONFIRMED | 3 / 3 | **100.0%** | `92f411d282fa7636cf43d6201aec0b85` |
-| **SEM-01-SAFE** | `authz-bypass (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-02-SAFE** | `cross-tenant-access (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-03-SAFE** | `confused-deputy (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-04-SAFE** | `state-transition (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-05-SAFE** | `validated-vs-consumed (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-06-SAFE** | `partial-mitigation (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-07-SAFE** | `unsafe-default (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-08-SAFE** | `multistep-attack-path (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-09-SAFE** | `prototype-pollution (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
-| **SEM-10-SAFE** | `concurrency-toctou (safe control)` | 🛡️ ZERO FP | 🛡️ ZERO FP | 🛡️ ZERO FP | 0 / 3 | **0.0% FP** | *(No spurious candidate)* |
+| **SEM-01-SAFE** | `authz-bypass (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-02-SAFE** | `cross-tenant-access (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-03-SAFE** | `confused-deputy (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-04-SAFE** | `state-transition (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-05-SAFE** | `validated-vs-consumed (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-06-SAFE** | `partial-mitigation (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-07-SAFE** | `unsafe-default (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-08-SAFE** | `multistep-attack-path (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-09-SAFE** | `prototype-pollution (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
+| **SEM-10-SAFE** | `concurrency-toctou (safe control)` | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 🛡️ SUPPRESSED | 0 / 3 | **100% SUPPRESSED** | *(Simulated candidate suppressed)* |
 
 ### Pairwise Jaccard Similarity Matrix
 
@@ -155,42 +156,42 @@ In Pass 3, the physical source location for `SEM-08` (`08-multistep-attack-path.
 
 ---
 
-## 5. Dual Control Analysis & False-Positive Immunity Under Default-Deny
+## 5. Dual Control Analysis & Finalizer Decision Suppression Under Default-Deny
 
-Under the Default-Deny policy, safe or guarded control fixtures must not produce unverified vulnerability candidates. The 10 safe fixtures provide empirical proof of zero false-positive candidate generation ($FP=0$, $TN=10/10$):
+Under the Default-Deny policy, candidate findings targeting properly guarded control fixtures are suppressed by the finalizer decision logic. The 10 safe fixtures verify that when simulated candidates are presented with complete mitigation proof, decision logic consistently suppresses them ($TN=10/10$):
 
 1. **Role Check Invariant (`safe/01-authz-bypass.js`, Line 11)**:
    - *Mitigation Architecture*: The endpoint routes through `verifyAdmin` middleware. Line 10–11 explicitly checks `if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });` prior to allowing execution to reach `systemConfig.maintenanceMode` modification.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 2. **Tenant-Scoped Query Isolation (`safe/02-cross-tenant-access.js`, Line 10)**:
    - *Mitigation Architecture*: In document retrieval, line 10 binds queries strictly across both identifiers: `mockDatabase.find(d => d.id === req.params.id && d.tenantId === currentTenantId)`, structurally preventing cross-tenant data leakage.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 3. **Allowlisted Destination Relay Guard (`safe/03-confused-deputy.js`, Line 13)**:
    - *Mitigation Architecture*: The proxy parses outbound URLs and enforces a strict destination allowlist: `ALLOWED_DESTINATIONS.has(parsed.origin + parsed.pathname)` (line 13). Crucially, the safe implementation strips ambient `X-Service-Auth` credentials from outbound dispatch headers, confining authority propagation.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 4. **State Machine Prerequisite Guard (`safe/04-state-transition.js`, Line 13)**:
    - *Mitigation Architecture*: In order fulfillment, line 13 asserts the prerequisite state machine invariant: `if (order.status !== 'PAID') return res.status(409).json({ error: 'Order must be PAID before fulfillment' });`, blocking invalid transitions from PENDING directly to FULFILLED.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 5. **Canonicalized Basename File Boundary (`safe/05-validated-vs-consumed.js`, Line 9)**:
    - *Mitigation Architecture*: In report exporting, line 9 forces untrusted input through `path.basename(String(req.body.targetFile || 'default.json'))` and line 11 confirms jail containment via `filePath.startsWith(DATA_DIR)`, eliminating path traversal.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 6. **Context-Aware Attribute Encoding Guard (`safe/06-partial-mitigation.js`, Line 18)**:
    - *Mitigation Architecture*: Replaces inline script interpolation with an HTML attribute context. Line 18 escapes user input via `encodeHtmlAttribute` (`&`, `<`, `>`, `"`, `'`) and binds it safely inside a quoted `<input type="text" value="${safeNick}">` element.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 7. **Fail-Closed Default-Deny Policy Guard (`safe/07-unsafe-default.js`, Line 8)**:
    - *Mitigation Architecture*: Configuration evaluation defaults securely to `ACCESS_POLICY || 'DENY_ALL'` (line 7). Line 8 enforces fail-closed authorization: `if (accessControl !== 'ALLOW_ADMIN_ONLY') return res.status(403).json(...)`, rejecting undefined or missing configurations.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 8. **Allowlisted Static Task Dispatch Table (`safe/08-multistep-attack-path.js`, Line 13)**:
    - *Mitigation Architecture*: Replaces dynamic `eval()` code evaluation with a static dictionary lookup table (`TASK_HANDLERS`). Line 13 resolves tasks via dictionary key (`handler = TASK_HANDLERS[taskName]`), completely eliminating arbitrary code execution.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 9. **Key-Filtering Prototype Pollution Guard (`safe/09-prototype-pollution.js`, Line 8)**:
    - *Mitigation Architecture*: The recursive merge utility explicitly skips dangerous object keys: line 8 enforces `if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;`, neutralizing prototype pollution attacks.
-   - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+   - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 10. **Atomic Account Lock Concurrency Guard (`safe/10-toctou-race-condition.js`, Line 26)**:
     - *Mitigation Architecture*: Encapsulates balance checking, asynchronous payment I/O delay, and state mutation within an exclusive mutex lock (`withAccountLock(userId, async () => { ... })` at line 26), serializing concurrent requests and eliminating the TOCTOU double-spend window.
-    - *Discovery Outcome*: Zero candidates generated across all 3 passes ($FP=0$).
+    - *Decision Logic Outcome*: Simulated candidate deterministically suppressed ($TN=10/10$).
 
-**Empirical Outcome**: **0 False Positives** across all 10 safe controls in all 3 runs ($FP=0$), yielding a flawless **100% Precision** and **100% Specificity** ($TN=10/10$).
+**Harness Verification Outcome**: Invariant decision logic suppression verified across all 10 safe controls in all 3 synthetic runs ($TN=10/10$). Decision compliance reached 100% on simulated inputs. (Note: real-world LLM candidate generation false-positive exposure on safe controls is evaluated in live benchmarks, not this deterministic harness).
 
 ---
 
@@ -276,13 +277,13 @@ The benchmark has progressed through three distinct developmental stages, adheri
 | **Unique Semantic Lineages** | 8 | 8 | **10** | $+2$ New Archetypes Covered |
 | **100% Reliable Lineages** | 7 / 8 ($87.5\%$) | 8 / 8 ($100.0\%$) | **10 / 10 ($100.0\%$)** | Flawless Lineage Stability |
 | **Mean Finding-Set Jaccard** | 91.7% ($0.9167$) | 100.0% ($1.0000$) | **100.0% ($1.0000$)** | $+8.3\%$ (Perfect Recurrence) |
-| **Mean Candidate Recall** | 95.8% ($0.9583$) | 100.0% ($1.0000$) | **100.0% ($1.0000$)** | Zero False Negatives |
-| **Mean Precision (Zero FP)** | 100.0% ($1.0000$) | 100.0% ($1.0000$) | **100.0% ($1.0000$)** | Zero False Positives |
+| **Simulated Candidate Verification Rate** | 95.8% ($0.9583$) | 100.0% ($1.0000$) | **100.0% ($1.0000$)** | Candidate Verification Convergence |
+| **Decision Invariant Compliance** | 100.0% ($1.0000$) | 100.0% ($1.0000$) | **100.0% ($1.0000$)** | Deterministic Decision Compliance |
 | **Decision Invariant Rate** | 12 / 12 ($100.0\%$) | 12 / 12 ($100.0\%$) | **20 / 20 ($100.0\%$)** | 100% Finalizer Determinism |
 
 ---
 
-## 8. Verification Signatures & Reproducibility Instructions
+## 8. Integrity Verification & Reproducibility Instructions
 
 All metrics and results documented in this report are 100% reproducible on a standard development environment using the official repository scripts:
 
@@ -309,7 +310,7 @@ npm test
 npm run check:release
 ```
 
-### Expected Command Execution Signatures
+### Expected Command Execution Outputs & Integrity Verification
 
 - **Disposition Benchmark (`run-semantic-eval.mjs`)**:
   ```
@@ -335,8 +336,8 @@ npm run check:release
   Running Empirical Discovery Stability Benchmark (Recorded Multi-Run Mode)...
   ================================================================
   Empirical Discovery Stability Metrics (Recorded Runs):
-    Evaluation Mode:                 RECORDED_EMPIRICAL
-    Model-Dependent Run:             YES (Observed Multi-Pass)
+    Evaluation Mode:                 RECORDED_SYNTHETIC
+    Model-Dependent Run:             NO (Deterministic Synthetic Generator)
     Total Recorded Runs:             3
     Evaluated Model(s):              gemini-2.5-flash
     AGY CLI Version(s):              1.2.2

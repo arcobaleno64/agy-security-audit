@@ -59,7 +59,7 @@ export const MANDATORY_INDIVIDUAL_FILES = [
   {
     repoPath: 'skills/security-audit/tool-integrity-manifest.json',
     stagedName: 'tool-integrity-manifest.json',
-    description: 'Signed Cryptographic TCB Manifest'
+    description: 'SHA-256 Cryptographic TCB Integrity Manifest'
   }
 ];
 
