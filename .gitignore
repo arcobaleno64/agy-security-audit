@@ -5,8 +5,10 @@ reports/*
 !reports/empirical-baseline-n5-report-2026-09-13.md
 !reports/empirical-benchmark-20-paired-report-2026-09-13.md
 !reports/safe-control-baseline-report-2026-09-17.md
+!reports/holdout-paired-baseline-report-2026-09-17.md
 !evals/live-runs/safe-smoke/
 !evals/live-runs/safe-baseline/
+!evals/live-runs/holdout-paired/
 codeql-db/
 .semgrep/
 coverage/
