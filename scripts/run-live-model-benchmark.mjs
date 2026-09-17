@@ -207,6 +207,78 @@ export function projectLabelBlindFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
 }
 
 /**
+ * Prepares an isolated, hermetic evaluation sandbox directory containing ONLY the
+ * stripped target fixture and minimal synthetic metadata (HERMETIC_BENCHMARK_V1).
+ *
+ * Strict Exclusion Properties:
+ * - Isolated directory per case under scratch/hermetic-sandbox/case-<hash>
+ * - No ground-truth.json, no fixture IDs, no SAFE/VULNERABLE labels, no CWE hints
+ * - No git history, no previous model outputs, no scorer or harness scripts
+ * - Minimal synthetic package.json (ESM enabled, private)
+ * - Enables agy CLI invocation with cwd = sandboxDir and workspace = sandboxDir
+ */
+export function prepareHermeticSandbox(fixture, repoRoot = DEFAULT_REPO_ROOT, options = {}) {
+  const sourcePath = path.resolve(repoRoot, fixture.file);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Fixture file not found: ${sourcePath}`);
+  }
+  const rawContent = fs.readFileSync(sourcePath, 'utf8');
+  const strippedContent = stripLabelLeakingComments(rawContent);
+
+  const fileHash = crypto.createHash('sha256').update(fixture.file).digest('hex').slice(0, 12);
+  const targetFileName = options.targetFileName || `case-${fileHash}.js`;
+  const defaultSandboxDir = `scratch/hermetic-sandbox/case-${fileHash}`;
+  const sandboxRelDir = (options.sandboxDir || defaultSandboxDir).replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  const sandboxAbsDir = path.resolve(repoRoot, sandboxRelDir);
+
+  // Clean directory first to guarantee no stale files exist
+  if (fs.existsSync(sandboxAbsDir)) {
+    fs.rmSync(sandboxAbsDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(sandboxAbsDir, { recursive: true });
+
+  // Write isolated target code file
+  const targetAbsPath = path.join(sandboxAbsDir, targetFileName);
+  fs.writeFileSync(targetAbsPath, strippedContent, 'utf8');
+
+  // Write minimal synthetic package.json (no project leaks, ESM enabled)
+  const syntheticPackageJson = {
+    name: 'hermetic-sandbox-fixture',
+    version: '1.0.0',
+    type: 'module',
+    private: true
+  };
+  fs.writeFileSync(
+    path.join(sandboxAbsDir, 'package.json'),
+    JSON.stringify(syntheticPackageJson, null, 2),
+    'utf8'
+  );
+
+  return {
+    originalFile: fixture.file,
+    fileHash,
+    sandboxRelDir,
+    sandboxAbsDir,
+    targetFileName,
+    targetRelPath: targetFileName,
+    targetAbsPath,
+    strippedContent,
+    lineCount: strippedContent.split('\n').length
+  };
+}
+
+/**
+ * Cleans up a hermetic sandbox directory.
+ */
+export function cleanHermeticSandbox(sandboxAbsDir) {
+  try {
+    if (fs.existsSync(sandboxAbsDir)) {
+      fs.rmSync(sandboxAbsDir, { recursive: true, force: true });
+    }
+  } catch {}
+}
+
+/**
  * Deterministically shuffles an array using Mulberry32 PRNG given a seed.
  */
 export function shuffleArrayWithSeed(array, seed) {
@@ -443,6 +515,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   const isDevSet = splits.developmentSet.ids.includes(fixture.id);
   const split = isSafeFixture ? 'SAFE_CONTROL' : (isDevSet ? 'DEVELOPMENT_SET' : 'HOLDOUT_SET');
 
+  const isHermetic = options.hermetic !== false;
   const useLabelBlind = options.labelBlind !== false;
   const defaultCasesDir = fs.existsSync(path.resolve(repoRoot, 'scratch/context'))
     ? 'scratch/context/cases'
@@ -451,7 +524,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
 
   // Support simulated / offline mode for tests and CI
   if (options.mock || options.mockCandidates) {
-    if (useLabelBlind) {
+    if (isHermetic) {
+      prepareHermeticSandbox(fixture, repoRoot, options);
+    } else if (useLabelBlind) {
       projectLabelBlindFixture(fixture, repoRoot, effectiveCasesDir);
     }
     if (isSafeFixture) {
@@ -559,8 +634,17 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   let promptTargetFile = fixture.file;
   let promptContent = fixtureContent;
   let projectedInfo = null;
+  let hermeticInfo = null;
+  let effectiveCwd = repoRoot;
+  let workspaceDir = repoRoot;
 
-  if (useLabelBlind) {
+  if (isHermetic) {
+    hermeticInfo = prepareHermeticSandbox(fixture, repoRoot, options);
+    effectiveCwd = hermeticInfo.sandboxAbsDir;
+    workspaceDir = hermeticInfo.sandboxAbsDir;
+    promptTargetFile = hermeticInfo.targetRelPath;
+    promptContent = hermeticInfo.strippedContent;
+  } else if (useLabelBlind) {
     projectedInfo = projectLabelBlindFixture(fixture, repoRoot, effectiveCasesDir);
     promptTargetFile = projectedInfo.projectedRelPath;
     promptContent = projectedInfo.strippedContent;
@@ -576,7 +660,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startTime = Date.now();
     const agyArgs = [
-      '--add-dir', repoRoot,
+      '--add-dir', workspaceDir,
       '--dangerously-skip-permissions',
       '--output-format', 'stream-json'
     ];
@@ -595,7 +679,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     try {
       const agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy';
       const result = spawnSync(agyBin, agyArgs, {
-        cwd: repoRoot,
+        cwd: effectiveCwd,
         encoding: 'utf8',
         timeout: timeoutMs,
         env: {
@@ -717,6 +801,10 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       }
       sleepSync(backoffMs);
     }
+  }
+
+  if (options.cleanSandbox && hermeticInfo) {
+    cleanHermeticSandbox(hermeticInfo.sandboxAbsDir);
   }
 
   return lastResult;
@@ -1064,6 +1152,7 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
     console.log(`  Shuffle Seed:          ${options.shuffleSeed}`);
   }
   console.log(`  Label-Blind Mode:      ${options.labelBlind !== false ? 'ENABLED (LABEL_BLIND_V1)' : 'DISABLED'}`);
+  console.log(`  Hermetic Isolation:    ${options.hermetic !== false ? 'ENABLED (HERMETIC_BENCHMARK_V1)' : 'DISABLED'}`);
   console.log(`  Throttle Delay:        ${delayMs}ms`);
   console.log(`  Sandbox Mode:          ${options.sandbox ? 'ENABLED (--sandbox)' : 'DISABLED'}`);
   if (outDir) {
@@ -1272,6 +1361,8 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
         safeOnly: isSafeOnly,
         shuffleSeed: options.shuffleSeed || null,
         labelBlind: options.labelBlind !== false,
+        hermetic: options.hermetic !== false,
+        hermeticHarnessVersion: options.hermetic !== false ? 'HERMETIC_BENCHMARK_V1' : null,
         throttleDelayMs: delayMs,
         pacingPolicy: `${delayMs}ms inter-call throttle delay`,
         fixtureResults: fixtureResults.map(r => ({
@@ -1633,6 +1724,43 @@ const y = 2;`;
 
   console.log('  ✔ Test 7: Atomic per-fixture checkpointing, schema-validated candidate resume, and multi-pass expansion verified.');
 
+  // Test 8: Hermetic Sandbox Harness (HERMETIC_BENCHMARK_V1)
+  const hermeticFixture = {
+    id: 'HLD-01-SAFE',
+    file: 'evals/holdout-benchmark/safe/01-ssti-template-injection.js',
+    expectedVerdict: 'SAFE'
+  };
+  const sandboxMeta = prepareHermeticSandbox(hermeticFixture, repoRoot);
+  if (!fs.existsSync(sandboxMeta.sandboxAbsDir)) {
+    throw new Error(`Hermetic sandbox directory not created: ${sandboxMeta.sandboxAbsDir}`);
+  }
+  const sandboxFiles = fs.readdirSync(sandboxMeta.sandboxAbsDir);
+  if (!sandboxFiles.includes(sandboxMeta.targetFileName) || !sandboxFiles.includes('package.json')) {
+    throw new Error(`Hermetic sandbox missing expected files: ${sandboxFiles.join(', ')}`);
+  }
+  for (const forbidden of ['ground-truth.json', '.git', 'reports', 'evals', 'scripts', 'skills']) {
+    if (sandboxFiles.includes(forbidden)) {
+      throw new Error(`Hermetic sandbox containment breached; contains forbidden '${forbidden}'`);
+    }
+  }
+  const pkgContent = JSON.parse(fs.readFileSync(path.join(sandboxMeta.sandboxAbsDir, 'package.json'), 'utf8'));
+  if (pkgContent.name !== 'hermetic-sandbox-fixture' || pkgContent.type !== 'module') {
+    throw new Error('Hermetic sandbox package.json invalid');
+  }
+  const codeContent = fs.readFileSync(sandboxMeta.targetAbsPath, 'utf8');
+  if (/evals\/|ssti-template-injection|SAFE|CWE-/i.test(codeContent)) {
+    throw new Error('Hermetic target code leaked labels/categories');
+  }
+  const mockHermeticRes = runAgyDiscoveryOnFixture(hermeticFixture, repoRoot, {
+    mock: true,
+    hermetic: true
+  });
+  if (mockHermeticRes.file !== hermeticFixture.file) {
+    throw new Error(`Candidate file not mapped back to authoritative path: got ${mockHermeticRes.file}`);
+  }
+  cleanHermeticSandbox(sandboxMeta.sandboxAbsDir);
+  console.log('  ✔ Test 8: Hermetic Sandbox Harness (HERMETIC_BENCHMARK_V1) strictly isolates workspace and metadata.');
+
   console.log('\n✔ All run-live-model-benchmark.mjs harness unit tests passed successfully.');
 }
 
@@ -1659,6 +1787,8 @@ Options:
   --safe-only          Run discovery ONLY on the paired safe controls to calibrate specificity
   --shuffle-seed <str> Deterministically shuffle evaluation order to mitigate presentation bias
   --no-label-blind     Disable label-blind case materialization (defaults to enabled)
+  --hermetic           Enable hermetic benchmark sandbox isolation (default: enabled)
+  --no-hermetic        Disable hermetic sandbox isolation, falling back to legacy repoRoot workspace
   --test               Run internal harness unit tests
   --fixture <id>       Run discovery only on a specific fixture (e.g. SEM-03)
   --model <modelId>    Override target model ID (default: gemini-3.8-flash-high)
@@ -1689,6 +1819,8 @@ Options:
   const isResume = args.includes('--resume');
   const shuffleSeed = getArg('--shuffle-seed') || getArg('--seed');
   const noLabelBlind = args.includes('--no-label-blind');
+  const noHermetic = args.includes('--no-hermetic');
+  const isHermetic = !noHermetic;
   const fixtureId = getArg('--fixture');
   const outDirArg = getArg('--out-dir') || getArg('--output-dir');
   const outFile = getArg('--output');
@@ -1722,6 +1854,7 @@ Options:
       resume: isResume,
       shuffleSeed,
       labelBlind: !noLabelBlind,
+      hermetic: isHermetic,
       fixtureId,
       modelId: model || undefined,
       retries,
