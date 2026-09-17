@@ -527,7 +527,14 @@ export function createCoordinatorEvidenceEnvelope({
       completed: false,
       exitStatus: null,
       artifactPath: null,
-      artifactDigest: null
+      artifactDigest: null,
+      boundRunId: null,
+      boundNonce: null
+    },
+    runBinding: {
+      runId: extraMetadata?.auditRunId || validation?.finalizer?.boundRunId || null,
+      nonce: extraMetadata?.auditNonce || validation?.finalizer?.boundNonce || null,
+      bound: Boolean(validation?.finalizer?.boundRunId && validation?.finalizer?.boundNonce)
     },
     traceArtifact: {
       relativePath: rawTraceRelativePath,
@@ -566,13 +573,18 @@ export function executeLiveCoordinatorAudit({
   timeoutMs = 420000,
   sandbox = true,
   policyEnforcement = false,
-  outDir = path.join(DEFAULT_REPO_ROOT, 'evals', 'live-runs', 'e2e-coordinator')
+  outDir = path.join(DEFAULT_REPO_ROOT, 'evals', 'live-runs', 'e2e-coordinator'),
+  runId = null,
+  nonce = null
 }) {
   const resolvedModel = resolveModelId(modelId);
   const env = probeEnvironment(repoRoot, { modelId: resolvedModel, modelProvider: 'google' });
   const executionLane = policyEnforcement ? EXECUTION_LANES.POLICY : EXECUTION_LANES.FUNCTIONAL;
 
-  console.log(`[E2E-COORDINATOR] Launching Live Coordinator Audit: Fixture=${fixtureId}, Claim=${targetClaim}, Model=${env.modelId}, Lane=${executionLane}`);
+  const auditRunId = runId || `RUN-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const auditNonce = nonce || `NONCE-${crypto.randomBytes(8).toString('hex')}`;
+
+  console.log(`[E2E-COORDINATOR] Launching Live Coordinator Audit: Fixture=${fixtureId}, Claim=${targetClaim}, Model=${env.modelId}, Lane=${executionLane}, RunId=${auditRunId}`);
 
   // Resolve fixture file
   const semanticGtPath = path.join(repoRoot, 'evals', 'semantic-benchmark', 'ground-truth.json');
@@ -600,17 +612,19 @@ export function executeLiveCoordinatorAudit({
   const normalizedRepoRoot = repoRoot.replace(/\\/g, '/');
   const normalizedTargetFile = path.relative(repoRoot, targetFile).replace(/\\/g, '/');
 
-  // Construct audit prompt for coordinator with explicit paths
+  // Construct audit prompt for coordinator with explicit paths and run-bound authority tokens
   const prompt = [
     `Perform an authoritative, end-to-end security audit on the codebase located at ${normalizedTargetFile}.`,
     `The project repository root is ${normalizedRepoRoot}.`,
+    `Audit Run ID: ${auditRunId}`,
+    `Task Correlation Nonce: ${auditNonce}`,
     `Strictly follow your 5-stage orchestration protocol:`,
     `1. Derive inventory via build-inventory.mjs for scratch/e2e-audit-target.`,
     `2. Prepare sanitized review context via prepare-review-context.mjs.`,
     `3. Dispatch threat modeling to threat-modeler subagent.`,
     `4. Dispatch vulnerability discovery to discovery-agent subagent.`,
-    `5. Dispatch 3-lens verifier subagents (reachability, defenses, impact).`,
-    `6. Finalize the audit via finalize-scan.mjs.`,
+    `5. Dispatch 3-lens verifier subagents (reachability, defenses, impact) with task-correlation nonce ${auditNonce}.`,
+    `6. Finalize the audit via finalize-scan.mjs with --run-id ${auditRunId} --nonce ${auditNonce}.`,
     `Do not skip any stage or self-certify without evidence.`
   ].join('\n');
 
@@ -659,7 +673,9 @@ export function executeLiveCoordinatorAudit({
   const parsedTrace = parseStreamJsonTrace(stdout);
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
   const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot, {
-    invocationStartTime: startTs
+    invocationStartTime: startTs,
+    runId: auditRunId,
+    nonce: auditNonce
   });
 
   fs.mkdirSync(outDir, { recursive: true });
@@ -691,7 +707,11 @@ export function executeLiveCoordinatorAudit({
     rawTraceRelativePath: path.join('evals', 'live-runs', 'e2e-coordinator', traceFilename).replace(/\\/g, '/'),
     targetClaim,
     executionLane,
-    extraMetadata: { fixture: fixtureInfo }
+    extraMetadata: {
+      fixture: fixtureInfo,
+      auditRunId,
+      auditNonce
+    }
   });
 
   fs.writeFileSync(envelopePath, JSON.stringify(envelope, null, 2), 'utf8');
@@ -719,6 +739,8 @@ export function main(args = process.argv.slice(2)) {
   const claimArg = args.find(a => a.startsWith('--claim='))?.split('=')[1] || 'orchestration';
   const policyEnforcement = args.includes('--policy-enforcement');
   const timeoutArg = Number(args.find(a => a.startsWith('--timeout='))?.split('=')[1]) || 420000;
+  const runIdArg = args.find(a => a.startsWith('--run-id='))?.split('=')[1] || null;
+  const nonceArg = args.find(a => a.startsWith('--nonce='))?.split('=')[1] || null;
 
   const targetClaim = claimArg === 'full-pipeline' ? CLAIM_TYPES.FULL_PIPELINE : CLAIM_TYPES.ORCHESTRATION;
 
@@ -733,6 +755,8 @@ Options:
   --dry-run               Verify harness logic, trace parser, and envelope hashing
   --model=<id>            Specify LLM model ID for AGY CLI (default: gemini-3.8-flash-high)
   --timeout=<ms>          Timeout per run in milliseconds (default: 420000)
+  --run-id=<id>           Audit run ID to inject and enforce (default: auto-generated)
+  --nonce=<nonce>         Task correlation nonce to inject and enforce (default: auto-generated)
   --help, -h              Show this help message
 `);
     process.exit(0);
@@ -1003,6 +1027,7 @@ Options:
       mode: 'scan',
       entries: [],
       scanRunId: 'dry-run-full',
+      nonce: 'dry-run-nonce',
       complete: true,
       completedAt: new Date().toISOString(),
       canDeclareClean: true,
@@ -1012,9 +1037,10 @@ Options:
 
     const fullVal = validateCoordinatorTrace(fullTrace, 'dry-run-full', CLAIM_TYPES.FULL_PIPELINE, 1, mockScratch, {
       invocationStartTime: testStartTime,
-      runId: 'dry-run-full'
+      runId: 'dry-run-full',
+      nonce: 'dry-run-nonce'
     });
-    if (!fullVal.valid || !fullVal.finalizer.completed || !fullVal.finalizer.artifactDigest) {
+    if (!fullVal.valid || !fullVal.finalizer.completed || !fullVal.finalizer.artifactDigest || fullVal.finalizer.boundRunId !== 'dry-run-full' || fullVal.finalizer.boundNonce !== 'dry-run-nonce') {
       console.error('❌ Dry-run full pipeline validation failed:', fullVal);
       process.exit(1);
     }
@@ -1032,8 +1058,17 @@ Options:
       validation: fullVal,
       rawTraceDigest: fullVal.traceDigest,
       rawTraceRelativePath: 'evals/live-runs/e2e-coordinator/trace-synthetic.ndjson',
-      targetClaim: CLAIM_TYPES.FULL_PIPELINE
+      targetClaim: CLAIM_TYPES.FULL_PIPELINE,
+      extraMetadata: {
+        auditRunId: 'dry-run-full',
+        auditNonce: 'dry-run-nonce'
+      }
     });
+
+    if (!baseEnvelope.runBinding || !baseEnvelope.runBinding.bound || baseEnvelope.runBinding.runId !== 'dry-run-full' || baseEnvelope.runBinding.nonce !== 'dry-run-nonce') {
+      console.error('❌ Dry-run run-binding validation failed:', baseEnvelope.runBinding);
+      process.exit(1);
+    }
 
     const d0 = baseEnvelope.envelopeDigest;
     const dModelMut = computeEnvelopeDigest({ ...baseEnvelope, environment: { ...baseEnvelope.environment, modelId: 'MUTATED_MODEL' } });
@@ -1057,6 +1092,7 @@ Options:
       smokeClaim: smokeVal.valid,
       finalizerInvokedVsCompletedVerified: !invOnlyVal.finalizer.completed && fullVal.finalizer.completed,
       fullPipelineClaim: fullVal.valid,
+      runBoundAuthorityVerified: baseEnvelope.runBinding.bound,
       c14nMutationResistant: true,
       canonicalizationAlgorithm: baseEnvelope.canonicalizationAlgorithm,
       envelopeDigest: baseEnvelope.envelopeDigest,
@@ -1071,7 +1107,9 @@ Options:
       targetClaim,
       modelId: modelArg,
       policyEnforcement,
-      timeoutMs: timeoutArg
+      timeoutMs: timeoutArg,
+      runId: runIdArg,
+      nonce: nonceArg
     });
     if (!result.success) {
       console.error('❌ Live Coordinator Audit failed validation.');

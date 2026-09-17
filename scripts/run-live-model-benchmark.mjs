@@ -976,7 +976,7 @@ ${hasSafeControls ? `The benchmark harness audited all ${safeCount} paired safe 
 > ${(safeMetrics.totalSpuriousCandidates || safeRec.totalFalsePositives || 0) === 0
   ? `0 reportable false positives observed across ${totalPasses} valid runs on ${safeCount} controlled safe fixtures. This result is corpus- and configuration-bounded and does not imply false-positive immunity.`
   : `${safeMetrics.totalSpuriousCandidates || safeRec.totalFalsePositives} spurious candidate(s) observed across ${totalPasses} valid runs on ${safeCount} controlled safe fixtures. Specificity calibrated at ${((safeMetrics.exposureSpecificity || 0) * 100).toFixed(1)}%.`}
-` : `Safe control auditing was disabled for this run (\`--include-safe\` or \`--safe-only\` not active). Specificity baseline was verified via the deterministic invariant test suite (\`npm test\` invariant 116/120).`}
+` : `No live safe-control evidence was collected in this run (\`--include-safe\` or \`--safe-only\` not active). No empirical specificity estimate is reported. Deterministic invariant results are reported separately and do not constitute empirical specificity evidence.`}
 
 ---
 
@@ -987,7 +987,7 @@ Under Default-Deny, any candidate missed during discovery or exhibiting low recu
 2. **Subtle Flaws & Multi-Step Logic**: Vulnerabilities involving complex multi-step taint tracking (e.g. \`SEM-08\` async message broker boundaries) or prototype pollution (\`SEM-09\`) exhibit the highest stochastic variance across model iterations.
 ${options.safeOnly
   ? `3. **Safe-Control Exposure & Verification Necessity**: On safe controls with mock architectural patterns, raw model discovery exhibits an observed ${((safeMetrics.runExposureFPRate || 0) * 100).toFixed(1)}% run-exposure false positive rate (${((safeMetrics.fixtureFPRate || 0) * 100).toFixed(1)}% fixture false-positive rate). This empirical exposure demonstrates that upstream LLM discovery generates spurious candidate hypotheses on defensive boilerplate, underscoring why downstream 3-lens verifier panels and finalization under Default-Deny are strictly necessary to prevent unverified candidates from reaching authoritative reports.`
-  : `3. **Prompt Robustness**: The Default-Deny system prompt effectively suppresses spurious candidate generation while maintaining high recall across standard authorization and input validation vulnerabilities.`}
+  : `3. **Defensive Verification Protocol**: Candidate generation on complex codebases produces hypotheses that require multi-stage verification. Downstream 3-lens verifier panels and finalization under Default-Deny ensure unevidenced candidate hypotheses are eliminated prior to reporting.`}
 
 ---
 

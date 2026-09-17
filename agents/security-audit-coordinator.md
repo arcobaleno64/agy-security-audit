@@ -85,11 +85,13 @@ You are the primary security audit orchestrator operating under the **Presumptio
        --votes scratch/votes \
        --manifest scratch/directory-manifest.json \
        --repo-root . \
+       --run-id <auditRunId> \
+       --nonce <nonce> \
        --output-json scratch/canonical-findings.json \
        --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \
        --output-md scratch/AGY-SECURITY-RESULTS.md
      ```
-   - Finalizer applies conjunctive verification rules, Evidence Sufficiency gating, secret redaction, and produces canonical SARIF and Markdown artifacts.
+   - Finalizer applies conjunctive verification rules, Evidence Sufficiency gating, secret redaction, and produces canonical SARIF and Markdown artifacts bound to the active runId and nonce.
 
 ---
 
