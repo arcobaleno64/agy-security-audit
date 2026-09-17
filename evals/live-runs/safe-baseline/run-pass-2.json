@@ -1,14 +1,14 @@
 {
   "schemaVersion": "1.0.0",
   "runId": "run-pass-2",
-  "recordedAt": "2026-09-16T17:08:16.679Z",
+  "recordedAt": "2026-09-17T00:00:11.647Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "target": {
     "repositoryName": "evals/semantic-benchmark",
     "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
-    "commitSha": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "commitSha": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "corpus": "semantic-benchmark"
   },
   "environment": {
@@ -17,29 +17,61 @@
     "modelProvider": "google",
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "skillRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "toolVersion": "1.4.0-dev",
-    "toolRevision": "d939a6473f66b20ea8d0f2a002a9d90ae345ff9d",
+    "toolRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
     "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
     "toolDirty": false
   },
   "findings": {
     "candidates": [
       {
-        "id": "CAND-CWE-285-9",
+        "id": "CAND-CWE-285-6",
         "ruleId": "CWE-285",
-        "title": "Broken authorization via hardcoded admin role in verifyAdmin",
+        "title": "Broken authorization check in verifyAdmin grants administrative access without validating credentials",
         "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "CRITICAL",
         "location": {
           "uri": "evals/semantic-benchmark/safe/01-authz-bypass.js",
-          "startLine": 9,
-          "endLine": 9
+          "startLine": 6,
+          "endLine": 14
         },
         "symbol": "verifyAdmin",
         "lineageId": "05cfb8bc749d695bab9146db61529b07"
+      },
+      {
+        "id": "CAND-CWE-639-9",
+        "ruleId": "CWE-639",
+        "title": "Broken tenancy boundary via untrusted tenant header",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/02-cross-tenant-access.js",
+          "startLine": 9,
+          "endLine": 9
+        },
+        "symbol": "mockDatabase.find",
+        "lineageId": "17b50d69d21eb849640ae05179183a50"
+      },
+      {
+        "id": "CAND-CWE-863-13",
+        "ruleId": "CWE-863",
+        "title": "Prototype property lookup bypasses task authorization check",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/08-multistep-attack-path.js",
+          "startLine": 13,
+          "endLine": 17
+        },
+        "symbol": "handler",
+        "lineageId": "0ae3eeda99e6587b0922dd5c27293be0"
       }
     ],
     "verifiedFindings": null,
@@ -47,11 +79,11 @@
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 1,
+    "candidateCount": 3,
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 139669
+    "executionDurationMs": 502437
   },
   "metadata": {
     "passIndex": 2,
@@ -90,17 +122,82 @@
         "fixtureId": "SEM-01-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 1,
-        "durationMs": 139667,
+        "durationMs": 89836,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 40885,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 53958,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 19085,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 34810,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 21008,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 19159,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 88579,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 41309,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 75704,
         "error": null
       }
     ],
-    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization."
+    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization.",
+    "throttleDelayMs": 2000,
+    "pacingPolicy": "2000ms inter-call delay"
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "9759100f-9f01-41d6-857b-0bcaedca1df1",
-    "telemetryDigest": "67cf78184b8bbc10a56fd71d5c9102ef0a89edd4c39d6682f1041c7b1f265760",
-    "totalEvents": 32,
+    "conversationId": "a9904b61-bfa8-4923-b78d-8c572e7fc1f0",
+    "telemetryDigest": "a51188cbe62adf9b2fdeea155edf3c77b744023429228382b795975546bc310b",
+    "totalEvents": 170,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -161,18 +258,19 @@
       "write_to_file"
     ],
     "toolsUsed": [
-      "view_file"
+      "view_file",
+      "run_command"
     ],
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "sandboxEnabled": false,
     "tokenUsage": {
-      "inputTokens": 19690,
-      "outputTokens": 31210,
-      "thinkingTokens": 30991,
-      "cacheReadTokens": 24070,
-      "totalTokens": 50900
+      "inputTokens": 149294,
+      "outputTokens": 129171,
+      "thinkingTokens": 126757,
+      "cacheReadTokens": 468332,
+      "totalTokens": 278465
     },
-    "durationSeconds": 139.669
+    "durationSeconds": 502.437
   }
 }

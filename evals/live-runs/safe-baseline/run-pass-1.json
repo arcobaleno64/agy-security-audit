@@ -1,0 +1,292 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-pass-1",
+  "recordedAt": "2026-09-16T23:51:46.776Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "target": {
+    "repositoryName": "evals/semantic-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "18460266b81a6d8caa87e8160c4172ac22dd2806",
+    "corpus": "semantic-benchmark"
+  },
+  "environment": {
+    "agyVersion": "1.2.4",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
+    "toolVersion": "1.4.0-dev",
+    "toolRevision": "18460266b81a6d8caa87e8160c4172ac22dd2806",
+    "toolIntegrityDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
+    "toolDirty": false
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-285-9",
+        "ruleId": "CWE-285",
+        "title": "Broken authorization via hardcoded admin role assignment",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/01-authz-bypass.js",
+          "startLine": 9,
+          "endLine": 9
+        },
+        "symbol": "verifyAdmin",
+        "lineageId": "05cfb8bc749d695bab9146db61529b07"
+      },
+      {
+        "id": "CAND-CWE-639-9",
+        "ruleId": "CWE-639",
+        "title": "Authorization bypass through user-controlled x-tenant-id header",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/02-cross-tenant-access.js",
+          "startLine": 9,
+          "endLine": 9
+        },
+        "symbol": "currentTenantId",
+        "lineageId": "892a3cb3885e6d31795560e8d65f87f2"
+      },
+      {
+        "id": "CAND-CWE-862-22",
+        "ruleId": "CWE-862",
+        "title": "Missing authorization check allows arbitrary account withdrawal via user-supplied userId",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/10-toctou-race-condition.js",
+          "startLine": 22,
+          "endLine": 24
+        },
+        "symbol": "/wallet/withdraw",
+        "lineageId": "890001b3b5d3efb7d2df06423a0aebfd"
+      },
+      {
+        "id": "CAND-CWE-20-27",
+        "ruleId": "CWE-20",
+        "title": "Missing input validation on withdrawal amount permits negative values to arbitrarily increase balance",
+        "securityProperty": "input-validation",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/semantic-benchmark/safe/10-toctou-race-condition.js",
+          "startLine": 27,
+          "endLine": 29
+        },
+        "symbol": "amount",
+        "lineageId": "a5b2a64ddc4e36f5ee06bba1190753c6"
+      }
+    ],
+    "verifiedFindings": null,
+    "unresolvedCandidates": null,
+    "suppressedCandidates": null
+  },
+  "summary": {
+    "candidateCount": 4,
+    "verifiedCount": null,
+    "deferredCount": null,
+    "suppressedCount": null,
+    "executionDurationMs": 378706
+  },
+  "metadata": {
+    "passIndex": 1,
+    "totalPasses": 3,
+    "suite": "semantic",
+    "fixtureSplits": {
+      "developmentSet": {
+        "ids": [
+          "SEM-03",
+          "SEM-09"
+        ],
+        "role": "REGRESSION_BASELINE",
+        "rationale": "SEM-03 (Confused Deputy) and SEM-09 (Prototype Pollution) were calibrated with targeted prompt heuristics; classified as development/regression fixtures."
+      },
+      "holdoutFixtures": {
+        "ids": [
+          "SEM-01",
+          "SEM-02",
+          "SEM-04",
+          "SEM-05",
+          "SEM-06",
+          "SEM-07",
+          "SEM-08",
+          "SEM-10"
+        ],
+        "role": "HOLDOUT_GENERALIZATION",
+        "rationale": "Fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
+      }
+    },
+    "includeSafe": true,
+    "safeOnly": true,
+    "shuffleSeed": null,
+    "labelBlind": true,
+    "fixtureResults": [
+      {
+        "fixtureId": "SEM-01-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 95946,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 46074,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 45582,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 26031,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 52636,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 25074,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 21924,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 52806,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 34945,
+        "error": null
+      },
+      {
+        "fixtureId": "SEM-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 2,
+        "durationMs": 57546,
+        "error": null
+      }
+    ],
+    "governanceNote": "SEM-03 classified as development-set / regression fixture; holdout fixtures evaluate generalization.",
+    "throttleDelayMs": 2000,
+    "pacingPolicy": "2000ms inter-call delay"
+  },
+  "executionTelemetry": {
+    "format": "AGY_STREAM_JSON_V1",
+    "conversationId": "2cc335c7-be34-4bee-8dfc-9f73f59abb8c",
+    "telemetryDigest": "93e81e1a465f68774409a81273d9496f9bbf9dce2d7b262e9ecebd439298d3cf",
+    "totalEvents": 195,
+    "availableTools": [
+      "ask_custom_permission",
+      "ask_permission",
+      "ask_question",
+      "browser_click_element",
+      "browser_drag_pixel_to_pixel",
+      "browser_get_dom",
+      "browser_get_network_request",
+      "browser_input",
+      "browser_list_network_requests",
+      "browser_mouse_down",
+      "browser_mouse_up",
+      "browser_move_mouse",
+      "browser_press_key",
+      "browser_refresh_page",
+      "browser_resize_window",
+      "browser_scroll",
+      "browser_scroll_dom",
+      "browser_select_option",
+      "browser_subagent",
+      "call_mcp_tool",
+      "capture_browser_console_logs",
+      "capture_browser_screenshot",
+      "click_browser_pixel",
+      "command_status",
+      "define_subagent",
+      "delete_knowledge",
+      "execute_browser_javascript",
+      "find_by_name",
+      "finish",
+      "generate_image",
+      "grep_search",
+      "invoke_subagent",
+      "list_browser_pages",
+      "list_dir",
+      "list_permissions",
+      "list_resources",
+      "manage_inbox",
+      "manage_subagents",
+      "manage_task",
+      "multi_replace_file_content",
+      "notebook_edit",
+      "notebook_execution",
+      "open_browser_url",
+      "read_browser_page",
+      "read_resource",
+      "read_url_content",
+      "replace_file_content",
+      "run_command",
+      "schedule",
+      "search_web",
+      "sed_file",
+      "send_command_input",
+      "send_message",
+      "view_file",
+      "wait",
+      "wait_5_seconds",
+      "write_to_file"
+    ],
+    "toolsUsed": [
+      "view_file",
+      "run_command"
+    ],
+    "subagentsInvoked": [],
+    "permissionMode": "always-proceed",
+    "sandboxEnabled": false,
+    "tokenUsage": {
+      "inputTokens": 206298,
+      "outputTokens": 114342,
+      "thinkingTokens": 111502,
+      "cacheReadTokens": 482319,
+      "totalTokens": 320640
+    },
+    "durationSeconds": 378.706
+  }
+}
