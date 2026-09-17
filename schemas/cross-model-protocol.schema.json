@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/cross-model-protocol.schema.json",
+  "title": "Cross-Model Comparative Validation Protocol Schema",
+  "type": "object",
+  "required": [
+    "protocolId",
+    "protocolVersion",
+    "targetSystem",
+    "targetVersion",
+    "status",
+    "frozenAt",
+    "governance",
+    "corpus",
+    "taxonomy",
+    "matching",
+    "metrics",
+    "consensusLineageDispositions",
+    "protocolDigest"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "protocolId": { "type": "string" },
+    "protocolVersion": { "type": "string" },
+    "targetSystem": { "type": "string" },
+    "targetVersion": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["DRAFT", "FROZEN", "SUPERSEDED", "REVOKED"]
+    },
+    "frozenAt": { "type": "string" },
+    "governance": {
+      "type": "object",
+      "required": ["covenant", "rationale"],
+      "properties": {
+        "covenant": { "type": "string" },
+        "rationale": { "type": "string" }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "required": ["corpusId", "corpusType", "fixtureCount", "vulnerableCount", "safeCount"],
+      "properties": {
+        "corpusId": { "type": "string" },
+        "corpusType": { "type": "string" },
+        "fixtureCount": { "type": "integer" },
+        "vulnerableCount": { "type": "integer" },
+        "safeCount": { "type": "integer" },
+        "groundTruthFile": { "type": "string" },
+        "groundTruthSha256": { "type": "string" }
+      }
+    },
+    "taxonomy": {
+      "type": "object",
+      "required": ["tiers", "attestationSources", "failClosedOnParsedInferredForTiers"],
+      "properties": {
+        "tiers": { "type": "object" },
+        "attestationSources": { "type": "array" },
+        "failClosedOnParsedInferredForTiers": { "type": "array" }
+      }
+    },
+    "matching": {
+      "type": "object",
+      "required": ["level1", "level2"],
+      "properties": {
+        "level1": { "type": "object" },
+        "level2": { "type": "object" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["strictThreshold", "recurrenceRule", "jaccard"],
+      "properties": {
+        "strictThreshold": { "type": "number" },
+        "recurrenceRule": { "type": "string" },
+        "jaccard": { "type": "object" }
+      }
+    },
+    "consensusLineageDispositions": {
+      "type": "object",
+      "required": ["REPLICATED_TRUE_POSITIVE", "REPLICATED_FALSE_POSITIVE", "REPLICATED_UNRESOLVED"],
+      "properties": {
+        "REPLICATED_TRUE_POSITIVE": { "type": "object" },
+        "REPLICATED_FALSE_POSITIVE": { "type": "object" },
+        "REPLICATED_UNRESOLVED": { "type": "object" }
+      }
+    },
+    "protocolDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

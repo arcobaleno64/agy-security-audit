@@ -1,0 +1,151 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/cross-model-protocol.schema.json",
+  "protocolId": "v1.5-cross-model-1",
+  "protocolVersion": "1.0.0",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "targetVersion": "1.5.0",
+  "status": "FROZEN",
+  "frozenAt": "2026-09-17T10:00:00Z",
+  "governance": {
+    "covenant": "Section 21 Holdout Covenant & Default-Deny Authority Invariant",
+    "rationale": "Cross-Model Comparative Validation Protocol establishes tamper-evident comparative rules, 4-tier taxonomy separation, dual-tier Jaccard with empty-set semantics, and consensus lineage dispositioning."
+  },
+  "corpus": {
+    "corpusId": "evals/holdout-benchmark",
+    "corpusType": "FROZEN_REPLICATION_CORPUS",
+    "fixtureCount": 20,
+    "vulnerableCount": 10,
+    "safeCount": 10,
+    "groundTruthFile": "evals/holdout-benchmark/ground-truth.json",
+    "groundTruthSha256": "93dfd88dbae5c44eb0d64a8f8996ff0beb91fe71152e89e45b530107718d6610"
+  },
+  "taxonomy": {
+    "tiers": {
+      "TIER_1_REASONING_PROFILE_ABLATION": {
+        "tier": 1,
+        "name": "REASONING_PROFILE_ABLATION",
+        "description": "Inference Effort / Thinking Depth Ablation on identical base model and runtime",
+        "conditions": {
+          "sameProvider": true,
+          "sameBaseModel": true,
+          "differentReasoningProfile": true,
+          "sameRuntime": true
+        },
+        "requiredAttestation": [
+          "RUNTIME_ATTESTED",
+          "CONFIG_DECLARED"
+        ],
+        "researchQuestion": "What is the marginal utility of inference compute depth on recall, specificity, latency, and stability?"
+      },
+      "TIER_2_INTRA_PROVIDER_MODEL_REPLICATION": {
+        "tier": 2,
+        "name": "INTRA_PROVIDER_MODEL_REPLICATION",
+        "description": "Replication across different model architectures from the same provider under identical runtime",
+        "conditions": {
+          "sameProvider": true,
+          "differentBaseModel": true,
+          "sameRuntime": true
+        },
+        "requiredAttestation": [
+          "RUNTIME_ATTESTED",
+          "CONFIG_DECLARED"
+        ],
+        "researchQuestion": "Do different model architectures from the same organization share common discovery biases?"
+      },
+      "TIER_3_CROSS_PROVIDER_MODEL_REPLICATION": {
+        "tier": 3,
+        "name": "CROSS_PROVIDER_MODEL_REPLICATION",
+        "description": "Independent cross-model replication across different model providers under identical neutral harness",
+        "conditions": {
+          "differentProvider": true,
+          "sameRuntime": true
+        },
+        "requiredAttestation": [
+          "RUNTIME_ATTESTED",
+          "CONFIG_DECLARED"
+        ],
+        "researchQuestion": "Can independent model families trained on distinct distributions independently corroborate the same vulnerability claims?"
+      },
+      "TIER_4_CROSS_SYSTEM_REPLICATION": {
+        "tier": 4,
+        "name": "CROSS_SYSTEM_REPLICATION",
+        "description": "Replication where model AND agent runtime / system prompt / tool semantics change together",
+        "conditions": {
+          "differentRuntime": true
+        },
+        "requiredAttestation": [
+          "RUNTIME_ATTESTED",
+          "CONFIG_DECLARED"
+        ],
+        "researchQuestion": "Honest attribution to cross-system effect, explicitly forbidding attribution solely to the underlying model."
+      },
+      "IDENTITY_CONTROL": {
+        "tier": 0,
+        "name": "IDENTITY_CONTROL",
+        "description": "Self-comparison or identical run envelopes used solely for internal engine verification; strictly non-publishable",
+        "conditions": {
+          "identicalRun": true
+        },
+        "publishable": false
+      }
+    },
+    "attestationSources": [
+      "RUNTIME_ATTESTED",
+      "CONFIG_DECLARED",
+      "PARSED_INFERRED",
+      "UNKNOWN"
+    ],
+    "failClosedOnParsedInferredForTiers": [
+      2,
+      3,
+      4
+    ]
+  },
+  "matching": {
+    "level1": {
+      "name": "EXACT_LINEAGE_MATCH",
+      "description": "Identical cryptographic lineage fingerprint: SHA256(ruleId:uri:symbol)",
+      "hashAlgorithm": "sha256",
+      "fields": [
+        "ruleId",
+        "uri",
+        "symbol"
+      ]
+    },
+    "level2": {
+      "name": "GROUND_TRUTH_SEMANTIC_MATCH",
+      "description": "Identical target fixture + CWE family + vulnerability property / attack path",
+      "fields": [
+        "fixtureId",
+        "ruleId",
+        "securityProperty"
+      ]
+    }
+  },
+  "metrics": {
+    "strictThreshold": 0.6,
+    "recurrenceRule": "ceil(0.60 * N)",
+    "jaccard": {
+      "dualTier": true,
+      "anyFormula": "J_any(A, B) = |S_A intersect S_B| / |S_A union S_B|",
+      "strictFormula": "J_strict(A, B) = |S_A^0.6 intersect S_B^0.6| / |S_A^0.6 union S_B^0.6|",
+      "emptySetSemantics": {
+        "bothEmptyValue": null,
+        "reportLabel": "N/A",
+        "safeControlSuppressionAgreementReportedSeparately": true
+      }
+    }
+  },
+  "consensusLineageDispositions": {
+    "REPLICATED_TRUE_POSITIVE": {
+      "description": "Consensus lineage correctly matches ground-truth vulnerability specification"
+    },
+    "REPLICATED_FALSE_POSITIVE": {
+      "description": "Consensus lineage spurious finding on safe control fixture"
+    },
+    "REPLICATED_UNRESOLVED": {
+      "description": "Consensus lineage finding on un-oracled corpus without ground truth"
+    }
+  },
+  "protocolDigest": "9ca44ee1fdb617e3fa36f90c2184bef857ec82b1ed40e660d31a6b5ba282aeb5"
+}
