@@ -2734,7 +2734,9 @@ export function finalizeScan({
   telemetryPath = null,
   conversationId = null,
   shadowRoot = null,
-  contextPrep = null
+  contextPrep = null,
+  scanRunId = null,
+  nonce = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -3228,7 +3230,8 @@ export function finalizeScan({
 
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = manifest;
-  const scanRunId = manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
+  const effectiveScanRunId = scanRunId || manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
+  const effectiveNonce = nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null;
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
@@ -3255,7 +3258,11 @@ export function finalizeScan({
     manifest.canDeclareClean = canDeclareClean;
     manifest.auditIntent = safeAuditIntent;
     manifest.coverageStatus = coverageStatus;
-    manifest.scanRunId = scanRunId;
+    manifest.scanRunId = effectiveScanRunId;
+    if (effectiveNonce) {
+      manifest.nonce = effectiveNonce;
+      manifest.taskCorrelationNonce = effectiveNonce;
+    }
     manifest.projectId = projectId;
     manifest.findingCounts = {
       reportable: confirmedCount,
@@ -3841,6 +3848,7 @@ export function renderSarifFromCanonical({
   assuranceLevel = null,
   findingCounts = null,
   scanRunId = null,
+  nonce = null,
   projectId = null,
   toolProvenance = null
 } = {}) {
@@ -3960,6 +3968,7 @@ export function renderSarifFromCanonical({
         suppressed: safeFindings.filter(f => f.disposition === 'SUPPRESSED').length
       },
       scanRunId: scanRunId || manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`,
+      nonce: nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null,
       projectId: projectId || manifest?.projectId || 'security-audit',
       directoryReconciliationManifest: manifest,
       executionAttestation: executionAttestation || buildExecutionAttestation({
@@ -4002,6 +4011,7 @@ export function renderMarkdownFromCanonical({
   canDeclareClean = null,
   assuranceLevel = null,
   scanRunId = null,
+  nonce = null,
   projectId = null,
   findingCounts = null,
   toolProvenance = null
@@ -4039,6 +4049,10 @@ export function renderMarkdownFromCanonical({
   const effectiveScanRunId = scanRunId || manifest?.scanRunId || null;
   if (effectiveScanRunId) {
     md += `- **Scan Run ID**: \`${sanitizeInlineText(effectiveScanRunId)}\`\n`;
+  }
+  const effectiveNonce = nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null;
+  if (effectiveNonce) {
+    md += `- **Task Correlation Nonce**: \`${sanitizeInlineText(effectiveNonce)}\`\n`;
   }
   if (projectId || manifest?.projectId) {
     md += `- **Project ID**: \`${sanitizeInlineText(projectId || manifest.projectId)}\`\n`;
@@ -4686,10 +4700,13 @@ if (isDirectExecution) {
   const externalSarifPath = getArg('--external-sarif');
   const repoRootArg = getArg('--repo-root') || process.cwd();
   const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
+  const scanRunIdArg = getArg('--run-id') || getArg('--scan-run-id');
+  const nonceArg = getArg('--nonce') || getArg('--task-correlation-nonce');
   const outputJsonPath = getArg('--output') || getArg('--output-json');
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
   const outputCoveragePath = getArg('--output-coverage');
+  const outputManifestPath = getArg('--output-manifest') || manifestPath || (fs.existsSync(path.resolve(repoRootArg, 'scratch/scan-manifest.json')) ? path.resolve(repoRootArg, 'scratch/scan-manifest.json') : null);
   const allowSelfAudit = args.includes('--self-audit');
   const showHelp = args.includes('--help') || args.includes('-h');
 
@@ -4706,11 +4723,14 @@ if (isDirectExecution) {
     console.log('  --executed-stages <stages>    Comma-separated list of executed audit stages');
     console.log('  --repo-root <path>            Repository root path (default: current directory)');
     console.log('  --intent <DISCOVERY|...>      Audit intent');
+    console.log('  --run-id <id>                 Audit run ID to bind manifest and SARIF');
+    console.log('  --nonce <nonce>               Task-correlation nonce to bind manifest and SARIF');
     console.log('  --self-audit                  Allow self-audit mode (TCB overlap permit)');
     console.log('  --external-sarif <path>       Ingest and display external scanner SARIF report');
     console.log('  --output <path>               Write canonical findings JSON');
     console.log('  --output-sarif <path>         Write finalized SARIF report');
     console.log('  --output-md <path>            Write finalized Markdown report');
+    console.log('  --output-manifest <path>      Write updated scan manifest JSON');
     console.log('  --output-coverage <path>      Write coverage accounting JSON');
     console.log('  --help                        Show this help message');
     process.exit(0);
@@ -4755,6 +4775,10 @@ if (isDirectExecution) {
       let manifest = null;
       if (manifestPath && fs.existsSync(manifestPath)) {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      } else if (fs.existsSync(path.resolve(repoRoot, 'scratch/scan-manifest.json'))) {
+        try {
+          manifest = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'scratch/scan-manifest.json'), 'utf8'));
+        } catch {}
       }
 
       let discoveryMatrix = [];
@@ -4824,13 +4848,23 @@ if (isDirectExecution) {
         threatModel,
         executedStages,
         allowSelfAudit,
-        executionAttestation
+        executionAttestation,
+        scanRunId: scanRunIdArg,
+        nonce: nonceArg
       });
 
       if (outputJsonPath) {
         fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
         fs.writeFileSync(outputJsonPath, JSON.stringify(finalization.canonicalFindings, null, 2), 'utf8');
         console.log(`✔ Generated Canonical Findings JSON: ${outputJsonPath}`);
+      }
+
+      if (outputManifestPath && finalization.manifest) {
+        try {
+          fs.mkdirSync(path.dirname(outputManifestPath), { recursive: true });
+          fs.writeFileSync(outputManifestPath, JSON.stringify(finalization.manifest, null, 2), 'utf8');
+          console.log(`✔ Updated Scan Manifest: ${outputManifestPath}`);
+        } catch {}
       }
 
       let sarif = null;
@@ -4846,6 +4880,7 @@ if (isDirectExecution) {
           assuranceLevel: finalization.summary.assuranceLabel,
           findingCounts: finalization.summary.findingCounts,
           scanRunId: finalization.manifest?.scanRunId,
+          nonce: finalization.manifest?.nonce,
           projectId: finalization.manifest?.projectId,
           executionAttestation: finalization.summary.execution,
           toolProvenance: finalization.summary.toolProvenance
@@ -4867,6 +4902,7 @@ if (isDirectExecution) {
           canDeclareClean: finalization.summary.canDeclareClean,
           assuranceLevel: finalization.summary.assuranceLabel,
           scanRunId: finalization.manifest?.scanRunId,
+          nonce: finalization.manifest?.nonce,
           projectId: finalization.manifest?.projectId,
           findingCounts: finalization.summary.findingCounts,
           toolProvenance: finalization.summary.toolProvenance
