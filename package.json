@@ -33,7 +33,7 @@
     "regen-integrity-manifest": "node scripts/regen-integrity-manifest.mjs",
     "benchmark:live": "node scripts/run-live-model-benchmark.mjs",
     "benchmark:live:holdout": "node scripts/run-live-model-benchmark.mjs --suite holdout",
-    "benchmark:live:holdout:paired": "node scripts/run-live-model-benchmark.mjs --suite holdout --include-safe --label-blind --passes 3 --out-dir evals/live-runs/holdout-paired --resume --delay-ms 2000 --hermetic --shuffle-seed 20260917 --protocol evals/protocols/v1.5-eval-1.json",
+    "benchmark:live:holdout:paired": "node scripts/run-live-model-benchmark.mjs --suite holdout --include-safe --label-blind --passes 3 --out-dir evals/live-runs/holdout-paired --resume --delay-ms 2000 --hermetic --shuffle-seed 20260917 --protocol evals/protocols/v1.5-eval-1.json --report reports/holdout-paired-baseline-report-2026-09-17.md",
     "check:protocol": "node scripts/run-live-model-benchmark.mjs --check-protocol evals/protocols/v1.5-eval-1.json",
     "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
     "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs",
