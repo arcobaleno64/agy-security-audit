@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1.0.0",
-  "toolVersion": "1.4.0-dev",
-  "generatedAt": "2026-09-16T11:39:34.397Z",
-  "manifestDigest": "0a7d514b3db3b9d2ebe4729671a9bd1d08a6e01d95dfd856c36cf826806c3cc4",
+  "toolVersion": "1.4.0",
+  "generatedAt": "2026-09-17T00:51:31.770Z",
+  "manifestDigest": "56fc89d1bc9715b66c179a4ff95d32d92812e572ce5caf4e53ffa54be4d3c4cc",
   "criticalScripts": {
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
     "scripts/build-threat-model.mjs": "c6ad391e269f9838013444a9d0df64f4145a7c46457803faf954a2bf52d3bfcd",
-    "scripts/finalize-scan.mjs": "07b1c2a5bfb50ebe50f007ac269414b375327b2346fe6a22f2c1ea10bfaf08fa",
+    "scripts/finalize-scan.mjs": "4fb088875df791f41d030cd620f0f503a8be44d19891c29ad09bfdf2701de36d",
     "scripts/path-containment.mjs": "8044a629e15bc113998417823359e5fdf1286e228ae1c384220c006559ffcbf8",
     "scripts/prepare-review-context.mjs": "ddbf271d330963d8b70ce6bc0c6dd585a468da7a6bf35c01a151276ea77fa2c8",
     "scripts/project-context.mjs": "6d07b49938a5d0e8bbd02baeb96b56e40fb82bf6dc8646ac397d28ef96ec9cce",
