@@ -1,10 +1,12 @@
 # agy-security-audit (plugin ID: `security-audit`) v1.4.1
 
-以證據為本、多階段的安全保證與弱點驗證外掛，專為 **Google Antigravity (AGY)** 打造，對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究等前沿代理安全框架的防禦性架構概念。
+`agy-security-audit` 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 **Antigravity CLI（`agy`）** 打造，對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究等前沿代理安全框架的防禦性架構概念。
 
 [English →](README.md)
 
-`agy-plugin-cc` 的姊妹專案：`agy-plugin-cc` 負責把審查工作從 Claude Code 委派給 AGY 作為跨模型審查者，`agy-security-audit` 則是原生跑在 AGY 內部的安全保證外掛。[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc)
+## 相關專案
+
+[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) 是獨立的 Claude Code 協作外掛，可透過 Gemini CLI 或 Antigravity CLI（`agy`）進行跨模型任務委派與程式碼審查。它從 Claude Code 委派工作；`agy-security-audit` 則原生執行於 Antigravity CLI 內。兩個專案都不會隨另一個一併提供，也不是使用另一個的必要條件。
 
 ## 核心公理：權威聲明以不通過為前提 (Default-Deny on Authority Claims)
 
