@@ -1,7 +1,7 @@
 {
   "name": "@arcobaleno64/agy-security-audit",
   "version": "1.4.1",
-  "description": "agy-security-audit is an evidence-backed, multi-stage security assurance plugin for Antigravity CLI (agy), aligned with NIST SSDF, OWASP ASVS, and industry verification standards.",
+  "description": "agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).",
   "type": "module",
   "license": "MIT",
   "repository": {

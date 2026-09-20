@@ -1,12 +1,16 @@
 # agy-security-audit (plugin ID: `security-audit`) v1.4.1
 
-`agy-security-audit` is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for **Antigravity CLI (`agy`)**, aligned with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
+agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
+
+Its defensive architecture aligns with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, and incorporates defensive concepts from Anthropic's Claude Security and OpenAI's Codex Security research.
 
 [繁體中文說明 →](README.zh-TW.md)
 
 ## Related project
 
 [`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) is a separate Claude Code companion for running Gemini CLI or Antigravity CLI (`agy`) as a cross-model task delegate and code reviewer. It delegates work from Claude Code; `agy-security-audit` runs natively inside Antigravity CLI. Neither project is bundled with or required by the other.
+
+> **Independent project.** `agy-security-audit` is community-maintained and is **not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic, or OpenAI**. Third-party names identify tools, standards, or research this project interoperates with or discusses; their respective terms govern those systems.
 
 ## Foundational Axiom: Presumption of Non-Pass (Default-Deny on Authority Claims)
 
