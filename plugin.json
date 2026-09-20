@@ -1,5 +1,5 @@
 {
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "security-audit",
-  "description": "Evidence-backed security review, validation, and patch verification workflows."
+  "description": "agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy)."
 }
