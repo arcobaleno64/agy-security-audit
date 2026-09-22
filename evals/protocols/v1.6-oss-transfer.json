@@ -1,0 +1,34 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/eval-protocol.schema.json",
+  "protocolId": "v1.6-oss-transfer",
+  "protocolVersion": "1.0.0",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "targetVersion": "1.5.1",
+  "status": "FROZEN",
+  "frozenAt": "2026-09-22T10:56:10.995Z",
+  "governance": {
+    "covenant": "Section 21 Holdout Covenant & External OSS Transfer Invariant",
+    "rationale": "Establishes empirical validation of vulnerability detection and remediation convergence on authentic open-source CVE pairs."
+  },
+  "experiments": {
+    "ossTransfer": {
+      "id": "G7_EXTERNAL_OSS_TRANSFER",
+      "name": "External OSS Real-World CVE Transfer Benchmark",
+      "suite": "oss-transfer",
+      "corpus": "evals/oss-corpus",
+      "groundTruthFile": "evals/oss-corpus/ground-truth.json",
+      "pairsCount": 6,
+      "preFixCount": 6,
+      "postFixCount": 6,
+      "hermetic": true,
+      "labelBlind": true,
+      "acceptanceCriteria": {
+        "preFixRecallMin": 0.8,
+        "postFixRediscoveryRateMax": 0,
+        "cleanConvergenceRateMin": 1,
+        "patchJailCompliance": true,
+        "zeroLeakage": true
+      }
+    }
+  }
+}
