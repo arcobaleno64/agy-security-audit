@@ -1,0 +1,11 @@
+--- a/evals/oss-corpus/04-tar-path-traversal.js
++++ b/evals/oss-corpus/04-tar-path-traversal.js
+@@ -8,3 +8,9 @@
+-  const destination = path.join(targetDir, entryPath);
++  const resolvedTarget = path.resolve(targetDir);
++  const destination = path.resolve(resolvedTarget, entryPath);
++  const rel = path.relative(resolvedTarget, destination);
++  if (rel.startsWith('..') || path.isAbsolute(rel)) {
++    throw new Error(`TAR_EXTRACTION_SECURITY_ERROR: Entry path '${entryPath}' escapes destination directory`);
++  }
+   fs.mkdirSync(path.dirname(destination), { recursive: true });

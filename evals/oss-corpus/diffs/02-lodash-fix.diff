@@ -1,0 +1,23 @@
+--- a/evals/oss-corpus/02-lodash-redos.js
++++ b/evals/oss-corpus/02-lodash-redos.js
+@@ -5,3 +5,15 @@
+-const reTrim = /^\s+|\s+$/g;
++function trimmedEnd(string) {
++  let index = string.length;
++  while (index-- && string.charCodeAt(index) <= 32) {}
++  return string.slice(0, index + 1);
++}
++
++function trimmedStart(string) {
++  let index = -1;
++  const length = string.length;
++  while (++index < length && string.charCodeAt(index) <= 32) {}
++  return string.slice(index);
++}
+ 
+ export function toNumber(value) {
+@@ -12,3 +24,3 @@
+   if (typeof value === 'string') {
+-    const trimmed = value.replace(reTrim, '');
++    const trimmed = trimmedStart(trimmedEnd(value));
+     return parseFloat(trimmed);

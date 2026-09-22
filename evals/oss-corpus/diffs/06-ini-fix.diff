@@ -1,0 +1,15 @@
+--- a/evals/oss-corpus/06-ini-prototype-pollution.js
++++ b/evals/oss-corpus/06-ini-prototype-pollution.js
+@@ -4,2 +4,4 @@
++const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
++
+ export function parse(string) {
+   const out = {};
+@@ -11,2 +13,3 @@
+       const section = trimmed.slice(1, -1);
++      if (UNSAFE_KEYS.has(section)) continue;
+       if (!p[section]) p[section] = {};
+@@ -15,2 +18,3 @@
+       const [key, val] = trimmed.split('=').map(s => s.trim());
++      if (UNSAFE_KEYS.has(key)) continue;
+       p[key] = val;

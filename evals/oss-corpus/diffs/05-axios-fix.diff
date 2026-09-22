@@ -1,0 +1,14 @@
+--- a/evals/oss-corpus/05-axios-ssrf-header-leak.js
++++ b/evals/oss-corpus/05-axios-ssrf-header-leak.js
+@@ -7,3 +7,12 @@
++  const orig = new URL(originalUrl);
+   const nextUrl = new URL(redirectLocation, originalUrl);
+   const forwardHeaders = { ...originalHeaders };
++  const isSameOrigin = orig.protocol === nextUrl.protocol && orig.host === nextUrl.host;
++  if (!isSameOrigin) {
++    delete forwardHeaders['authorization'];
++    delete forwardHeaders['Authorization'];
++    delete forwardHeaders['cookie'];
++    delete forwardHeaders['Cookie'];
++  }
+   return {
