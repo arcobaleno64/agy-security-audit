@@ -1,25 +1,27 @@
-# Milestone G7: External OSS Real-World CVE Transfer Benchmark Report
+# Milestone G7: Real-World CVE-Derived Curated Fixture Evaluation Report
 
-> **Authority & Governance Notice**
-> This report documents the authentic generalization and transfer capability of `@arcobaleno64/agy-security-audit`
-> against **6 authentic, real-world open-source software (OSS) CVEs** across popular Node.js/JavaScript libraries.
+> **Authority & Governance Notice: CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION**
+> This report documents the deterministic finalizer disposition logic verification of `@arcobaleno64/agy-security-audit`
+> across **6 real-world CVE-derived curated fixture slices** from popular Node.js/JavaScript libraries.
+> **Scope Clarification**: This benchmark evaluates deterministic finalizer disposition logic on extracted single-file slices
+> (`evals/oss-corpus/pre-fix/*.js` and `post-fix/*.js`) with synthetic 3-lens ballots, and **does NOT constitute live agent discovery over full upstream git repository checkouts**.
 
 ## Provenance & Protocol Specification
 
 | Field | Value |
 | :--- | :--- |
-| **Evidence Grade** | **`EXTERNAL_OSS_TRANSFER`** |
-| **Protocol ID** | `v1.6-oss-transfer` |
-| **Evaluation Mode** | `EMPIRICAL_OSS_TRANSFER` |
+| **Evidence Grade** | **`CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION`** |
+| **Protocol ID** | `v1.6-curated-oss-fixture` |
+| **Evaluation Mode** | `CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION` |
 | **Corpus Directory** | `evals/oss-corpus` |
-| **Generated At** | `2026-09-22T10:58:06.672Z` |
+| **Generated At** | `2026-09-22T15:10:08.696Z` |
 | **Total Evaluated Pairs** | `6 Paired CVEs (12 Total Fixtures)` |
 | **Pre-Fix Vulnerability Recall** | **`100.0%` (6/6)** |
 | **Post-Fix Clean Specificity** | **`100.0%` (6/6)** |
 | **Post-Fix Rediscovery Rate** | **`0.0%` (0 False Rediscoveries)** |
 | **Clean Convergence Rate** | **`100.0%`** |
 | **Patch Jail Compliance Rate** | **`100.0%`** |
-| **Status** | **`CONVERGED_TRANSFER_ESTABLISHED`** |
+| **Status** | **`CONVERGED_FIXTURE_VALIDATION_ESTABLISHED`** |
 
 ## Uncompressed 6-CVE External Transfer Matrix
 
@@ -77,9 +79,9 @@
 
 ## Conclusion & Formal Assurance Determination
 
-The evidence confirms that **`@arcobaleno64/agy-security-audit`** successfully transfers its assurance capabilities to authentic, production open-source software repositories:
-- **Pre-Fix Vulnerability Recall**: 100.0% (6/6 real-world vulnerabilities detected and validated).
+The evidence confirms that **`@arcobaleno64/agy-security-audit`** successfully validates deterministic disposition logic across curated real-world CVE-derived fixture slices:
+- **Pre-Fix Vulnerability Recall**: 100.0% (6/6 real-world vulnerabilities detected and validated via canonical ballots).
 - **Post-Fix Clean Convergence**: 100.0% (6/6 remediations recognized with 0% post-fix rediscovery).
 - **Patch Jail Integrity**: 100.0% (all 6 official diffs adhere strictly to single-file confinement and non-tampering invariants).
 
-Milestone G7 is formally **VERIFIED AND CONVERGED** at Evidence Grade **`EXTERNAL_OSS_TRANSFER`**.
+Milestone G7 is formally **VERIFIED** at Evidence Grade **`CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION`** (`Real-World CVE-Derived Curated Fixture Evaluation`). Full upstream git repository transfer remains designated as **REOPENED / unverified** pending contemporaneous live repository discovery.

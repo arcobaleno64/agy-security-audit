@@ -1138,7 +1138,8 @@ export function renderComparativeReport(comparisonData, options = {}) {
   let md = '';
   md += `# Cross-Model & Ablation Comparative Validation Report\n\n`;
   md += `**Generated**: \`${nowIso}\`  \n`;
-  md += `**Evidence Grade**: \`Tier 1A: HISTORICAL_REFERENCE_ABLATION\`  \n`;
+  const evidenceGradeStr = classification.tier === 1 ? 'Tier 1A: HISTORICAL_REFERENCE_ABLATION' : `TIER ${classification.tier} (${classification.name})`;
+  md += `**Evidence Grade**: \`${evidenceGradeStr}\`  \n`;
   md += `**Protocol ID**: \`${protocol?.protocolId || 'v1.5-cross-model-1'}\`  \n`;
   md += `**Protocol Digest**: \`${protocol?.protocolDigest || 'UNKNOWN'}\`  \n`;
   md += `**Governance Standard**: NIST SSDF / Section 21 Holdout Covenant / Default-Deny Authority Invariant\n\n`;
@@ -1186,7 +1187,7 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `| **Attestation Authority** | \`${taxA.identitySource}\` (\`${taxA.identityConfidence}\`) | \`${taxB.identitySource}\` (\`${taxB.identityConfidence}\`) | **VERIFIED** |\n\n`;
 
   md += `### 2.2 Temporal-Confound Disclosure\n\n`;
-  md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this ablation is formally classified under **Tier 1A: HISTORICAL_REFERENCE_ABLATION** rather than a simultaneous interleaved trial.\n\n`;
+  md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation is formally classified under ${classification.tier === 1 ? '**Tier 1A: HISTORICAL_REFERENCE_ABLATION**' : `**TIER ${classification.tier} (${classification.name})**`} rather than a simultaneous interleaved trial.\n\n`;
 
   // Execution Exposure & Censoring Audit
   const auditA = comparisonData.auditA;

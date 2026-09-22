@@ -1,0 +1,195 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/evidence-matrix.schema.json",
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-22T15:11:01.485Z",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "version": "1.6.1",
+  "governance": {
+    "standard": "NIST SSDF (SP 800-218) / Default-Deny Authority Invariant",
+    "covenant": "Section 21 Holdout Covenant & v1.6.1 Evidence Integrity Correction",
+    "provenancePolicy": "Strict Fail-Closed: synthetic fixtures must never be represented as live model observations."
+  },
+  "summary": {
+    "totalDimensions": 5,
+    "supportedDimensions": 3,
+    "partiallyHoldsDimensions": 1,
+    "reopenedDimensions": 1
+  },
+  "dimensions": {
+    "DETERMINISTIC_HARNESS": {
+      "status": "SUPPORTED",
+      "grade": "L1",
+      "claim": "121 automated release invariants and G6 19 runtime confinement vectors verified green in deterministic CI harness.",
+      "scope": "121 automated invariants, G6 19 vectors",
+      "verificationMethod": "Deterministic automated test runner and invariant assertions (skills/security-audit/scripts/render-sarif.mjs --test).",
+      "artifacts": [
+        {
+          "path": "skills/security-audit/scripts/render-sarif.mjs",
+          "sha256": "ba633aa20be99725f668b552296b40835564e05d527b738f204c8342b2783464",
+          "description": "Canonical SARIF renderer and 121 automated release invariants test suite"
+        },
+        {
+          "path": "skills/security-audit/scripts/check-release-invariants.mjs",
+          "sha256": "925137f6f74e4b01e458b28cd3544f543ecf7aa9a93c9558a5dfe1836e8bd9c9",
+          "description": "Release Invariants Gate specification checker (60 specs, 40 security invariants)"
+        },
+        {
+          "path": "skills/security-audit/tool-integrity-manifest.json",
+          "sha256": "59938375781ee7a43456f113a1abe76a54ba58cbde48c8502dc9f40a6131c649",
+          "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
+        },
+        {
+          "path": "scripts/test-runtime-confinement.mjs",
+          "sha256": "6dcf7552c5688cd41c57e1c6973e6d393804092f45e1cf7543078966e65e1bad",
+          "description": "Deterministic test suite verifying all 5 G6 runtime confinement controls"
+        },
+        {
+          "path": "reports/runtime-confinement-report-2026-09-22.md",
+          "sha256": "9619e5e4bca4d63ace312c89d4013d089ecb51ade651259ee56e33a91f1c0caf",
+          "description": "Dual-Control Runtime Confinement Matrix Report (Milestone G6)"
+        }
+      ]
+    },
+    "LIVE_MODEL_EVALUATION": {
+      "status": "SUPPORTED",
+      "grade": "L2",
+      "claim": "G4/G5 label-blind hermetic live evaluation across 20 holdout benchmark fixtures over 5 passes.",
+      "scope": "G4/G5 label-blind hermetic live evaluation",
+      "verificationMethod": "Label-blind projection in hermetic sandbox with empirical N=5 pass recording and holdout oracle reconciliation.",
+      "artifacts": [
+        {
+          "path": "evals/semantic-benchmark/ground-truth.json",
+          "sha256": "8aacd40bb4e8a01053ca98c686d903e362802aefbb660c97b806b4d2e3f78228",
+          "description": "Authoritative 20-fixture paired ground-truth dataset"
+        },
+        {
+          "path": "evals/holdout-benchmark/ground-truth.json",
+          "sha256": "77e6d7a71de9ad90fa848373a026041093800d5fce271d624ff184634ced66de",
+          "description": "Authoritative 20-fixture paired holdout generalization dataset"
+        },
+        {
+          "path": "reports/empirical-baseline-n5-report-2026-09-13.md",
+          "sha256": "a294eab1cbf6b27d50ffc7e9cf0f17d76a11c4d9cb15dceeb29780cff4dd573a",
+          "description": "Authentic N=5 Model Discovery Baseline Report"
+        },
+        {
+          "path": "reports/safe-control-baseline-report-2026-09-17.md",
+          "sha256": "156c60ea14729dab3678021c0785926de2292971389cc9cc979f946cde0067e4",
+          "description": "Authentic Label-Blind Safe-Control Baseline Report"
+        },
+        {
+          "path": "reports/reasoning-ablation-report-2026-09-17-corrected.md",
+          "sha256": "8180d8f57588e0155b240957fceac69964d519f3fa3cd419bae2871c9bccedfa",
+          "description": "Corrected Reasoning Profile Ablation Report (Milestone G5)"
+        },
+        {
+          "path": "evals/live-runs/run-pass-1.json",
+          "sha256": "a5a300198783a2b6e3c2ee5e0ca5441757eb7160f2a3db13b6c8663b5d2cd61f",
+          "description": "Authentic MODEL_OBSERVED live run pass 1 envelope"
+        },
+        {
+          "path": "evals/live-runs/run-pass-2.json",
+          "sha256": "e9519063b7b333b9ebf4fe0ddb9df6898dc2d8b0f132dad2bbfec925b1a86644",
+          "description": "Authentic MODEL_OBSERVED live run pass 2 envelope"
+        },
+        {
+          "path": "evals/live-runs/run-pass-3.json",
+          "sha256": "d976983b15e5303ba791984c8fea2b9b6f4b9382775997c966fd126fd32f37af",
+          "description": "Authentic MODEL_OBSERVED live run pass 3 envelope"
+        },
+        {
+          "path": "evals/live-runs/run-pass-4.json",
+          "sha256": "c1690cdf1e49a6324fcfe6017e99f6f8dc6be4727e7b36afe75264036a5195a3",
+          "description": "Authentic MODEL_OBSERVED live run pass 4 envelope"
+        },
+        {
+          "path": "evals/live-runs/run-pass-5.json",
+          "sha256": "921fac2871f25f045de8d748498f5b96e43f3f194a1cb582a13bcbe7a78cb431",
+          "description": "Authentic MODEL_OBSERVED live run pass 5 envelope"
+        }
+      ]
+    },
+    "LIVE_RUNTIME_ENFORCEMENT": {
+      "status": "SUPPORTED",
+      "grade": "L2_OBSERVED_RUNTIME",
+      "claim": "Five runtime confinement controls enforced fail-closed under PreToolUse hook telemetry.",
+      "scope": "DEFINED_FIVE_CONTROL_CANARY",
+      "verificationMethod": "Canary agent interception via hooks/shadow-context-guard.mjs with out-of-band telemetry logging.",
+      "artifacts": [
+        {
+          "path": "hooks/shadow-context-guard.mjs",
+          "sha256": "ac640a24184c731fcb1fa8adf4ccbd0d5b40f17d8789149ccbdeb670dc2e61c0",
+          "description": "PreToolUse hook enforcing shadow context redirection and runtime confinement"
+        },
+        {
+          "path": "scripts/run-runtime-canary.mjs",
+          "sha256": "92387d292b1040c72582ee41ad449994d47c6933ff50a94684c06f63cca98882",
+          "description": "Milestone G6-L2 Live Runtime Canary Verification Engine"
+        },
+        {
+          "path": "reports/runtime-canary-report-2026-09-22.md",
+          "sha256": "f5b7393d1ca190c137ffe8d09273a51be7cdd20eb784a88e4a86fa021e69c433",
+          "description": "Live Runtime Confinement Canary Report (Milestone G6-L2)"
+        }
+      ]
+    },
+    "CROSS_PROVIDER_REPLICATION": {
+      "status": "REOPENED",
+      "grade": "NONE",
+      "claim": "Current G8 live-evidence claim invalidated by synthetic provenance; requires contemporaneous live execution with raw stream attestation.",
+      "scope": "CROSS_PROVIDER_MODEL_REPLICATION",
+      "reopenedReason": "Runs in evals/live-runs/cross-provider/claude/ were synthetic fixtures reconstructed via scratch/generate-claude-runs.mjs rather than authentic model observations; demoted to SYNTHETIC_RECONSTRUCTED / SYNTHETIC_SIMULATED.",
+      "reinstatementRequirement": "Contemporaneous live agent execution with raw stream attestation and verified provider identity.",
+      "artifacts": [
+        {
+          "path": "reports/cross-provider-replication-report-2026-09-22.md",
+          "sha256": "5efe3064ef5f68af1e7ff90c85af138eee092cb960c5c6889bce1a83e0ab2352",
+          "description": "Cross-Provider Model Replication Report (Milestone G8, Superseded)"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/run-pass-1.json",
+          "sha256": "ccba0fe516710cf18f3ff2becdffddae64ec764a08e2060625e150eb9bd7bd6f",
+          "description": "Reconstructed synthetic fixture pass 1 (demoted from MODEL_OBSERVED)"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/run-pass-2.json",
+          "sha256": "782adad85a4481c2102b7d10b2bb3d7628bf1dbbe3ebe629ac3b8673a318be96",
+          "description": "Reconstructed synthetic fixture pass 2 (demoted from MODEL_OBSERVED)"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/run-pass-3.json",
+          "sha256": "fb78fda7d6b35f9882a9fc787578611eb4852ae58410f9ffd03a6f5bd8abde71",
+          "description": "Reconstructed synthetic fixture pass 3 (demoted from MODEL_OBSERVED)"
+        }
+      ]
+    },
+    "EXTERNAL_OSS_TRANSFER": {
+      "status": "PARTIALLY_HOLDS",
+      "grade": "CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION",
+      "claim": "Curated external-origin CVE deterministic fixture validation supported; full upstream repository transfer REOPENED.",
+      "scope": "Real-World CVE-Derived Curated Fixture Evaluation (6 paired CVE slices across minimist, lodash, json-pointer, node-tar, axios, ini)",
+      "partiallyHoldsDetail": {
+        "curatedFixtureValidation": "SUPPORTED",
+        "fullUpstreamRepoTransfer": "REOPENED"
+      },
+      "scopeClarification": "Evaluates deterministic finalizer disposition logic on extracted single-file slices (evals/oss-corpus/pre-fix/*.js and post-fix/*.js) with synthetic 3-lens ballots; does NOT constitute live agent discovery over full upstream git repository checkouts.",
+      "artifacts": [
+        {
+          "path": "reports/oss-transfer-benchmark-report-2026-09-22.md",
+          "sha256": "e1524d5462f1e094c991c3712b0f843f4c36d035a0947bb31646705bc6d31e2c",
+          "description": "Real-World CVE-Derived Curated Fixture Evaluation Report (Milestone G7)"
+        },
+        {
+          "path": "evals/oss-corpus/ground-truth.json",
+          "sha256": "eef1136924447b5718be979ba86a8f2c1e1f015fc3575d8128ae1471aa27e7f8",
+          "description": "Curated 6-CVE paired fixture ground-truth catalog"
+        },
+        {
+          "path": "scripts/run-oss-transfer-eval.mjs",
+          "sha256": "4b6872f17c5840062843ee9ed62cc2de745e19b78ea8cadbe014bcdcc744b7e3",
+          "description": "Curated External-Origin Fixture Validation runner"
+        }
+      ]
+    }
+  }
+}
