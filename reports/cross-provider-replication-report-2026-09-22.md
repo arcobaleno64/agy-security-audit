@@ -1,7 +1,14 @@
+> [!WARNING] **SUPERSEDED / NOT LIVE EVIDENCE -- DO NOT CITE AS MODEL REPLICATION**
+> This evaluation report has been formally superseded and demoted under Milestone G8 Evidence Integrity Correction (v1.6.1).
+> **Provenance & Evidence Invalidation**:
+> 1. **Synthetic Fixture Provenance**: The candidate runs for Configuration B (`evals/live-runs/cross-provider/claude/run-pass-{1,2,3}.json`) are synthetic fixtures constructed via script (`scratch/generate-claude-runs.mjs`) rather than observed outputs from live agent execution. They do not constitute live model evidence.
+> 2. **Evidence Demotion**: Manifests have been demoted from `MODEL_OBSERVED` / `LIVE_AGENT` to `SYNTHETIC_RECONSTRUCTED` / `SYNTHETIC_SIMULATED`.
+> 3. **Reopened Dimension**: The Cross-Provider Replication dimension of the evidence matrix is marked as `REOPENED`, requiring contemporaneous live execution with raw stream attestation before publication claims can be reinstated.
+
 # Cross-Model & Ablation Comparative Validation Report
 
 **Generated**: `2026-09-22T13:26:48.492Z`  
-**Evidence Grade**: `Tier 1A: HISTORICAL_REFERENCE_ABLATION`  
+**Evidence Grade**: `TIER 3 (CROSS_PROVIDER_MODEL_REPLICATION) [SUPERSEDED / NOT LIVE EVIDENCE]`  
 **Protocol ID**: `v1.5-cross-model-1`  
 **Protocol Digest**: `9ca44ee1fdb617e3fa36f90c2184bef857ec82b1ed40e660d31a6b5ba282aeb5`  
 **Governance Standard**: NIST SSDF / Section 21 Holdout Covenant / Default-Deny Authority Invariant
@@ -32,7 +39,7 @@
 | **Base Model Architecture** | `gemini-3.8-flash` | `claude-5-sonnet` | **DIVERGENT** |
 | **Model Provider** | `google` | `anthropic` | **DIVERGENT** |
 | **Evaluation Corpus** | `evals/holdout-benchmark` | `evals/holdout-benchmark` | **MATCH** |
-| **Ground Truth Oracle** | `93dfd88dbae5c44e...` | `93dfd88dbae5c44e...` | **MATCH** |
+| **Ground Truth Oracle** | `77e6d7a71de9ad90...` | `77e6d7a71de9ad90...` | **MATCH** |
 | **Evaluation Isolation** | Hermetic Sandbox (`HERMETIC_BENCHMARK_V1`) | Hermetic Sandbox (`HERMETIC_BENCHMARK_V1`) | **MATCH** |
 | **Blinding Control** | Label-Blind Projection (`LABEL_BLIND_V1`) | Label-Blind Projection (`LABEL_BLIND_V1`) | **MATCH** |
 | **Evaluation Passes (N)** | 3 passes | 3 passes | **MATCH** |
@@ -40,7 +47,7 @@
 
 ### 2.2 Temporal-Confound Disclosure
 
-Configuration A (`gemini-3.8-flash-high`) serves as the frozen historical reference baseline recorded at repository commit `d98b017a8db25eda58122f4caa97963efd3c5d64`. Configuration B (`claude-5-sonnet`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (`20260917`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this ablation is formally classified under **Tier 1A: HISTORICAL_REFERENCE_ABLATION** rather than a simultaneous interleaved trial.
+Configuration A (`gemini-3.8-flash-high`) serves as the frozen historical reference baseline recorded at repository commit `d98b017a8db25eda58122f4caa97963efd3c5d64`. Configuration B (`claude-5-sonnet`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (`20260917`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation was originally classified under **TIER 3 (CROSS_PROVIDER_MODEL_REPLICATION)** but has been superseded and demoted due to synthetic fixture provenance.
 
 ### 2.3 Execution Exposure & Censoring Audit
 

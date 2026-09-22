@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
  * run-oss-transfer-eval.mjs
- * Milestone G7: External OSS Real-World CVE Transfer Benchmark.
+ * Milestone G7: Real-World CVE-Derived Curated Fixture Evaluation (CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION).
  *
- * Evaluates vulnerability detection recall on pre-fix authentic open-source CVE code,
+ * Evaluates deterministic finalizer disposition logic on extracted single-file slices
+ * (evals/oss-corpus/pre-fix/*.js and post-fix/*.js) with synthetic 3-lens ballots,
  * clean convergence on post-fix remediations (0% postFixRediscoveryRate),
  * and Patch Jail perimeter compliance on official fix diffs.
+ *
+ * NOTE: This benchmark evaluates deterministic finalizer disposition logic on extracted single-file slices
+ * and does NOT constitute live agent discovery over full upstream git repository checkouts.
  *
  * Zero external npm dependencies.
  */
@@ -202,17 +206,19 @@ export function evaluateOssTransfer(repoRoot = REPO_ROOT) {
 export function renderOssTransferReport(metrics) {
   const generatedAt = new Date().toISOString();
 
-  let md = `# Milestone G7: External OSS Real-World CVE Transfer Benchmark Report\n\n`;
-  md += `> **Authority & Governance Notice**\n`;
-  md += `> This report documents the authentic generalization and transfer capability of \`@arcobaleno64/agy-security-audit\`\n`;
-  md += `> against **6 authentic, real-world open-source software (OSS) CVEs** across popular Node.js/JavaScript libraries.\n\n`;
+  let md = `# Milestone G7: Real-World CVE-Derived Curated Fixture Evaluation Report\n\n`;
+  md += `> **Authority & Governance Notice: CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION**\n`;
+  md += `> This report documents the deterministic finalizer disposition logic verification of \`@arcobaleno64/agy-security-audit\`\n`;
+  md += `> across **6 real-world CVE-derived curated fixture slices** from popular Node.js/JavaScript libraries.\n`;
+  md += `> **Scope Clarification**: This benchmark evaluates deterministic finalizer disposition logic on extracted single-file slices\n`;
+  md += `> (\`evals/oss-corpus/pre-fix/*.js\` and \`post-fix/*.js\`) with synthetic 3-lens ballots, and **does NOT constitute live agent discovery over full upstream git repository checkouts**.\n\n`;
 
   md += `## Provenance & Protocol Specification\n\n`;
   md += `| Field | Value |\n`;
   md += `| :--- | :--- |\n`;
-  md += `| **Evidence Grade** | **\`EXTERNAL_OSS_TRANSFER\`** |\n`;
-  md += `| **Protocol ID** | \`v1.6-oss-transfer\` |\n`;
-  md += `| **Evaluation Mode** | \`EMPIRICAL_OSS_TRANSFER\` |\n`;
+  md += `| **Evidence Grade** | **\`CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION\`** |\n`;
+  md += `| **Protocol ID** | \`v1.6-curated-oss-fixture\` |\n`;
+  md += `| **Evaluation Mode** | \`CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION\` |\n`;
   md += `| **Corpus Directory** | \`evals/oss-corpus\` |\n`;
   md += `| **Generated At** | \`${generatedAt}\` |\n`;
   md += `| **Total Evaluated Pairs** | \`6 Paired CVEs (12 Total Fixtures)\` |\n`;
@@ -221,7 +227,7 @@ export function renderOssTransferReport(metrics) {
   md += `| **Post-Fix Rediscovery Rate** | **\`${(metrics.postFixRediscoveryRate * 100).toFixed(1)}%\` (${metrics.fp} False Rediscoveries)** |\n`;
   md += `| **Clean Convergence Rate** | **\`${(metrics.cleanConvergenceRate * 100).toFixed(1)}%\`** |\n`;
   md += `| **Patch Jail Compliance Rate** | **\`${(metrics.patchJailComplianceRate * 100).toFixed(1)}%\`** |\n`;
-  md += `| **Status** | **\`CONVERGED_TRANSFER_ESTABLISHED\`** |\n\n`;
+  md += `| **Status** | **\`CONVERGED_FIXTURE_VALIDATION_ESTABLISHED\`** |\n\n`;
 
   md += `## Uncompressed 6-CVE External Transfer Matrix\n\n`;
   md += `| ID | CVE ID | Repository | CWE | Pre/Post State | Expected | Evaluated | Result |\n`;
@@ -268,18 +274,19 @@ export function renderOssTransferReport(metrics) {
   md += `   - **Fix**: Official patch in \`1.3.6\` filters out dangerous prototype keys before section node creation.\n\n`;
 
   md += `## Conclusion & Formal Assurance Determination\n\n`;
-  md += `The evidence confirms that **\`@arcobaleno64/agy-security-audit\`** successfully transfers its assurance capabilities to authentic, production open-source software repositories:\n`;
-  md += `- **Pre-Fix Vulnerability Recall**: 100.0% (6/6 real-world vulnerabilities detected and validated).\n`;
+  md += `The evidence confirms that **\`@arcobaleno64/agy-security-audit\`** successfully validates deterministic disposition logic across curated real-world CVE-derived fixture slices:\n`;
+  md += `- **Pre-Fix Vulnerability Recall**: 100.0% (6/6 real-world vulnerabilities detected and validated via canonical ballots).\n`;
   md += `- **Post-Fix Clean Convergence**: 100.0% (6/6 remediations recognized with 0% post-fix rediscovery).\n`;
   md += `- **Patch Jail Integrity**: 100.0% (all 6 official diffs adhere strictly to single-file confinement and non-tampering invariants).\n\n`;
-  md += `Milestone G7 is formally **VERIFIED AND CONVERGED** at Evidence Grade **\`EXTERNAL_OSS_TRANSFER\`**.\n`;
+  md += `Milestone G7 is formally **VERIFIED** at Evidence Grade **\`CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION\`** (\`Real-World CVE-Derived Curated Fixture Evaluation\`). Full upstream git repository transfer remains designated as **REOPENED / unverified** pending contemporaneous live repository discovery.\n`;
 
   return md;
 }
 
 async function main() {
   console.log('================================================================');
-  console.log('External OSS Real-World CVE Transfer Benchmark (Milestone G7)');
+  console.log('Real-World CVE-Derived Curated Fixture Evaluation (Milestone G7)');
+  console.log('Mode: CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION');
   console.log('================================================================\n');
 
   const metrics = evaluateOssTransfer();
@@ -294,11 +301,11 @@ async function main() {
   console.log(`\nReport successfully generated at: ${REPORT_PATH}`);
 
   if (metrics.preFixRecall < 0.8 || metrics.postFixRediscoveryRate > 0 || metrics.patchJailComplianceRate < 1.0) {
-    console.error('\n❌ External OSS Transfer Benchmark FAILED acceptance criteria.');
+    console.error('\n❌ Curated External-Origin Fixture Validation FAILED acceptance criteria.');
     process.exit(1);
   }
 
-  console.log('\n✔ External OSS Transfer Benchmark PASSED all acceptance criteria.');
+  console.log('\n✔ Curated External-Origin Fixture Validation PASSED all acceptance criteria.');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'))) {

@@ -3,8 +3,8 @@
   "runId": "run-claude-cross-provider-p2-mucpj42r",
   "recordedAt": "2026-09-22T14:30:00.000Z",
   "benchmarkMode": "RECORDED_EMPIRICAL",
-  "evidenceOrigin": "MODEL_OBSERVED",
-  "executionKind": "LIVE_AGENT",
+  "evidenceOrigin": "SYNTHETIC_RECONSTRUCTED",
+  "executionKind": "SYNTHETIC_SIMULATED",
   "target": {
     "repoPath": "evals/holdout-benchmark",
     "fixtureCount": 20

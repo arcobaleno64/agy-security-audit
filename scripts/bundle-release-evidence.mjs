@@ -85,6 +85,11 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     repoPath: 'reports/cross-provider-replication-report-2026-09-22.md',
     stagedName: 'cross-provider-replication-report-2026-09-22.md',
     description: 'Cross-Provider Model Replication Report (Milestone G8)'
+  },
+  {
+    repoPath: 'evals/evidence-matrix.json',
+    stagedName: 'evidence-matrix.json',
+    description: 'Authoritative 5-Dimension Evidence Matrix Artifact'
   }
 ];
 
