@@ -70,6 +70,21 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     repoPath: 'reports/runtime-confinement-report-2026-09-22.md',
     stagedName: 'runtime-confinement-report-2026-09-22.md',
     description: 'Dual-Control Runtime Confinement Matrix Report (Milestone G6)'
+  },
+  {
+    repoPath: 'reports/runtime-canary-report-2026-09-22.md',
+    stagedName: 'runtime-canary-report-2026-09-22.md',
+    description: 'Live Runtime Confinement Canary Report (Milestone G6-L2)'
+  },
+  {
+    repoPath: 'reports/oss-transfer-benchmark-report-2026-09-22.md',
+    stagedName: 'oss-transfer-benchmark-report-2026-09-22.md',
+    description: 'External OSS Transfer Benchmark Report (Milestone G7)'
+  },
+  {
+    repoPath: 'reports/cross-provider-replication-report-2026-09-22.md',
+    stagedName: 'cross-provider-replication-report-2026-09-22.md',
+    description: 'Cross-Provider Model Replication Report (Milestone G8)'
   }
 ];
 
