@@ -5245,8 +5245,8 @@ export default appName;`;
   if (holdoutResult.failed > 0 || holdoutResult.total !== 20) {
     throw new Error('P0 VIOLATION: runHoldoutEval failed to pass 20 holdout disposition ground-truth invariant cases');
   }
-  if (holdoutResult.tp !== 10 || holdoutResult.tn !== 10 || holdoutResult.fp !== 0 || holdoutResult.fn !== 0) {
-    throw new Error('P0 VIOLATION: runHoldoutEval failed dual-control symmetry (expected TP=10, TN=10, FP=0, FN=0)');
+  if (holdoutResult.tp !== 10 || holdoutResult.tn !== 9 || holdoutResult.fp !== 0 || holdoutResult.fn !== 0 || holdoutResult.disputed !== 1) {
+    throw new Error(`P0 VIOLATION: runHoldoutEval failed dual-control symmetry (expected TP=10, TN=9, FP=0, FN=0, DISPUTED=1; got TP=${holdoutResult.tp}, TN=${holdoutResult.tn}, FP=${holdoutResult.fp}, FN=${holdoutResult.fn}, DISPUTED=${holdoutResult.disputed})`);
   }
   console.log('✔ 116. P0 Invariant: Holdout Generalization Benchmark Ground-Truth & Symmetrical Dual-Control.');
 

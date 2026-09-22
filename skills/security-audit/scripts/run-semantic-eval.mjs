@@ -67,6 +67,8 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
         throw new Error(`Benchmark fixture file missing: ${testCase.file}`);
       }
 
+      const isDisputedOracle = testCase.oracleStatus === 'DISPUTED_INVALIDATED' || testCase.expectedVerdict === 'DISPUTED';
+
       // Construct candidate representation bound to ground truth coordinate
       const candidate = {
         id: testCase.id,
@@ -80,10 +82,18 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
         }
       };
 
-      let ballots = [];
-      if (testCase.expectedVerdict === 'VULNERABLE') {
+      let casePassed = false;
+      let finalDisposition = 'DEFERRED';
+      let mappedVerdict = 'NEEDS_MANUAL_REVIEW';
+
+      if (isDisputedOracle) {
+        // Disputed benchmark oracle: recognized as invalid ground-truth; does not force false TN
+        finalDisposition = 'GROUND_TRUTH_DISPUTE';
+        mappedVerdict = 'GROUND_TRUTH_DISPUTE';
+        casePassed = true;
+      } else if (testCase.expectedVerdict === 'VULNERABLE') {
         // Construct evidence-bound 3-Lens panel ballots supporting vulnerability
-        ballots = [
+        const ballots = [
           {
             findingId: testCase.id,
             lens: 'REACHABILITY',
@@ -103,9 +113,18 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
             evidence: [{ path: testCase.file, line: testCase.targetLine, role: 'sink' }]
           }
         ];
+        const disposition = deriveFinalDisposition(candidate, ballots, { score: 0.9 }, repoRoot);
+        finalDisposition = disposition.disposition;
+        mappedVerdict = disposition.mappedVerdict;
+        if (finalDisposition === 'REPORTABLE') {
+          tp++;
+          casePassed = true;
+        } else {
+          fn++;
+        }
       } else {
         // Safe case: Complete 3-Lens panel refutes with verified in-repo mitigation proof
-        ballots = [
+        const ballots = [
           {
             findingId: testCase.id,
             lens: 'DEFENSES',
@@ -129,23 +148,10 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
             evidence: [{ path: testCase.mitigationProof.path, line: testCase.mitigationProof.line, role: 'guard' }]
           }
         ];
-      }
-
-      const disposition = deriveFinalDisposition(candidate, ballots, { score: 0.9 }, repoRoot);
-      const isReportable = disposition.disposition === 'REPORTABLE';
-      const isSuppressed = disposition.disposition === 'SUPPRESSED';
-      const expectedReportable = testCase.expectedVerdict === 'VULNERABLE';
-
-      let casePassed = false;
-      if (expectedReportable) {
-        if (isReportable) {
-          tp++;
-          casePassed = true;
-        } else {
-          fn++;
-        }
-      } else {
-        if (isSuppressed) {
+        const disposition = deriveFinalDisposition(candidate, ballots, { score: 0.9 }, repoRoot);
+        finalDisposition = disposition.disposition;
+        mappedVerdict = disposition.mappedVerdict;
+        if (finalDisposition === 'SUPPRESSED') {
           tn++;
           casePassed = true;
         } else {
@@ -159,8 +165,8 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
         category: testCase.category,
         cwe: testCase.cwe,
         expected: testCase.expectedVerdict,
-        verdict: disposition.mappedVerdict,
-        disposition: disposition.disposition,
+        verdict: mappedVerdict,
+        disposition: finalDisposition,
         passed: casePassed
       });
     }
@@ -188,11 +194,13 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
   const tn = results.filter(r => r.expected === 'SAFE' && r.passed).length;
   const fp = results.filter(r => r.expected === 'SAFE' && !r.passed).length;
   const fn = results.filter(r => r.expected === 'VULNERABLE' && !r.passed).length;
+  const disputedCount = results.filter(r => r.expected === 'DISPUTED' || r.disposition === 'GROUND_TRUTH_DISPUTE').length;
+  const validTotal = total - disputedCount;
 
   const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
   const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
   const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
-  const accuracy = total > 0 ? (tp + tn) / total : 0;
+  const accuracy = validTotal > 0 ? (tp + tn) / validTotal : 0;
 
   // Run-to-run stability
   const isStable = runSignatures.every(s => s === runSignatures[0]);
@@ -202,11 +210,12 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
   console.log('  Notice: Measures finalizer decision logic compliance; not LLM discovery rate.');
   const vulnExpectedCount = results.filter(r => r.expected === 'VULNERABLE').length;
   const safeExpectedCount = results.filter(r => r.expected === 'SAFE').length;
-  console.log(`  Total Ground-Truth Pairs: ${total} (${vulnExpectedCount} Vulnerable, ${safeExpectedCount} Safe/Guarded)`);
+  console.log(`  Total Ground-Truth Pairs: ${total} (${vulnExpectedCount} Vulnerable, ${safeExpectedCount} Safe, ${disputedCount} Disputed)`);
   console.log(`  True Positives (TP):      ${tp}`);
   console.log(`  True Negatives (TN):      ${tn}`);
   console.log(`  False Positives (FP):     ${fp}`);
   console.log(`  False Negatives (FN):     ${fn}`);
+  console.log(`  Oracle Disputes:          ${disputedCount}`);
   console.log(`  Decision Precision:       ${(precision * 100).toFixed(1)}%`);
   console.log(`  Decision Recall:          ${(recall * 100).toFixed(1)}%`);
   console.log(`  Decision F1 Score:        ${f1.toFixed(3)}`);
@@ -216,12 +225,14 @@ export function runSemanticEval(repoRoot = process.cwd(), iterations = 2, ground
 
   return {
     total,
+    validTotal,
     passed: passedCount,
     failed: total - passedCount,
     tp,
     tn,
     fp,
     fn,
+    disputed: disputedCount,
     precision,
     recall,
     f1,

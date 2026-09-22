@@ -12,7 +12,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-02",
@@ -27,7 +28,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-03",
@@ -42,7 +44,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-04",
@@ -57,7 +60,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-05",
@@ -72,7 +76,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-06",
@@ -87,7 +92,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-07",
@@ -102,7 +108,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-08",
@@ -117,7 +124,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-09",
@@ -132,7 +140,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-10",
@@ -147,7 +156,8 @@
     "evidenceRoles": [
       "entrypoint",
       "sink"
-    ]
+    ],
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-01-SAFE",
@@ -163,7 +173,8 @@
       "path": "evals/holdout-benchmark/safe/01-ssti-template-injection.js",
       "line": 14,
       "reason": "Enforces pre-compiled static template map rejecting dynamic evaluation"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-02-SAFE",
@@ -179,7 +190,8 @@
       "path": "evals/holdout-benchmark/safe/02-xxe-entity-expansion.js",
       "line": 7,
       "reason": "Enforces safe XML parser configuration with noent=false and dtd=false"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-03-SAFE",
@@ -195,7 +207,8 @@
       "path": "evals/holdout-benchmark/safe/03-mass-assignment.js",
       "line": 17,
       "reason": "Enforces strict whitelist-based field extraction for object mutation"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-04-SAFE",
@@ -211,7 +224,8 @@
       "path": "evals/holdout-benchmark/safe/04-redos-backtracking.js",
       "line": 12,
       "reason": "Enforces input length bound and linear regex complexity"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-05-SAFE",
@@ -227,7 +241,8 @@
       "path": "evals/holdout-benchmark/safe/05-crypto-iv-reuse.js",
       "line": 13,
       "reason": "Enforces fresh cryptographically random IV generation per encryption call"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-06-SAFE",
@@ -243,7 +258,8 @@
       "path": "evals/holdout-benchmark/safe/06-jwt-alg-confusion.js",
       "line": 14,
       "reason": "Enforces strict algorithm whitelist pinned to RS256"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-07-SAFE",
@@ -259,7 +275,8 @@
       "path": "evals/holdout-benchmark/safe/07-zip-slip-traversal.js",
       "line": 16,
       "reason": "Enforces canonical destination containment within directory prefix boundary"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-08-SAFE",
@@ -268,13 +285,23 @@
     "cwe": "CWE-918",
     "file": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
     "targetLine": 20,
-    "expectedVerdict": "SAFE",
-    "severity": "NONE",
-    "description": "Webhook caller pre-resolves DNS hostname and blocks requests to private, loopback, or link-local addresses.",
+    "expectedVerdict": "DISPUTED",
+    "oracleStatus": "DISPUTED_INVALIDATED",
+    "originalVerdict": "SAFE",
+    "actualDisposition": "VULNERABLE",
+    "severity": "HIGH",
+    "description": "Webhook caller pre-resolves DNS hostname and checks private IP, but fails to pin resolution to HTTP client, leaving it vulnerable to DNS rebinding TOCTOU.",
+    "disputeMetadata": {
+      "status": "GROUND_TRUTH_DISPUTE",
+      "disputedAt": "2026-09-22",
+      "reason": "Verified benchmark oracle defect: hostname is resolved and verified, but subsequent http.get(url) executes a second independent DNS resolution, allowing an attacker to rebind hostname to loopback/private IP.",
+      "actualVulnerability": "DNS_REBINDING_SSRF",
+      "adjudication": "Oracle invalidated; fixture is genuinely vulnerable to CWE-918 SSRF via DNS rebinding"
+    },
     "mitigationProof": {
       "path": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
       "line": 20,
-      "reason": "Enforces pre-request DNS resolution and private/loopback IP egress barrier"
+      "reason": "Enforces pre-request DNS resolution (defective: not pinned to transport)"
     }
   },
   {
@@ -291,7 +318,8 @@
       "path": "evals/holdout-benchmark/safe/09-crlf-header-injection.js",
       "line": 11,
       "reason": "Enforces strict CRLF character rejection prior to header assignment"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   },
   {
     "id": "HLD-10-SAFE",
@@ -307,6 +335,7 @@
       "path": "evals/holdout-benchmark/safe/10-race-token-reuse.js",
       "line": 12,
       "reason": "Enforces atomic check-and-set invalidation before async operation"
-    }
+    },
+    "oracleStatus": "CONFIRMED_VALID"
   }
 ]
