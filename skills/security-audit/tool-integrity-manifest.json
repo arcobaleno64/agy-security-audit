@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.5.1",
-  "generatedAt": "2026-09-22T08:44:46.351Z",
+  "generatedAt": "2026-09-22T09:40:26.172Z",
   "manifestDigest": "ca959a56ca4df24ebf063f83a71905386176a74727a012109b55672123098417",
   "criticalScripts": {
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
