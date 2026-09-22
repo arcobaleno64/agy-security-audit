@@ -229,7 +229,7 @@ export function classifyComparisonExperiment(runOrTaxA, runOrTaxB, options = {})
   let name = null;
   let description = null;
 
-  if (isSameRunId || (isIdenticalTax && options.identityControl)) {
+  if (isIdenticalTax && (isSameRunId || options.identityControl)) {
     tier = 0;
     name = 'IDENTITY_CONTROL';
     description = 'Self-comparison or identical run verification control (strictly non-publishable).';
@@ -1230,6 +1230,14 @@ function runSelfTests(repoRoot = DEFAULT_REPO_ROOT) {
   const t0 = classifyComparisonExperiment(taxGeminiHigh, taxGeminiHigh, { identityControl: true });
   if (t0.tier !== 0 || t0.name !== 'IDENTITY_CONTROL' || t0.publishable !== false) {
     throw new Error(`Self-test 0 failed: Expected non-publishable IDENTITY_CONTROL, got ${t0.name}`);
+  }
+
+  // Self-test 0b: Two runs with same pass runId ('run-pass-1') but different reasoning profiles must be Tier 1, NOT IDENTITY_CONTROL
+  const runPassHigh = { runId: 'run-pass-1', environment: { modelId: 'gemini-3.8-flash-high', reasoningProfile: 'high', baseModel: 'gemini-3.8-flash', identitySource: 'CONFIG_DECLARED' } };
+  const runPassMed = { runId: 'run-pass-1', environment: { modelId: 'gemini-3.8-flash-medium', reasoningProfile: 'medium', baseModel: 'gemini-3.8-flash', identitySource: 'CONFIG_DECLARED' } };
+  const t1SameRunId = classifyComparisonExperiment(runPassHigh, runPassMed);
+  if (t1SameRunId.tier !== 1 || t1SameRunId.name !== 'REASONING_PROFILE_ABLATION') {
+    throw new Error(`Self-test 0b failed: Expected Tier 1 REASONING_PROFILE_ABLATION for cross-profile runs sharing runId 'run-pass-1', got ${t1SameRunId.name}`);
   }
   console.log('  ✔ Test 1: Taxonomy classification cleanly maps all 4 tiers and non-publishable IDENTITY_CONTROL.');
 
