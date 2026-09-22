@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/evidence-matrix.schema.json",
+  "title": "Evidence Matrix Schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "targetSystem",
+    "version",
+    "governance",
+    "summary",
+    "dimensions"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "string", "enum": ["1.0.0"] },
+    "generatedAt": { "type": "string" },
+    "targetSystem": { "type": "string" },
+    "version": { "type": "string" },
+    "governance": {
+      "type": "object",
+      "required": ["standard", "covenant", "provenancePolicy"],
+      "properties": {
+        "standard": { "type": "string" },
+        "covenant": { "type": "string" },
+        "provenancePolicy": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "totalDimensions",
+        "supportedDimensions",
+        "partiallyHoldsDimensions",
+        "reopenedDimensions"
+      ],
+      "properties": {
+        "totalDimensions": { "type": "integer" },
+        "supportedDimensions": { "type": "integer" },
+        "partiallyHoldsDimensions": { "type": "integer" },
+        "reopenedDimensions": { "type": "integer" }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "required": [
+        "DETERMINISTIC_HARNESS",
+        "LIVE_MODEL_EVALUATION",
+        "LIVE_RUNTIME_ENFORCEMENT",
+        "CROSS_PROVIDER_REPLICATION",
+        "EXTERNAL_OSS_TRANSFER"
+      ],
+      "properties": {
+        "DETERMINISTIC_HARNESS": { "$ref": "#/definitions/dimension" },
+        "LIVE_MODEL_EVALUATION": { "$ref": "#/definitions/dimension" },
+        "LIVE_RUNTIME_ENFORCEMENT": { "$ref": "#/definitions/dimension" },
+        "CROSS_PROVIDER_REPLICATION": { "$ref": "#/definitions/dimension" },
+        "EXTERNAL_OSS_TRANSFER": { "$ref": "#/definitions/dimension" }
+      }
+    }
+  },
+  "definitions": {
+    "dimension": {
+      "type": "object",
+      "required": ["status", "claim", "scope", "artifacts"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["SUPPORTED", "PARTIALLY_HOLDS", "REOPENED", "REFUTED"]
+        },
+        "grade": { "type": "string" },
+        "claim": { "type": "string" },
+        "scope": { "type": "string" },
+        "verificationMethod": { "type": "string" },
+        "reopenedReason": { "type": "string" },
+        "reinstatementRequirement": { "type": "string" },
+        "scopeClarification": { "type": "string" },
+        "partiallyHoldsDetail": { "type": "object" },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256", "description"],
+            "properties": {
+              "path": { "type": "string" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

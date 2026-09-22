@@ -1136,9 +1136,26 @@ export function renderComparativeReport(comparisonData, options = {}) {
   const nowIso = new Date().toISOString();
 
   let md = '';
+  const isSyntheticRun = (r) => r?.evidenceOrigin === 'SYNTHETIC_RECONSTRUCTED' || r?.executionKind === 'SYNTHETIC_SIMULATED';
+  const hasSyntheticRuns = Boolean(
+    options.isSuperseded ||
+    (comparisonData.runsA && comparisonData.runsA.some(isSyntheticRun)) ||
+    (comparisonData.runsB && comparisonData.runsB.some(isSyntheticRun))
+  );
+
+  if (hasSyntheticRuns) {
+    md += `> [!WARNING] **SUPERSEDED / NOT LIVE EVIDENCE -- DO NOT CITE AS MODEL REPLICATION**\n`;
+    md += `> This evaluation report has been formally superseded and demoted under Milestone G8 Evidence Integrity Correction (v1.6.1).\n`;
+    md += `> **Provenance & Evidence Invalidation**:\n`;
+    md += `> 1. **Synthetic Fixture Provenance**: The candidate runs for Configuration B (\`evals/live-runs/cross-provider/claude/run-pass-{1,2,3}.json\`) are synthetic fixtures constructed via script (\`scratch/generate-claude-runs.mjs\`) rather than observed outputs from live agent execution. They do not constitute live model evidence.\n`;
+    md += `> 2. **Evidence Demotion**: Manifests have been demoted from \`MODEL_OBSERVED\` / \`LIVE_AGENT\` to \`SYNTHETIC_RECONSTRUCTED\` / \`SYNTHETIC_SIMULATED\`.\n`;
+    md += `> 3. **Reopened Dimension**: The Cross-Provider Replication dimension of the evidence matrix is marked as \`REOPENED\`, requiring contemporaneous live execution with raw stream attestation before publication claims can be reinstated.\n\n`;
+  }
+
   md += `# Cross-Model & Ablation Comparative Validation Report\n\n`;
   md += `**Generated**: \`${nowIso}\`  \n`;
-  const evidenceGradeStr = classification.tier === 1 ? 'Tier 1A: HISTORICAL_REFERENCE_ABLATION' : `TIER ${classification.tier} (${classification.name})`;
+  const baseGradeStr = classification.tier === 1 ? 'Tier 1A: HISTORICAL_REFERENCE_ABLATION' : `TIER ${classification.tier} (${classification.name})`;
+  const evidenceGradeStr = hasSyntheticRuns ? `${baseGradeStr} [SUPERSEDED / NOT LIVE EVIDENCE]` : baseGradeStr;
   md += `**Evidence Grade**: \`${evidenceGradeStr}\`  \n`;
   md += `**Protocol ID**: \`${protocol?.protocolId || 'v1.5-cross-model-1'}\`  \n`;
   md += `**Protocol Digest**: \`${protocol?.protocolDigest || 'UNKNOWN'}\`  \n`;
@@ -1180,14 +1197,26 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `| **Base Model Architecture** | \`${taxA.baseModel}\` | \`${taxB.baseModel}\` | **${taxA.baseModel === taxB.baseModel ? 'MATCH' : 'DIVERGENT'}** |\n`;
   md += `| **Model Provider** | \`${taxA.modelProvider}\` | \`${taxB.modelProvider}\` | **${taxA.modelProvider === taxB.modelProvider ? 'MATCH' : 'DIVERGENT'}** |\n`;
   md += `| **Evaluation Corpus** | \`${protocol?.corpus?.corpusId || 'evals/holdout-benchmark'}\` | \`${protocol?.corpus?.corpusId || 'evals/holdout-benchmark'}\` | **MATCH** |\n`;
-  md += `| **Ground Truth Oracle** | \`${protocol?.corpus?.groundTruthSha256 ? protocol.corpus.groundTruthSha256.slice(0, 16) + '...' : 'VERIFIED'}\` | \`${protocol?.corpus?.groundTruthSha256 ? protocol.corpus.groundTruthSha256.slice(0, 16) + '...' : 'VERIFIED'}\` | **MATCH** |\n`;
+
+  const gtFilePath = protocol?.corpus?.groundTruthFile
+    ? path.resolve(options.repoRoot || DEFAULT_REPO_ROOT, protocol.corpus.groundTruthFile)
+    : (protocol?.corpus?.groundTruthPath ? path.resolve(options.repoRoot || DEFAULT_REPO_ROOT, protocol.corpus.groundTruthPath) : null);
+  const resolvedGtSha = gtFilePath && fs.existsSync(gtFilePath)
+    ? crypto.createHash('sha256').update(fs.readFileSync(gtFilePath)).digest('hex')
+    : (protocol?.corpus?.groundTruthSha256 || null);
+  const gtDisplay = resolvedGtSha ? resolvedGtSha.slice(0, 16) + '...' : 'VERIFIED';
+
+  md += `| **Ground Truth Oracle** | \`${gtDisplay}\` | \`${gtDisplay}\` | **MATCH** |\n`;
   md += `| **Evaluation Isolation** | Hermetic Sandbox (\`HERMETIC_BENCHMARK_V1\`) | Hermetic Sandbox (\`HERMETIC_BENCHMARK_V1\`) | **MATCH** |\n`;
   md += `| **Blinding Control** | Label-Blind Projection (\`LABEL_BLIND_V1\`) | Label-Blind Projection (\`LABEL_BLIND_V1\`) | **MATCH** |\n`;
   md += `| **Evaluation Passes (N)** | ${l1.passesA} passes | ${l1.passesB} passes | **${l1.passesA === l1.passesB ? 'MATCH' : 'ASYMMETRIC'}** |\n`;
   md += `| **Attestation Authority** | \`${taxA.identitySource}\` (\`${taxA.identityConfidence}\`) | \`${taxB.identitySource}\` (\`${taxB.identityConfidence}\`) | **VERIFIED** |\n\n`;
 
   md += `### 2.2 Temporal-Confound Disclosure\n\n`;
-  md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation is formally classified under ${classification.tier === 1 ? '**Tier 1A: HISTORICAL_REFERENCE_ABLATION**' : `**TIER ${classification.tier} (${classification.name})**`} rather than a simultaneous interleaved trial.\n\n`;
+  const temporalClassificationStr = hasSyntheticRuns
+    ? `originally classified under **TIER ${classification.tier} (${classification.name})** but has been superseded and demoted due to synthetic fixture provenance`
+    : `formally classified under ${classification.tier === 1 ? '**Tier 1A: HISTORICAL_REFERENCE_ABLATION**' : `**TIER ${classification.tier} (${classification.name})**`} rather than a simultaneous interleaved trial`;
+  md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation was ${temporalClassificationStr}.\n\n`;
 
   // Execution Exposure & Censoring Audit
   const auditA = comparisonData.auditA;
@@ -1402,7 +1431,9 @@ export function compareModelBenchmarks(runsA, runsB, options = {}) {
     protocol,
     auditA,
     auditB,
-    groundTruthMap
+    groundTruthMap,
+    runsA: loadedA,
+    runsB: loadedB
   }, options);
 
   return {

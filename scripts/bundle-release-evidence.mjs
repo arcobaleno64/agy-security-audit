@@ -406,6 +406,46 @@ export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
     }
   }
 
+  // 2.5 Verify authoritative evidence matrix artifact integrity and dimension hashes
+  const matrixRelPath = 'evals/evidence-matrix.json';
+  const matrixFullPath = path.resolve(repoRoot, matrixRelPath);
+  if (fs.existsSync(matrixFullPath)) {
+    try {
+      const matrix = JSON.parse(fs.readFileSync(matrixFullPath, 'utf8'));
+      const requiredDims = [
+        'DETERMINISTIC_HARNESS',
+        'LIVE_MODEL_EVALUATION',
+        'LIVE_RUNTIME_ENFORCEMENT',
+        'CROSS_PROVIDER_REPLICATION',
+        'EXTERNAL_OSS_TRANSFER'
+      ];
+      for (const dim of requiredDims) {
+        if (!matrix.dimensions || !matrix.dimensions[dim]) {
+          errors.push(`Evidence matrix missing required dimension: ${dim}`);
+        } else {
+          const dimData = matrix.dimensions[dim];
+          if (!Array.isArray(dimData.artifacts) || dimData.artifacts.length === 0) {
+            errors.push(`Evidence matrix dimension ${dim} has no artifacts`);
+          } else {
+            for (const art of dimData.artifacts) {
+              const artFullPath = path.resolve(repoRoot, art.path);
+              if (!fs.existsSync(artFullPath)) {
+                errors.push(`Evidence matrix artifact missing on disk: ${art.path} in dimension ${dim}`);
+              } else {
+                const actualHash = crypto.createHash('sha256').update(fs.readFileSync(artFullPath)).digest('hex');
+                if (actualHash !== art.sha256) {
+                  errors.push(`Evidence matrix artifact SHA-256 mismatch for ${art.path}: expected ${art.sha256}, actual ${actualHash}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      errors.push(`Failed to parse evidence matrix (${matrixRelPath}): ${err.message}`);
+    }
+  }
+
   // 3. Check release archive completeness
   let releaseArchive = null;
   const pkgPath = path.resolve(repoRoot, 'package.json');
