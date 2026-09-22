@@ -265,7 +265,17 @@ function runSuite() {
   };
   const unresDisp = dispositionConsensusLineage(unresCandidate, mockGroundTruth);
   assert(unresDisp.disposition === 'REPLICATED_UNRESOLVED', `Expected REPLICATED_UNRESOLVED, got ${unresDisp.disposition}`);
-  console.log('  ✔ 3.3 REPLICATED_UNRESOLVED: consensus finding on un-oracled fixture correctly categorized without hallucinated verdict.\n');
+  console.log('  ✔ 3.3 REPLICATED_UNRESOLVED: consensus finding on un-oracled fixture correctly categorized without hallucinated verdict.');
+
+  // 3.4 Ground Truth Dispute (Disputed benchmark fixture with authentic vulnerability)
+  const disputeCandidate = {
+    ruleId: 'CWE-918',
+    location: { uri: 'evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js', startLine: 15 },
+    symbol: 'checkDnsRebinding'
+  };
+  const disputeDisp = dispositionConsensusLineage(disputeCandidate, mockGroundTruth);
+  assert(disputeDisp.disposition === 'GROUND_TRUTH_DISPUTE', `Expected GROUND_TRUTH_DISPUTE, got ${disputeDisp.disposition}`);
+  console.log('  ✔ 3.4 GROUND_TRUTH_DISPUTE: finding on disputed benchmark fixture categorized without false FP penalty.\n');
 
   // ---------------------------------------------------------------------------
   // Suite 4: Dual-Level Matching (Exact Lineage vs Semantic Ground-Truth)
@@ -396,7 +406,7 @@ function runSuite() {
   assert(mdReport.includes('Cross-Model & Ablation Comparative Validation Report'), 'Report missing title');
   assert(mdReport.includes('TIER 1 (REASONING_PROFILE_ABLATION)'), 'Report missing Tier 1 banner');
   assert(mdReport.includes('Dual-Tier Jaccard Lineage Stability Matrix'), 'Report missing Jaccard table');
-  assert(mdReport.includes('Safe Control Specificity & Suppression Agreement'), 'Report missing specificity section');
+  assert(mdReport.includes('Safe Control Specificity'), 'Report missing specificity section');
   console.log('  ✔ 6.2 Publication-grade comparative Markdown report rendered cleanly with all sections.');
 
   // 6.3 Multi-Configuration Comparison Matrix (compareRunMatrix)

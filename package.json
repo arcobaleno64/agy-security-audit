@@ -39,6 +39,7 @@
     "check:cross-model-protocol": "node scripts/compare-model-benchmarks.mjs --verify-protocol evals/protocols/v1.5-cross-model-protocol.json",
     "compare:models": "node scripts/compare-model-benchmarks.mjs",
     "compare:ablation:medium-high": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/holdout-paired --runs-b evals/live-runs/reasoning-ablation/medium --protocol evals/protocols/v1.5-cross-model-protocol.json --report reports/reasoning-ablation-report-2026-09-17.md",
+    "compare:ablation:corrected": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/holdout-paired --runs-b evals/live-runs/reasoning-ablation/medium --protocol evals/protocols/v1.5-cross-model-protocol.json --report reports/reasoning-ablation-report-2026-09-17-corrected.md",
     "test:comparison": "node scripts/test-cross-model-protocol.mjs",
     "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
     "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs",
