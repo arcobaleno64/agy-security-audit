@@ -60,6 +60,16 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     repoPath: 'skills/security-audit/tool-integrity-manifest.json',
     stagedName: 'tool-integrity-manifest.json',
     description: 'SHA-256 Cryptographic TCB Integrity Manifest'
+  },
+  {
+    repoPath: 'reports/reasoning-ablation-report-2026-09-17-corrected.md',
+    stagedName: 'reasoning-ablation-report-2026-09-17-corrected.md',
+    description: 'Corrected Reasoning Profile Ablation Report (Milestone G5)'
+  },
+  {
+    repoPath: 'reports/runtime-confinement-report-2026-09-22.md',
+    stagedName: 'runtime-confinement-report-2026-09-22.md',
+    description: 'Dual-Control Runtime Confinement Matrix Report (Milestone G6)'
   }
 ];
 
