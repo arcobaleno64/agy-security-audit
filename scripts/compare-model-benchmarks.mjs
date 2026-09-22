@@ -623,14 +623,20 @@ export function dispositionConsensusLineage(cand, groundTruthMap = null) {
     }
   }
 
-  if (isSafeFixture || (matchedGt && (matchedGt.expectedVerdict === 'SAFE' || matchedGt.id?.endsWith('-SAFE')))) {
-    const isDisputed = matchedGt?.disputed || matchedGt?.id === 'HLD-08-SAFE' || String(fixtureId).toUpperCase() === 'HLD-08-SAFE';
+  if (isSafeFixture || (matchedGt && (matchedGt.expectedVerdict === 'SAFE' || matchedGt.expectedVerdict === 'DISPUTED' || matchedGt.id?.endsWith('-SAFE')))) {
+    const isDisputed = Boolean(
+      matchedGt?.disputed ||
+      matchedGt?.oracleStatus === 'DISPUTED_INVALIDATED' ||
+      matchedGt?.expectedVerdict === 'DISPUTED' ||
+      matchedGt?.id === 'HLD-08-SAFE' ||
+      String(fixtureId).toUpperCase() === 'HLD-08-SAFE'
+    );
     if (isDisputed) {
       return {
         disposition: 'GROUND_TRUTH_DISPUTE',
         groundTruthId: matchedGt?.id || fixtureId || 'HLD-08-SAFE',
-        expectedVerdict: 'SAFE',
-        disputeReason: `Verified benchmark oracle flaw: '${matchedGt?.id || fixtureId || 'HLD-08-SAFE'}' contains unpinned DNS lookup followed by http.get (CWE-918 SSRF / DNS rebinding TOCTOU).`,
+        expectedVerdict: matchedGt?.originalVerdict || 'SAFE',
+        disputeReason: matchedGt?.disputeMetadata?.reason || `Verified benchmark oracle flaw on fixture '${matchedGt?.id || fixtureId || 'HLD-08-SAFE'}': contains unpinned DNS lookup followed by http.get (CWE-918 SSRF / DNS rebinding TOCTOU).`,
         reason: `Evidence-backed candidate on safe control fixture '${matchedGt?.id || uri}' identifies an authentic benchmark oracle defect (GROUND_TRUTH_DISPUTE).`
       };
     }
@@ -781,6 +787,7 @@ export function computeConsensusLineages(runsA, runsB, groundTruth = null, optio
     consensusCount: consensusList.length,
     level2ConsensusList,
     level2ConsensusCount: level2ConsensusList.length,
+    disputedFixtures: Array.from(gtMap.values()).filter(g => g.oracleStatus === 'DISPUTED_INVALIDATED' || g.disputed || g.id === 'HLD-08-SAFE').map(g => g.id),
     dispositionSummary: {
       replicatedTruePositives: tpCount,
       replicatedFalsePositives: fpCount,
@@ -800,6 +807,7 @@ export function computeConsensusLineages(runsA, runsB, groundTruth = null, optio
 export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, options = {}) {
   const envsA = Array.isArray(runsA) ? runsA : [runsA];
   const envsB = Array.isArray(runsB) ? runsB : [runsB];
+  const groundTruthMap = loadGroundTruth(groundTruth, options.repoRoot || DEFAULT_REPO_ROOT);
 
   function auditSafeFps(envs) {
     let completedSafe = 0;
@@ -821,7 +829,8 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
             continue;
           }
           completedSafe++;
-          const isDisputed = r.fixtureId === 'HLD-08-SAFE';
+          const gt = groundTruthMap.get(r.fixtureId);
+          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || r.fixtureId === 'HLD-08-SAFE');
           if (isDisputed) disputedCompletedSafe++;
           else genuineCompletedSafe++;
         }
@@ -835,7 +844,10 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
       for (const c of cands) {
         const uri = String(c.location?.uri || c.uri || '').replace(/\\/g, '/').toLowerCase();
         if (uri.includes('/safe/') || uri.includes('-safe')) {
-          if (uri.includes('08-ssrf') || uri.includes('hld-08')) {
+          const fid = extractFixtureIdFromUri(uri) || '';
+          const gt = groundTruthMap.get(fid);
+          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || uri.includes('08-ssrf') || uri.includes('hld-08'));
+          if (isDisputed) {
             disputeCount++;
           } else {
             fpCountGenuine++;
@@ -1192,8 +1204,12 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `## 3. Dual-Tier Jaccard Lineage Stability Matrix\n\n`;
   md += `Strict recurrence threshold: $\\lceil 0.60 \\times N \\rceil$ ($N_A=${l1.passesA} \\implies \\ge ${l1.requiredCountA}$, $N_B=${l1.passesB} \\implies \\ge ${l1.requiredCountB}$).\n\n`;
 
-  // Clean oracle subset for Level 2 (excluding disputed HLD-08-SAFE)
-  const isCleanL2 = (k) => !k.startsWith('HLD-08-SAFE:');
+  // Clean oracle subset for Level 2 (excluding disputed oracles)
+  const disputedFixtures = consensus?.disputedFixtures || ['HLD-08-SAFE'];
+  const isCleanL2 = (k) => {
+    const fixId = k.split(':')[0];
+    return !disputedFixtures.includes(fixId);
+  };
   const cleanL2StrictA = new Set((l2.setA_strict || []).filter(isCleanL2));
   const cleanL2StrictB = new Set((l2.setB_strict || []).filter(isCleanL2));
   const cleanL2StrictIntersection = new Set([...cleanL2StrictA].filter(x => cleanL2StrictB.has(x)));
