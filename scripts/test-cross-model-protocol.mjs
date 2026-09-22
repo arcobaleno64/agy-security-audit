@@ -233,7 +233,18 @@ function runSuite() {
   const mockGroundTruth = new Map([
     ['HLD-01', { id: 'HLD-01', cwe: 'CWE-1336', expectedVerdict: 'VULNERABLE', file: '01-ssti-template-injection.js' }],
     ['HLD-02', { id: 'HLD-02', cwe: 'CWE-611', expectedVerdict: 'VULNERABLE', file: '02-xxe-entity-expansion.js' }],
-    ['HLD-01-SAFE', { id: 'HLD-01-SAFE', cwe: 'CWE-1336', expectedVerdict: 'SAFE', file: 'safe/01-ssti-template-injection.js' }]
+    ['HLD-01-SAFE', { id: 'HLD-01-SAFE', cwe: 'CWE-1336', expectedVerdict: 'SAFE', file: 'safe/01-ssti-template-injection.js' }],
+    ['HLD-08-SAFE', {
+      id: 'HLD-08-SAFE',
+      cwe: 'CWE-918',
+      file: 'safe/08-ssrf-dns-rebinding.js',
+      expectedVerdict: 'DISPUTED',
+      oracleStatus: 'DISPUTED_INVALIDATED',
+      originalVerdict: 'SAFE',
+      disputeMetadata: {
+        reason: 'Verified benchmark oracle defect: unpinned DNS lookup followed by http.get (CWE-918 SSRF / DNS rebinding TOCTOU).'
+      }
+    }]
   ]);
 
   // 3.1 Replicated True Positive (Consensus matches ground truth vuln)

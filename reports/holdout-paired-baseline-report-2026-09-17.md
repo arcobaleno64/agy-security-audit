@@ -1,3 +1,10 @@
+> [!WARNING] **SUPERSEDED REPORT -- DO NOT CITE AS PRIMARY EVIDENCE**
+> This historical baseline report has been formally superseded by [`reports/reasoning-ablation-report-2026-09-17-corrected.md`](./reasoning-ablation-report-2026-09-17-corrected.md) and [`reports/cross-provider-replication-report-2026-09-22.md`](./cross-provider-replication-report-2026-09-22.md) under Milestones G5-CR1 and G8.
+> **Correction & Retraction Rationale**:
+> 1. **Benchmark Oracle Defect Correction**: Safe control fixture `HLD-08-SAFE` (`evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js`) contains an authentic DNS rebinding TOCTOU SSRF flaw. The uncorrected 30/30 (100.0%) safe-control metric in this historical baseline conflated a missed detection of an authentic vulnerability with safe-control specificity.
+> 2. **Corrected Specificity Baseline**: Evaluated across the 9 genuinely safe control fixtures (`HLD-01-SAFE` through `HLD-07-SAFE`, `HLD-09-SAFE`, `HLD-10-SAFE`), the empirical specificity is 100.0% (0/27 false-positive exposures). `HLD-08-SAFE` is reclassified as `GROUND_TRUTH_DISPUTE` / `DISPUTED_INVALIDATED`.
+> 3. **Canonical Reference**: Refer to the corrected ablation report and cross-provider replication report for active publication metrics and censored-exposure analysis.
+
 # Empirical Baseline Evaluation Report: Model-Dependent Stochastic Discovery (N=3)
 
 **Evaluation Harness**: Antigravity Security Audit Plugin (`@arcobaleno64/agy-security-audit`)  

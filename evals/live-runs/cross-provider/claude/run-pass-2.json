@@ -1,0 +1,425 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-claude-cross-provider-p2-mucpj42r",
+  "recordedAt": "2026-09-22T14:30:00.000Z",
+  "benchmarkMode": "RECORDED_EMPIRICAL",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "target": {
+    "repoPath": "evals/holdout-benchmark",
+    "fixtureCount": 20
+  },
+  "environment": {
+    "agyVersion": "1.2.7",
+    "modelId": "claude-5-sonnet",
+    "modelProvider": "anthropic",
+    "baseModel": "claude-5-sonnet",
+    "reasoningProfile": "high",
+    "identitySource": "CONFIG_DECLARED",
+    "modelTaxonomy": {
+      "rawModelId": "claude-5-sonnet",
+      "canonicalModelId": "claude-5-sonnet",
+      "baseModel": "claude-5-sonnet",
+      "modelFamily": "claude-sonnet",
+      "modelProvider": "anthropic",
+      "reasoningProfile": "high",
+      "runtimeId": "agy",
+      "runtimeAdapter": "native",
+      "identitySource": "CONFIG_DECLARED",
+      "identityConfidence": "HIGH"
+    },
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "923dddfb94ec1d4452077e68fa7c20c0274719c8",
+    "toolVersion": "1.5.1",
+    "toolRevision": "923dddfb94ec1d4452077e68fa7c20c0274719c8",
+    "toolIntegrityDigest": "a1672eaa288b5cdd73186b5ead62dfb06f0d661e63cc9f433e86bedc40b1e569",
+    "toolDirty": false
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-1336-8",
+        "ruleId": "CWE-1336",
+        "title": "Server-Side Template Injection via unescaped string interpolation",
+        "securityProperty": "safe-templating",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
+          "startLine": 8,
+          "endLine": 10
+        },
+        "symbol": "renderDynamicTemplate",
+        "lineageId": "d593b68c2453a8f81e0dadcf07f64824"
+      },
+      {
+        "id": "CAND-CWE-611-18",
+        "ruleId": "CWE-611",
+        "title": "Insecure XML Entity Expansion (XXE) with External Entity Resolution",
+        "securityProperty": "safe-resource-handling",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/02-xxe-entity-expansion.js",
+          "startLine": 18,
+          "endLine": 20
+        },
+        "symbol": "parseXmlReport",
+        "lineageId": "9130d72b31c7cf7181fcf44a79e65314"
+      },
+      {
+        "id": "CAND-CWE-915-14",
+        "ruleId": "CWE-915",
+        "title": "Mass Assignment / Object Prototype Injection via unrestricted Object.assign",
+        "securityProperty": "object-integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/03-mass-assignment.js",
+          "startLine": 14,
+          "endLine": 16
+        },
+        "symbol": "Object.assign",
+        "lineageId": "c3b27fdb7fa1fe562fd3400dbc7c8a55"
+      },
+      {
+        "id": "CAND-CWE-329-15",
+        "ruleId": "CWE-329",
+        "title": "Static / Reused Initialization Vector (IV) in CBC Encryption",
+        "securityProperty": "cryptographic-randomness",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
+          "startLine": 15,
+          "endLine": 17
+        },
+        "symbol": "createCipheriv",
+        "lineageId": "dfc83efd73b151e197270738d9c876c5"
+      },
+      {
+        "id": "CAND-CWE-347-14",
+        "ruleId": "CWE-347",
+        "title": "JWT Algorithm Confusion (HMAC vs RSA) in Token Verification",
+        "securityProperty": "cryptographic-signature",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/06-jwt-alg-confusion.js",
+          "startLine": 14,
+          "endLine": 16
+        },
+        "symbol": "jwt.verify",
+        "lineageId": "5b2dfcf52c1e8c6ab627abb20787c1c8"
+      },
+      {
+        "id": "CAND-CWE-22-14",
+        "ruleId": "CWE-22",
+        "title": "Path Traversal via Archive Extraction (Zip Slip)",
+        "securityProperty": "filesystem-confinement",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/07-zip-slip-traversal.js",
+          "startLine": 14,
+          "endLine": 16
+        },
+        "symbol": "path.join",
+        "lineageId": "04f6916026f52c1b01f09cbd9fa608a5"
+      },
+      {
+        "id": "CAND-CWE-918-11",
+        "ruleId": "CWE-918",
+        "title": "Server-Side Request Forgery via Unfiltered Webhook URL Fetch",
+        "securityProperty": "network-boundary-confinement",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/08-ssrf-dns-rebinding.js",
+          "startLine": 11,
+          "endLine": 13
+        },
+        "symbol": "http.get",
+        "lineageId": "53529aa322b3190d8cd7e8869639bc53"
+      },
+      {
+        "id": "CAND-CWE-113-10",
+        "ruleId": "CWE-113",
+        "title": "HTTP Response Splitting / CRLF Header Injection",
+        "securityProperty": "output-encoding",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "MEDIUM",
+        "location": {
+          "uri": "evals/holdout-benchmark/09-crlf-header-injection.js",
+          "startLine": 10,
+          "endLine": 12
+        },
+        "symbol": "res.setHeader",
+        "lineageId": "60c9b20a434068984849a9c946207bde"
+      },
+      {
+        "id": "CAND-CWE-367-14",
+        "ruleId": "CWE-367",
+        "title": "Time-of-Check to Time-of-Use (TOCTOU) Race Condition in Token Redemption",
+        "securityProperty": "concurrency-control",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/10-race-token-reuse.js",
+          "startLine": 14,
+          "endLine": 16
+        },
+        "symbol": "router.post",
+        "lineageId": "73b813d5295c580a600fe8bd0db1a659"
+      },
+      {
+        "id": "CAND-CWE-918-23",
+        "ruleId": "CWE-918",
+        "title": "Server-Side Request Forgery via DNS rebinding and unpinned secondary resolution",
+        "securityProperty": "network-boundary-confinement",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
+          "startLine": 23,
+          "endLine": 25
+        },
+        "symbol": "http.get",
+        "lineageId": "ecb8ed463bf92734118b5553029fc434"
+      }
+    ],
+    "verifiedFindings": [],
+    "unresolvedCandidates": [],
+    "suppressedCandidates": []
+  },
+  "summary": {
+    "candidateCount": 10,
+    "verifiedCount": null,
+    "deferredCount": null,
+    "suppressedCount": null,
+    "executionDurationMs": 1485600
+  },
+  "metadata": {
+    "passIndex": 2,
+    "totalPasses": 3,
+    "suite": "holdout",
+    "protocolId": "v1.5-cross-model-1",
+    "protocolDigest": "9ca44ee1fdb617e3fa36f90c2184bef857ec82b1ed40e660d31a6b5ba282aeb5",
+    "fixtureSplits": {
+      "developmentSet": {
+        "ids": [],
+        "role": "REGRESSION_BASELINE",
+        "rationale": "Holdout generalization benchmark suite has no development or calibrated fixtures (Section 21 covenant)."
+      },
+      "holdoutFixtures": {
+        "ids": [
+          "HLD-01",
+          "HLD-02",
+          "HLD-03",
+          "HLD-04",
+          "HLD-05",
+          "HLD-06",
+          "HLD-07",
+          "HLD-08",
+          "HLD-09",
+          "HLD-10"
+        ],
+        "role": "HOLDOUT_GENERALIZATION",
+        "rationale": "All 10 fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
+      }
+    },
+    "includeSafe": true,
+    "safeOnly": false,
+    "shuffleSeed": "20260917",
+    "labelBlind": true,
+    "hermetic": true,
+    "hermeticHarnessVersion": "HERMETIC_BENCHMARK_V1",
+    "throttleDelayMs": 2000,
+    "fixtureResults": [
+      {
+        "fixtureId": "HLD-01",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 85581,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-02",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 75354,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-03",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 89902,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-04",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 71827,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-05",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 71827,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 89902,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-07",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 89902,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-08",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 62129,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-09",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 55164,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-10",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 89902,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-01-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 1,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 62879,
+        "error": null
+      }
+    ],
+    "governanceNote": "Holdout generalization benchmark: cross-provider replication under Section 21 covenant."
+  },
+  "executionTelemetry": {
+    "format": "AGY_STREAM_JSON_V1",
+    "conversationId": "ebfb46e7-6c15-45c3-bef5-4186610e7346",
+    "telemetryDigest": "3e6aef52e59ef28483fe2b675589fd499e37d0d16add3c609add4b46448bbfdc",
+    "totalEvents": 910,
+    "availableTools": [
+      "ask_custom_permission",
+      "ask_permission",
+      "ask_question",
+      "view_file",
+      "list_dir",
+      "run_command",
+      "grep_search",
+      "find_by_name"
+    ],
+    "toolsUsed": [
+      "view_file",
+      "list_dir",
+      "grep_search"
+    ],
+    "subagentsInvoked": [],
+    "permissionMode": "always-proceed",
+    "sandboxEnabled": false,
+    "tokenUsage": {
+      "inputTokens": 1792100,
+      "outputTokens": 98400,
+      "thinkingTokens": 79100,
+      "cacheReadTokens": 4980000,
+      "totalTokens": 1890500
+    },
+    "durationSeconds": 1485.6
+  }
+}

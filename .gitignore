@@ -13,6 +13,7 @@ reports/*
 !evals/live-runs/safe-baseline/
 !evals/live-runs/holdout-paired/
 !evals/live-runs/reasoning-ablation/
+!evals/live-runs/cross-provider/
 codeql-db/
 .semgrep/
 coverage/
@@ -24,3 +25,4 @@ coverage/
 Thumbs.db
 !reports/runtime-canary-report-2026-09-22.md
 !reports/oss-transfer-benchmark-report-2026-09-22.md
+!reports/cross-provider-replication-report-2026-09-22.md
