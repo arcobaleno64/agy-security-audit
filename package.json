@@ -49,7 +49,8 @@
     "benchmark:live:safe:baseline": "node scripts/run-live-model-benchmark.mjs --safe-only --passes 3 --out-dir evals/live-runs/safe-baseline --resume --delay-ms 2000",
     "benchmark:live:safe:n10": "node scripts/run-live-model-benchmark.mjs --safe-only --passes 10 --out-dir evals/live-runs/safe-n10",
     "test:safe-control:mock": "node scripts/run-live-model-benchmark.mjs --safe-only --mock --passes 3",
-    "test:harness": "node scripts/run-live-model-benchmark.mjs --test"
+    "test:harness": "node scripts/run-live-model-benchmark.mjs --test",
+    "benchmark:canary": "node scripts/run-runtime-canary.mjs"
   },
   "keywords": [
     "antigravity",
