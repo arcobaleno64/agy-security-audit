@@ -51,7 +51,8 @@
     "test:safe-control:mock": "node scripts/run-live-model-benchmark.mjs --safe-only --mock --passes 3",
     "test:harness": "node scripts/run-live-model-benchmark.mjs --test",
     "benchmark:canary": "node scripts/run-runtime-canary.mjs",
-    "benchmark:oss": "node scripts/run-oss-transfer-eval.mjs"
+    "benchmark:oss": "node scripts/run-oss-transfer-eval.mjs",
+    "compare:cross-provider": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/holdout-paired --runs-b evals/live-runs/cross-provider/claude --protocol evals/protocols/v1.5-cross-model-protocol.json --report reports/cross-provider-replication-report-2026-09-22.md"
   },
   "keywords": [
     "antigravity",

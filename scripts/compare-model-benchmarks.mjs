@@ -627,16 +627,14 @@ export function dispositionConsensusLineage(cand, groundTruthMap = null) {
     const isDisputed = Boolean(
       matchedGt?.disputed ||
       matchedGt?.oracleStatus === 'DISPUTED_INVALIDATED' ||
-      matchedGt?.expectedVerdict === 'DISPUTED' ||
-      matchedGt?.id === 'HLD-08-SAFE' ||
-      String(fixtureId).toUpperCase() === 'HLD-08-SAFE'
+      matchedGt?.expectedVerdict === 'DISPUTED'
     );
     if (isDisputed) {
       return {
         disposition: 'GROUND_TRUTH_DISPUTE',
-        groundTruthId: matchedGt?.id || fixtureId || 'HLD-08-SAFE',
+        groundTruthId: matchedGt?.id || fixtureId || 'DISPUTED_FIXTURE',
         expectedVerdict: matchedGt?.originalVerdict || 'SAFE',
-        disputeReason: matchedGt?.disputeMetadata?.reason || `Verified benchmark oracle flaw on fixture '${matchedGt?.id || fixtureId || 'HLD-08-SAFE'}': contains unpinned DNS lookup followed by http.get (CWE-918 SSRF / DNS rebinding TOCTOU).`,
+        disputeReason: matchedGt?.disputeMetadata?.reason || `Verified benchmark oracle flaw on fixture '${matchedGt?.id || fixtureId || 'UNKNOWN'}': invalidated in benchmark ground-truth.`,
         reason: `Evidence-backed candidate on safe control fixture '${matchedGt?.id || uri}' identifies an authentic benchmark oracle defect (GROUND_TRUTH_DISPUTE).`
       };
     }
@@ -787,7 +785,7 @@ export function computeConsensusLineages(runsA, runsB, groundTruth = null, optio
     consensusCount: consensusList.length,
     level2ConsensusList,
     level2ConsensusCount: level2ConsensusList.length,
-    disputedFixtures: Array.from(gtMap.values()).filter(g => g.oracleStatus === 'DISPUTED_INVALIDATED' || g.disputed || g.id === 'HLD-08-SAFE').map(g => g.id),
+    disputedFixtures: Array.from(new Set(Array.from(gtMap.values()).filter(g => g.oracleStatus === 'DISPUTED_INVALIDATED' || g.disputed || g.expectedVerdict === 'DISPUTED').map(g => g.id))),
     dispositionSummary: {
       replicatedTruePositives: tpCount,
       replicatedFalsePositives: fpCount,
@@ -830,7 +828,7 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
           }
           completedSafe++;
           const gt = groundTruthMap.get(r.fixtureId);
-          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || r.fixtureId === 'HLD-08-SAFE');
+          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || gt?.expectedVerdict === 'DISPUTED');
           if (isDisputed) disputedCompletedSafe++;
           else genuineCompletedSafe++;
         }
@@ -845,8 +843,16 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
         const uri = String(c.location?.uri || c.uri || '').replace(/\\/g, '/').toLowerCase();
         if (uri.includes('/safe/') || uri.includes('-safe')) {
           const fid = extractFixtureIdFromUri(uri) || '';
-          const gt = groundTruthMap.get(fid);
-          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || uri.includes('08-ssrf') || uri.includes('hld-08'));
+          let gt = groundTruthMap.get(fid);
+          if (!gt) {
+            for (const [, candidateGt] of groundTruthMap.entries()) {
+              if (candidateGt.file && uri.includes(candidateGt.file)) {
+                gt = candidateGt;
+                break;
+              }
+            }
+          }
+          const isDisputed = Boolean(gt?.oracleStatus === 'DISPUTED_INVALIDATED' || gt?.disputed || gt?.expectedVerdict === 'DISPUTED');
           if (isDisputed) {
             disputeCount++;
           } else {
@@ -866,7 +872,7 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
       disputeCount,
       totalFindingsOnSafe: safeCands.length,
       neutralOutcome: `${fpCountGenuine} observed false-positive exposures across ${genuineCompletedSafe} completed genuinely-safe exposures`,
-      disputeOutcome: `${disputeCount} candidate detections across ${disputedCompletedSafe} completed exposures of disputed fixture HLD-08-SAFE`
+      disputeOutcome: `${disputeCount} candidate detections across ${disputedCompletedSafe} completed exposures of disputed fixture(s)`
     };
   }
 
@@ -1121,7 +1127,7 @@ export function computeComparativeEfficiency(runsA, runsB, consensus = null, opt
  * Renders a publication-grade Markdown comparative validation report.
  */
 export function renderComparativeReport(comparisonData, options = {}) {
-  const { classification, consensus, specificity, protocol } = comparisonData;
+  const { classification, consensus, specificity, protocol, groundTruthMap } = comparisonData;
   const eff = comparisonData.efficiency || null;
   const taxA = classification.taxonomyA;
   const taxB = classification.taxonomyB;
@@ -1205,7 +1211,7 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `Strict recurrence threshold: $\\lceil 0.60 \\times N \\rceil$ ($N_A=${l1.passesA} \\implies \\ge ${l1.requiredCountA}$, $N_B=${l1.passesB} \\implies \\ge ${l1.requiredCountB}$).\n\n`;
 
   // Clean oracle subset for Level 2 (excluding disputed oracles)
-  const disputedFixtures = consensus?.disputedFixtures || ['HLD-08-SAFE'];
+  const disputedFixtures = consensus?.disputedFixtures || [];
   const isCleanL2 = (k) => {
     const fixId = k.split(':')[0];
     return !disputedFixtures.includes(fixId);
@@ -1311,12 +1317,27 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `> - Configuration A: ${specificity.neutralOutcomeA || '0 observed false-positive exposures across genuine safe controls'}.\n`;
   md += `> - Configuration B: ${specificity.neutralOutcomeB || '0 observed false-positive exposures across genuine safe controls'}.\n\n`;
 
-  md += `### ${safeSectionNum}.2 Benchmark Oracle Defect Disclosure (\`HLD-08-SAFE\`)\n\n`;
-  md += `Investigation into the candidate detections on \`evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js\` revealed a defect in the benchmark oracle itself:\n\n`;
-  md += `| Disputed Fixture | Ground Truth Label | Actual Code Property | Configuration A Detections | Configuration B Detections | Final Classification |\n`;
-  md += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
-  md += `| \`HLD-08-SAFE\` | \`SAFE\` (Defective Oracle) | Vulnerable to DNS TOCTOU / Rebinding SSRF | 0 / 3 (Missed flaw) | 2 / 2 (Detected SSRF) | **GROUND_TRUTH_DISPUTE** |\n\n`;
-  md += `**Flaw Mechanism**: In \`08-ssrf-dns-rebinding.js\`, \`dns.lookup()\` validates the resolved IP of the input hostname, but the subsequent \`http.get(targetUrl)\` call triggers a secondary, unpinned DNS resolution. A DNS server configured with TTL=0 returning a public IP on the first resolution and \`127.0.0.1\` on the second resolution bypasses the validation. Configuration B (Medium) accurately identified this authentic vulnerability in 2 out of 2 completed exposures. The prior conclusion asserting that Medium exhibits lower specificity is **formally retracted**.\n\n`;
+  if (disputedFixtures.length > 0) {
+    const fixtureListStr = disputedFixtures.map(f => `\`${f}\``).join(', ');
+    md += `### ${safeSectionNum}.2 Benchmark Oracle Defect Disclosure (${fixtureListStr})\n\n`;
+    md += `Investigation into candidate detections revealed defective benchmark oracle(s) within the safe control corpus:\n\n`;
+    md += `| Disputed Fixture | Ground Truth Label | Actual Code Property | Disputed Detections (A) | Disputed Detections (B) | Final Classification |\n`;
+    md += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+    for (const fixId of disputedFixtures) {
+      const gt = groundTruthMap?.get(fixId);
+      const actualProp = gt?.disputeMetadata?.actualVulnerability || gt?.disputeMetadata?.reason || 'Authentic security defect in benchmark safe baseline';
+      const origVerdict = gt?.originalVerdict || 'SAFE';
+      md += `| \`${fixId}\` | \`${origVerdict}\` (Defective Oracle) | ${actualProp} | ${specificity.disputeCountA} | ${specificity.disputeCountB} | **GROUND_TRUTH_DISPUTE** |\n`;
+    }
+    md += `\n`;
+    for (const fixId of disputedFixtures) {
+      const gt = groundTruthMap?.get(fixId);
+      const file = gt?.file || fixId;
+      const reason = gt?.disputeMetadata?.reason || 'Verified benchmark oracle defect: safe control contains an authentic vulnerability.';
+      const adjudication = gt?.disputeMetadata?.adjudication ? ` **Adjudication**: ${gt.disputeMetadata.adjudication}.` : '';
+      md += `**Flaw Mechanism (\`${fixId}\` in \`${file}\`)**: ${reason}${adjudication}\n\n`;
+    }
+  }
 
   // Divergent Lineages
   const divSectionNum = eff ? 7 : 6;
@@ -1371,6 +1392,7 @@ export function compareModelBenchmarks(runsA, runsB, options = {}) {
     repoRoot
   });
 
+  const groundTruthMap = loadGroundTruth(groundTruthPath, repoRoot);
   const report = renderComparativeReport({
     classification,
     consensus,
@@ -1378,7 +1400,8 @@ export function compareModelBenchmarks(runsA, runsB, options = {}) {
     efficiency,
     protocol,
     auditA,
-    auditB
+    auditB,
+    groundTruthMap
   }, options);
 
   return {
@@ -1646,7 +1669,18 @@ function runSelfTests(repoRoot = DEFAULT_REPO_ROOT) {
   // Test 5: Consensus Lineage Dispositions
   const mockGt = new Map([
     ['HLD-01', { id: 'HLD-01', cwe: 'CWE-1336', expectedVerdict: 'VULNERABLE' }],
-    ['HLD-01-SAFE', { id: 'HLD-01-SAFE', cwe: 'CWE-1336', expectedVerdict: 'SAFE' }]
+    ['HLD-01-SAFE', { id: 'HLD-01-SAFE', cwe: 'CWE-1336', expectedVerdict: 'SAFE' }],
+    ['HLD-08-SAFE', {
+      id: 'HLD-08-SAFE',
+      cwe: 'CWE-918',
+      file: 'evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js',
+      expectedVerdict: 'DISPUTED',
+      oracleStatus: 'DISPUTED_INVALIDATED',
+      originalVerdict: 'SAFE',
+      disputeMetadata: {
+        reason: 'Verified benchmark oracle defect: unpinned DNS lookup followed by http.get (CWE-918 SSRF / DNS rebinding TOCTOU).'
+      }
+    }]
   ]);
 
   const tpCand = {
@@ -1687,7 +1721,7 @@ function runSelfTests(repoRoot = DEFAULT_REPO_ROOT) {
   };
   const disputeDisp = dispositionConsensusLineage(disputeCand, mockGt);
   if (disputeDisp.disposition !== 'GROUND_TRUTH_DISPUTE') {
-    throw new Error(`Self-test 5 failed: expected GROUND_TRUTH_DISPUTE for HLD-08-SAFE, got ${disputeDisp.disposition}`);
+    throw new Error(`Self-test 5 failed: expected GROUND_TRUTH_DISPUTE for disputed fixture, got ${disputeDisp.disposition}`);
   }
   console.log('  ✔ Test 5: Consensus lineage dispositions (TP, FP, GROUND_TRUTH_DISPUTE, UNRESOLVED) correctly classified.');
 
