@@ -22,9 +22,22 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { isRealPathContained, isPathContained } from '../skills/security-audit/scripts/path-containment.mjs';
 
-const SUPPORTED_TOOLS = new Set(['view_file', 'grep_search', 'list_dir', 'find_by_name']);
+export const READ_TOOLS = new Set(['view_file', 'grep_search', 'list_dir', 'find_by_name']);
+export const NETWORK_TOOLS = new Set(['search_web', 'read_url_content', 'read_browser_page', 'call_mcp_tool']);
+export const WRITE_TOOLS = new Set(['write_to_file', 'replace_file_content']);
+export const SUBAGENT_TOOLS = new Set(['invoke_subagent']);
+export const COMMAND_TOOLS = new Set(['run_command']);
+
+export const SUPPORTED_TOOLS = new Set([
+  ...READ_TOOLS,
+  ...NETWORK_TOOLS,
+  ...WRITE_TOOLS,
+  ...SUBAGENT_TOOLS,
+  ...COMMAND_TOOLS
+]);
 
 // Emits result with strict LF line ending, avoiding CRLF conversion issues on Windows
 function emit(obj) {
@@ -43,6 +56,9 @@ export function extractTargetParam(toolName, args) {
       return typeof args.DirectoryPath === 'string' ? args.DirectoryPath : null;
     case 'find_by_name':
       return typeof args.SearchDirectory === 'string' ? args.SearchDirectory : null;
+    case 'write_to_file':
+    case 'replace_file_content':
+      return typeof args.TargetFile === 'string' ? args.TargetFile : (typeof args.targetFile === 'string' ? args.targetFile : null);
     default:
       return null;
   }
@@ -186,6 +202,101 @@ async function main() {
     return emit({ decision: 'allow' });
   }
 
+  const { contextRoot, repoRoot } = contextInfo;
+
+  // ---------------------------------------------------------------------------
+  // Control 3: DENY_NETWORK_EXFILTRATION (Network Tools & Shell Egress)
+  // ---------------------------------------------------------------------------
+  if (NETWORK_TOOLS.has(toolName)) {
+    recordTelemetry(contextInfo, payload, toolName, '', 'deny', 'DENIED_NETWORK_TOOL', `Outbound network tool '${toolName}' is blocked during headless security audit (G6 DENY_NETWORK_EXFILTRATION).`);
+    return emit({
+      decision: 'deny',
+      reason: `[NETWORK_CONFINEMENT_ENFORCEMENT] Outbound network tool '${toolName}' is blocked during headless security audit (G6 DENY_NETWORK_EXFILTRATION).`
+    });
+  }
+
+  if (COMMAND_TOOLS.has(toolName)) {
+    const cmdLine = payload?.toolCall?.args?.CommandLine || '';
+    const NETWORK_EGRESS_REGEX = /\b(curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|nc|ncat|netcat|telnet|ssh|scp|ftp|sftp)\b/i;
+    if (NETWORK_EGRESS_REGEX.test(cmdLine)) {
+      const match = cmdLine.match(NETWORK_EGRESS_REGEX);
+      const matchedBinary = match ? match[1] : 'network_egress';
+      recordTelemetry(contextInfo, payload, toolName, cmdLine, 'deny', 'DENIED_NETWORK_CMD', `Shell command blocked: prohibited outbound network egress via '${matchedBinary}' (G6 DENY_NETWORK_EXFILTRATION).`);
+      return emit({
+        decision: 'deny',
+        reason: `[NETWORK_CONFINEMENT_ENFORCEMENT] Shell command blocked: prohibited outbound network egress via '${matchedBinary}' (G6 DENY_NETWORK_EXFILTRATION).`
+      });
+    }
+    return emit({ decision: 'allow' });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Control 5: DENY_SUBAGENT_RECURSION (Subagent Spawning & Depth Limits)
+  // ---------------------------------------------------------------------------
+  if (SUBAGENT_TOOLS.has(toolName)) {
+    const subagentDepth = typeof payload?.subagentDepth === 'number'
+      ? payload.subagentDepth
+      : (payload?.isSubagent || (payload?.agentRole && payload?.agentRole !== 'coordinator') ? 1 : 0);
+
+    if (subagentDepth >= 1) {
+      recordTelemetry(contextInfo, payload, toolName, '', 'deny', 'DENIED_RECURSION', `Recursive subagent invocation blocked: depth ${subagentDepth} exceeds allowable quorum depth (G6 DENY_SUBAGENT_RECURSION).`);
+      return emit({
+        decision: 'deny',
+        reason: `[SUBAGENT_CONFINEMENT_ENFORCEMENT] Subagent recursion rejected: subagents cannot recursively spawn further subagents (quorum depth limit: 1).`
+      });
+    }
+
+    const subagentsList = payload?.toolCall?.args?.Subagents || [];
+    if (Array.isArray(subagentsList) && subagentsList.length > 5) {
+      recordTelemetry(contextInfo, payload, toolName, '', 'deny', 'DENIED_RECURSION', `Subagent invocation blocked: batch size ${subagentsList.length} exceeds maximum concurrent quorum quota (5).`);
+      return emit({
+        decision: 'deny',
+        reason: `[SUBAGENT_CONFINEMENT_ENFORCEMENT] Subagent invocation blocked: batch size ${subagentsList.length} exceeds maximum concurrent quorum quota (5).`
+      });
+    }
+
+    recordTelemetry(contextInfo, payload, toolName, '', 'allow', 'ALLOWED_COORDINATOR_SPAWN', 'Coordinator subagent invocation permitted within quorum quota.');
+    return emit({ decision: 'allow' });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Control 4: DENY_ARBITRARY_FS_WRITE (Filesystem Mutation Sandbox Boundary)
+  // ---------------------------------------------------------------------------
+  if (WRITE_TOOLS.has(toolName)) {
+    if (!targetPathArg || typeof targetPathArg !== 'string' || !targetPathArg.trim()) {
+      recordTelemetry(contextInfo, payload, toolName, '', 'deny', 'DENIED_MALFORMED', `Write tool '${toolName}' rejected: missing TargetFile argument.`);
+      return emit({
+        decision: 'deny',
+        reason: `[FILESYSTEM_CONFINEMENT_ENFORCEMENT] Write tool '${toolName}' rejected: missing TargetFile argument.`
+      });
+    }
+
+    const resolvedTarget = path.resolve(targetPathArg);
+    const scratchDir = path.resolve(repoRoot, 'scratch');
+    const artifactDir = payload?.artifactDirectoryPath ? path.resolve(payload.artifactDirectoryPath) : null;
+    const tmpDir = os.tmpdir() ? path.resolve(os.tmpdir()) : null;
+
+    const isInsideScratch = isRealPathContained(scratchDir, resolvedTarget) || isPathContained(scratchDir, resolvedTarget);
+    const isInsideArtifact = artifactDir && (isRealPathContained(artifactDir, resolvedTarget) || isPathContained(artifactDir, resolvedTarget));
+    const isInsideRepo = isRealPathContained(repoRoot, resolvedTarget) || isPathContained(repoRoot, resolvedTarget);
+    const isInsideTmp = !isInsideRepo && tmpDir && (isRealPathContained(tmpDir, resolvedTarget) || isPathContained(tmpDir, resolvedTarget));
+
+    if (isInsideScratch || isInsideArtifact || isInsideTmp) {
+      recordTelemetry(contextInfo, payload, toolName, resolvedTarget, 'allow', 'ALLOWED_SANDBOX_WRITE', 'Filesystem write within authorized sandbox boundary permitted.');
+      return emit({ decision: 'allow' });
+    }
+
+    const rel = path.relative(repoRoot, resolvedTarget).replace(/\\/g, '/');
+    recordTelemetry(contextInfo, payload, toolName, resolvedTarget, 'deny', 'DENIED_FS_WRITE', `Filesystem write to '${rel}' blocked: mutations outside authorized sandbox boundary are prohibited (G6 DENY_ARBITRARY_FS_WRITE).`);
+    return emit({
+      decision: 'deny',
+      reason: `[FILESYSTEM_CONFINEMENT_ENFORCEMENT] Filesystem write to '${rel}' is blocked. Mutations outside authorized sandbox boundary ('scratch/') are prohibited during security audit.`
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Control 1 & 2: ALLOW_SHADOW_READ & DENY_RAW_REPO_READ (Filesystem Reads)
+  // ---------------------------------------------------------------------------
   // Active shadow context is present! Strict Fail-Closed enforcement applies.
   if (!targetPathArg || typeof targetPathArg !== 'string' || !targetPathArg.trim()) {
     recordTelemetry(contextInfo, payload, toolName, '', 'deny', 'DENIED_MALFORMED', 'Tool call rejected: missing required path argument.');
@@ -196,7 +307,6 @@ async function main() {
   }
 
   const resolvedTarget = path.resolve(targetPathArg);
-  const { contextRoot, repoRoot } = contextInfo;
 
   // 1. If path is already inside contextRoot, allow sanitized inspection
   if (isRealPathContained(contextRoot, resolvedTarget) || isPathContained(contextRoot, resolvedTarget)) {

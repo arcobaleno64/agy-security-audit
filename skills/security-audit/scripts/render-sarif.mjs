@@ -1531,7 +1531,7 @@ export function runTests() {
     const cleanExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-audit-zip-clean-'));
     try {
       // Copy project files (excluding .git) to simulate freshly extracted zip archive
-      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'hooks.json', 'hooks', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit', 'recommended-security-audit-permissions.json'];
+      const copyItems = ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'plugin.json', 'hooks.json', 'hooks', 'rules', 'agents', 'skills', 'evals', 'schemas', '.security-audit', 'recommended-security-audit-permissions.json', 'scripts'];
       for (const item of copyItems) {
         const srcPath = path.resolve(process.cwd(), item);
         if (fs.existsSync(srcPath)) {
@@ -5794,7 +5794,104 @@ export default appName;`;
 
   console.log('✔ 120. P0 Invariant: AGY Custom-Agent Contract Conformance & Native Frontmatter Validation.');
 
-  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (120/120).');
+  // ---------------------------------------------------------------------------
+  // 121. P0 Invariant: G6 Dual-Control Runtime Confinement Matrix & Subprocess Calling Contract Verification
+  // ---------------------------------------------------------------------------
+  const runMatrixScript121 = path.resolve(process.cwd(), 'scripts/run-confinement-matrix.mjs');
+  const testConfinementScript121 = path.resolve(process.cwd(), 'scripts/test-runtime-confinement.mjs');
+  const hooksConfigPath121 = path.resolve(process.cwd(), 'hooks.json');
+  const guardHookPath121 = path.resolve(process.cwd(), 'hooks/shadow-context-guard.mjs');
+
+  if (!fs.existsSync(runMatrixScript121)) {
+    throw new Error('P0-121 VIOLATION: scripts/run-confinement-matrix.mjs does not exist');
+  }
+  if (!fs.existsSync(testConfinementScript121)) {
+    throw new Error('P0-121 VIOLATION: scripts/test-runtime-confinement.mjs does not exist');
+  }
+  if (!fs.existsSync(hooksConfigPath121)) {
+    throw new Error('P0-121 VIOLATION: hooks.json does not exist');
+  }
+  if (!fs.existsSync(guardHookPath121)) {
+    throw new Error('P0-121 VIOLATION: hooks/shadow-context-guard.mjs does not exist');
+  }
+
+  // 1. Verify hooks.json configures PreToolUse hook covering all 5 control surfaces
+  const hooksRaw121 = fs.readFileSync(hooksConfigPath121, 'utf8');
+  const hooksConfig121 = JSON.parse(hooksRaw121);
+  const guardGroup121 = hooksConfig121['shadow-context-guard'];
+  const preToolHooks121 = guardGroup121?.PreToolUse;
+  if (!Array.isArray(preToolHooks121) || preToolHooks121.length === 0) {
+    throw new Error('P0-121 VIOLATION: hooks.json does not define any PreToolUse hooks');
+  }
+  const preToolEntry121 = preToolHooks121[0];
+  const matcherPattern121 = preToolEntry121.matcher || '';
+  const command121 = preToolEntry121.hooks?.[0]?.command || '';
+  if (!command121.includes('shadow-context-guard.mjs')) {
+    throw new Error('P0-121 VIOLATION: hooks.json missing shadow-context-guard.mjs in command');
+  }
+  const requiredMatcherTools121 = [
+    'view_file', 'grep_search', 'list_dir', 'find_by_name',
+    'search_web', 'read_url_content', 'read_browser_page', 'call_mcp_tool',
+    'write_to_file', 'replace_file_content', 'invoke_subagent', 'run_command'
+  ];
+  for (const tool of requiredMatcherTools121) {
+    if (!matcherPattern121.includes(tool)) {
+      throw new Error(`P0-121 VIOLATION: hooks.json matcher missing tool '${tool}'`);
+    }
+  }
+
+  // 2. Dynamic check of hooks/shadow-context-guard.mjs tool categories
+  const guardCode121 = fs.readFileSync(guardHookPath121, 'utf8');
+  const requiredExports121 = ['READ_TOOLS', 'NETWORK_TOOLS', 'WRITE_TOOLS', 'SUBAGENT_TOOLS', 'COMMAND_TOOLS', 'SUPPORTED_TOOLS'];
+  for (const exp of requiredExports121) {
+    if (!guardCode121.includes(`export const ${exp}`)) {
+      throw new Error(`P0-121 VIOLATION: hooks/shadow-context-guard.mjs does not export ${exp}`);
+    }
+  }
+
+  // 3. Execute scripts/test-runtime-confinement.mjs
+  try {
+    const testOutput121 = execFileSync(process.execPath, [testConfinementScript121], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    if (!testOutput121.includes('All Milestone G6 Runtime Confinement Matrix tests passed successfully.')) {
+      throw new Error('P0-121 VIOLATION: test-runtime-confinement did not report complete success');
+    }
+  } catch (err) {
+    throw new Error(`P0-121 VIOLATION: scripts/test-runtime-confinement.mjs execution failed: ${err.message}`);
+  }
+
+  // 4. Execute scripts/run-confinement-matrix.mjs --test
+  try {
+    const matrixOutput121 = execFileSync(process.execPath, [runMatrixScript121, '--test'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    const expectedControls121 = [
+      'ALLOW_SHADOW_READ',
+      'DENY_RAW_REPO_READ',
+      'DENY_NETWORK_EXFILTRATION',
+      'DENY_ARBITRARY_FS_WRITE',
+      'DENY_SUBAGENT_RECURSION'
+    ];
+    for (const ctrl of expectedControls121) {
+      if (!matrixOutput121.includes(ctrl)) {
+        throw new Error(`P0-121 VIOLATION: run-confinement-matrix output missing control ${ctrl}`);
+      }
+    }
+    if (!matrixOutput121.includes('All 5 G6 confinement controls passed self-test.')) {
+      throw new Error('P0-121 VIOLATION: run-confinement-matrix did not report 5/5 controls passed self-test');
+    }
+  } catch (err) {
+    throw new Error(`P0-121 VIOLATION: scripts/run-confinement-matrix.mjs --test execution failed: ${err.message}`);
+  }
+
+  console.log('✔ 121. P0 Invariant: G6 Dual-Control Runtime Confinement Matrix & Subprocess Calling Contract Verification.');
+
+  console.log('\nAll render-sarif.mjs automated verification tests passed successfully (121/121).');
 
   } finally {
     gitFixture.cleanup();
