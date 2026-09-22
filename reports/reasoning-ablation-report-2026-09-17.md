@@ -1,3 +1,11 @@
+> [!WARNING] **SUPERSEDED REPORT -- DO NOT CITE AS PRIMARY EVIDENCE**
+> This report has been formally superseded by [`reports/reasoning-ablation-report-2026-09-17-corrected.md`](./reasoning-ablation-report-2026-09-17-corrected.md) under Milestone G5-CR1.
+> **Correction Rationale**:
+> 1. **Censoring Rectification**: Unexposed fixtures (16 in High, 9 in Medium) due to timeouts/schema violations were inappropriately conflated with negative findings.
+> 2. **Benchmark Oracle Flaw Retraction**: `HLD-08-SAFE` contains an authentic DNS rebinding SSRF flaw detected by Medium (TP); the prior conclusion that Medium exhibits lower specificity is **retracted**.
+> 3. **Level-2 Key Normalization**: Freeform text hashing was de-fuzzed to canonical CWE mapping, raising recurrent semantic consensus from 5 to 9 shared vulnerability families (90.0% clean oracle Jaccard).
+> 4. **Paired Efficiency Calibration**: Paired 37 mutually completed exposures demonstrate 24.5% total token and 45.1% thinking token savings with 21.4s faster median latency.
+
 # Cross-Model & Ablation Comparative Validation Report
 
 **Generated**: `2026-09-22T02:27:53.838Z`  
