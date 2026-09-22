@@ -909,6 +909,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     lastResult = {
       fixtureId: fixture.id,
       file: fixture.file,
+      modelId,
       durationMs,
       candidates,
       rawOutput: stdout,
@@ -1333,9 +1334,13 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
   console.log('================================================================\n');
 
   const isResume = Boolean(options.resume);
+  const outDirRel = outDir ? path.relative(repoRoot, outDir).replace(/\\/g, '/').replace(/^\.\//, '') : '';
+  const outDirSlug = outDirRel.replace(/[^a-zA-Z0-9_-]/g, '_');
   const defaultCheckpointsDir = options.mock
     ? 'scratch/mock-benchmark/checkpoints'
-    : 'scratch/live-benchmark/checkpoints';
+    : (outDirSlug
+        ? path.join('scratch/live-benchmark/checkpoints', outDirSlug)
+        : 'scratch/live-benchmark/checkpoints');
   const checkpointsBaseDir = options.checkpointsDir
     ? path.resolve(repoRoot, options.checkpointsDir)
     : path.resolve(repoRoot, defaultCheckpointsDir);
@@ -1416,7 +1421,9 @@ export function runLiveModelBenchmark(repoRoot = DEFAULT_REPO_ROOT, options = {}
           const isMockCheckpoint = parsedCheckpoint?.executionTelemetry?.format === 'SIMULATED_MOCK';
           const formatCompatible = options.mock ? isMockCheckpoint : !isMockCheckpoint;
 
-          if (parsedCheckpoint && parsedCheckpoint.fixtureId === fix.id && Array.isArray(parsedCheckpoint.candidates) && formatCompatible) {
+          if (parsedCheckpoint?.modelId && modelId && parsedCheckpoint.modelId !== modelId) {
+            console.warn(`  ⚠ Checkpoint for [${fix.id}] was produced by model '${parsedCheckpoint.modelId}', but current run expects '${modelId}'. Discarding cross-model checkpoint.`);
+          } else if (parsedCheckpoint && parsedCheckpoint.fixtureId === fix.id && Array.isArray(parsedCheckpoint.candidates) && formatCompatible) {
             const candVal = validateCandidateSet({ candidates: parsedCheckpoint.candidates });
             if (candVal.valid) {
               res = parsedCheckpoint;

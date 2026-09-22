@@ -112,6 +112,11 @@ function runSuite() {
   const runEnvelopeSelf = { runId: 'run-identical-001', environment: { modelId: 'gemini-3.8-flash-high' } };
   const t0b = classifyComparisonExperiment(runEnvelopeSelf, runEnvelopeSelf);
   assert(t0b.tier === 0 && t0b.name === 'IDENTITY_CONTROL' && t0b.publishable === false, 'Matching runId must classify as IDENTITY_CONTROL');
+
+  const runPassHigh = { runId: 'run-pass-1', environment: { modelId: 'gemini-3.8-flash-high', reasoningProfile: 'high', baseModel: 'gemini-3.8-flash', identitySource: 'CONFIG_DECLARED' } };
+  const runPassMed = { runId: 'run-pass-1', environment: { modelId: 'gemini-3.8-flash-medium', reasoningProfile: 'medium', baseModel: 'gemini-3.8-flash', identitySource: 'CONFIG_DECLARED' } };
+  const t1SameRunId = classifyComparisonExperiment(runPassHigh, runPassMed);
+  assert(t1SameRunId.tier === 1 && t1SameRunId.name === 'REASONING_PROFILE_ABLATION' && t1SameRunId.publishable === true, 'Matching pass runId across different reasoning profiles must classify as Tier 1 REASONING_PROFILE_ABLATION');
   console.log('  ✔ 1.5 Verification Control: IDENTITY_CONTROL strictly marked non-publishable.');
 
   // 1.6 Default-Deny Authority Invariant: PARSED_INFERRED cannot establish Tier 2/3/4 independence
