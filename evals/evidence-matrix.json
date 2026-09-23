@@ -3,7 +3,7 @@
   "schemaVersion": "1.0.0",
   "generatedAt": "2026-09-22T15:11:01.485Z",
   "targetSystem": "@arcobaleno64/agy-security-audit",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "governance": {
     "standard": "NIST SSDF (SP 800-218) / Default-Deny Authority Invariant",
     "covenant": "Section 21 Holdout Covenant & v1.6.1 Evidence Integrity Correction",
@@ -30,12 +30,12 @@
         },
         {
           "path": "skills/security-audit/scripts/check-release-invariants.mjs",
-          "sha256": "925137f6f74e4b01e458b28cd3544f543ecf7aa9a93c9558a5dfe1836e8bd9c9",
+          "sha256": "d9880ab1e3f51b87d2ae0859c40f32e06dfa9285466967196ac1e946ce57df7d",
           "description": "Release Invariants Gate specification checker (60 specs, 40 security invariants)"
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "59938375781ee7a43456f113a1abe76a54ba58cbde48c8502dc9f40a6131c649",
+          "sha256": "9186fde9ede8bad53ecc00b0f7781fab8bf244be9ff2df768537d4541217b54c",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {
@@ -47,6 +47,11 @@
           "path": "reports/runtime-confinement-report-2026-09-22.md",
           "sha256": "9619e5e4bca4d63ace312c89d4013d089ecb51ade651259ee56e33a91f1c0caf",
           "description": "Dual-Control Runtime Confinement Matrix Report (Milestone G6)"
+        },
+        {
+          "path": "schemas/evidence-matrix.schema.json",
+          "sha256": "16e44a97ad155fd63bc679100adb367bb6ec3653ad557a5dd861c863ff806c9d",
+          "description": "Draft-07 JSON Schema defining the authoritative evidence matrix specification"
         }
       ]
     },

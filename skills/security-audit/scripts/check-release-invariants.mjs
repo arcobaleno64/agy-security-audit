@@ -139,7 +139,9 @@ const REQUIRED_FILES = [
   'agents/verifier-impact.md',
   'agents/security-audit-coordinator.md',
   'recommended-security-audit-permissions.json',
-  'schemas/permissions-profile.schema.json'
+  'schemas/permissions-profile.schema.json',
+  'schemas/evidence-matrix.schema.json',
+  'evals/evidence-matrix.json'
 ];
 
 /**
@@ -297,6 +299,25 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   } else if (!process.env.IS_ZIP_CLEAN_SUBTEST) {
     if (!fs.existsSync(compareScriptPath)) errors.push('Missing comparator engine: scripts/compare-model-benchmarks.mjs');
     if (!fs.existsSync(crossModelProtoPath)) errors.push('Missing cross-model protocol: evals/protocols/v1.5-cross-model-protocol.json');
+  }
+
+  // 3.7 Check Evidence Matrix Schema & Integrity Gate Regression Suite (Milestone v1.6.2)
+  const matrixGateScriptPath = path.resolve(repoRoot, 'scripts/test-evidence-matrix-gate.mjs');
+  if (fs.existsSync(matrixGateScriptPath)) {
+    try {
+      const stdout = execFileSync(process.execPath, [matrixGateScriptPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      if (!stdout.includes('All evidence matrix gate regression tests passed cleanly')) {
+        errors.push('Evidence Matrix Gate Test Suite did not output clean pass signature');
+      }
+    } catch (err) {
+      errors.push(`Evidence Matrix Gate Test Suite failed: ${err.message}\n${err.stderr || ''}`);
+    }
+  } else if (!process.env.IS_ZIP_CLEAN_SUBTEST) {
+    errors.push('Missing evidence matrix gate test script: scripts/test-evidence-matrix-gate.mjs');
   }
 
   // 4. Validate Plugin Custom Agents Capability & Tool Invariants (P0-04)

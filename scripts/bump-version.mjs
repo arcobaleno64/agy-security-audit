@@ -26,6 +26,10 @@ const JSON_TARGETS = [
   {
     file: "recommended-security-audit-permissions.json",
     values: [{ label: "version", get: (json) => json.version, set: (json, version) => { json.version = version; } }]
+  },
+  {
+    file: "evals/evidence-matrix.json",
+    values: [{ label: "version", get: (json) => json.version, set: (json, version) => { json.version = version; } }]
   }
 ];
 

@@ -87,6 +87,11 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     description: 'Cross-Provider Model Replication Report (Milestone G8)'
   },
   {
+    repoPath: 'schemas/evidence-matrix.schema.json',
+    stagedName: 'evidence-matrix.schema.json',
+    description: 'Draft-07 JSON Schema for Evidence Matrix Artifact'
+  },
+  {
     repoPath: 'evals/evidence-matrix.json',
     stagedName: 'evidence-matrix.json',
     description: 'Authoritative 5-Dimension Evidence Matrix Artifact'
@@ -341,6 +346,162 @@ export function getReleaseArchiveFiles(repoRoot = REPO_ROOT) {
  * @param {string} repoRoot
  * @returns {{ valid: boolean, errors: string[], checkedFiles: string[] }}
  */
+
+/**
+ * Zero-dependency JSON Schema validator supporting Draft-07 subsets required
+ * by evidence-matrix.schema.json ($ref, definitions, type, required, properties,
+ * items, enum, pattern).
+ *
+ * @param {any} data
+ * @param {object} schema
+ * @param {object} rootSchema
+ * @param {string} currentPath
+ * @returns {string[]} List of validation error strings
+ */
+export function validateAgainstSchema(data, schema, rootSchema = schema, currentPath = '') {
+  const errors = [];
+  if (!schema || typeof schema !== 'object') return errors;
+
+  if (schema['$ref']) {
+    const ref = schema['$ref'];
+    if (typeof ref === 'string' && ref.startsWith('#/')) {
+      const parts = ref.slice(2).split('/');
+      let resolved = rootSchema;
+      for (const part of parts) {
+        if (resolved && typeof resolved === 'object' && part in resolved) {
+          resolved = resolved[part];
+        } else {
+          resolved = null;
+          break;
+        }
+      }
+      if (!resolved) {
+        errors.push(`Unresolvable schema reference '${ref}' at ${currentPath || 'root'}`);
+        return errors;
+      }
+      return validateAgainstSchema(data, resolved, rootSchema, currentPath);
+    }
+  }
+
+  if (schema.type) {
+    const p = currentPath || 'root';
+    switch (schema.type) {
+      case 'object':
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+          errors.push(`Expected object at ${p}, found ${data === null ? 'null' : Array.isArray(data) ? 'array' : typeof data}`);
+          return errors;
+        }
+        break;
+      case 'array':
+        if (!Array.isArray(data)) {
+          errors.push(`Expected array at ${p}, found ${typeof data}`);
+          return errors;
+        }
+        break;
+      case 'string':
+        if (typeof data !== 'string') {
+          errors.push(`Expected string at ${p}, found ${typeof data}`);
+          return errors;
+        }
+        break;
+      case 'integer':
+        if (typeof data !== 'number' || !Number.isInteger(data)) {
+          errors.push(`Expected integer at ${p}, found ${typeof data}`);
+          return errors;
+        }
+        break;
+      case 'number':
+        if (typeof data !== 'number' || Number.isNaN(data)) {
+          errors.push(`Expected number at ${p}, found ${typeof data}`);
+          return errors;
+        }
+        break;
+      case 'boolean':
+        if (typeof data !== 'boolean') {
+          errors.push(`Expected boolean at ${p}, found ${typeof data}`);
+          return errors;
+        }
+        break;
+    }
+  }
+
+  if (Array.isArray(schema.enum)) {
+    if (!schema.enum.includes(data)) {
+      const p = currentPath || 'root';
+      errors.push(`Value '${data}' at ${p} is not one of enum [${schema.enum.map(v => JSON.stringify(v)).join(', ')}]`);
+    }
+  }
+
+  if (typeof schema.pattern === 'string' && typeof data === 'string') {
+    const regex = new RegExp(schema.pattern);
+    if (!regex.test(data)) {
+      const p = currentPath || 'root';
+      errors.push(`String '${data}' at ${p} does not match pattern '${schema.pattern}'`);
+    }
+  }
+
+  if (Array.isArray(schema.required) && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    for (const reqProp of schema.required) {
+      if (data[reqProp] === undefined || data[reqProp] === null) {
+        const p = currentPath ? `${currentPath}.${reqProp}` : reqProp;
+        errors.push(`Missing required property: ${p}`);
+      }
+    }
+  }
+
+  if (schema.properties && typeof schema.properties === 'object' && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    for (const [propName, propSchema] of Object.entries(schema.properties)) {
+      if (data[propName] !== undefined) {
+        const subPath = currentPath ? `${currentPath}.${propName}` : propName;
+        const subErrors = validateAgainstSchema(data[propName], propSchema, rootSchema, subPath);
+        errors.push(...subErrors);
+      }
+    }
+  }
+
+  if (schema.items && Array.isArray(data)) {
+    data.forEach((item, index) => {
+      const subPath = `${currentPath || 'root'}[${index}]`;
+      const itemErrors = validateAgainstSchema(item, schema.items, rootSchema, subPath);
+      errors.push(...itemErrors);
+    });
+  }
+
+  return errors;
+}
+
+/**
+ * Validates the evidence matrix artifact against schemas/evidence-matrix.schema.json.
+ * @param {object} matrix
+ * @param {string} repoRoot
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateEvidenceMatrixSchema(matrix, repoRoot = REPO_ROOT) {
+  const schemaPath = path.resolve(repoRoot, 'schemas/evidence-matrix.schema.json');
+  if (!fs.existsSync(schemaPath)) {
+    return {
+      valid: false,
+      errors: [`Evidence matrix schema file missing at ${schemaPath}`]
+    };
+  }
+
+  let schema;
+  try {
+    schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+  } catch (err) {
+    return {
+      valid: false,
+      errors: [`Failed to parse evidence matrix schema: ${err.message}`]
+    };
+  }
+
+  const errors = validateAgainstSchema(matrix, schema, schema);
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
 export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
   const errors = [];
   const checkedFiles = [];
@@ -406,35 +567,35 @@ export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
     }
   }
 
-  // 2.5 Verify authoritative evidence matrix artifact integrity and dimension hashes
+  // 2.5 Verify authoritative evidence matrix artifact integrity, Draft-07 schema compliance, and dimension hashes
   const matrixRelPath = 'evals/evidence-matrix.json';
   const matrixFullPath = path.resolve(repoRoot, matrixRelPath);
-  if (fs.existsSync(matrixFullPath)) {
+  if (!fs.existsSync(matrixFullPath)) {
+    errors.push(`Missing mandatory evidence matrix: ${matrixRelPath}`);
+  } else {
     try {
       const matrix = JSON.parse(fs.readFileSync(matrixFullPath, 'utf8'));
-      const requiredDims = [
-        'DETERMINISTIC_HARNESS',
-        'LIVE_MODEL_EVALUATION',
-        'LIVE_RUNTIME_ENFORCEMENT',
-        'CROSS_PROVIDER_REPLICATION',
-        'EXTERNAL_OSS_TRANSFER'
-      ];
-      for (const dim of requiredDims) {
-        if (!matrix.dimensions || !matrix.dimensions[dim]) {
-          errors.push(`Evidence matrix missing required dimension: ${dim}`);
-        } else {
-          const dimData = matrix.dimensions[dim];
-          if (!Array.isArray(dimData.artifacts) || dimData.artifacts.length === 0) {
-            errors.push(`Evidence matrix dimension ${dim} has no artifacts`);
-          } else {
+      const schemaValidation = validateEvidenceMatrixSchema(matrix, repoRoot);
+      if (!schemaValidation.valid) {
+        for (const err of schemaValidation.errors) {
+          errors.push(`Evidence matrix schema violation: ${err}`);
+        }
+      }
+
+      // Physical artifact existence & hash verification under Fail-Closed Default-Deny
+      if (matrix.dimensions && typeof matrix.dimensions === 'object') {
+        for (const [dim, dimData] of Object.entries(matrix.dimensions)) {
+          if (dimData && Array.isArray(dimData.artifacts)) {
             for (const art of dimData.artifacts) {
-              const artFullPath = path.resolve(repoRoot, art.path);
-              if (!fs.existsSync(artFullPath)) {
-                errors.push(`Evidence matrix artifact missing on disk: ${art.path} in dimension ${dim}`);
-              } else {
-                const actualHash = crypto.createHash('sha256').update(fs.readFileSync(artFullPath)).digest('hex');
-                if (actualHash !== art.sha256) {
-                  errors.push(`Evidence matrix artifact SHA-256 mismatch for ${art.path}: expected ${art.sha256}, actual ${actualHash}`);
+              if (art && typeof art.path === 'string') {
+                const artFullPath = path.resolve(repoRoot, art.path);
+                if (!fs.existsSync(artFullPath)) {
+                  errors.push(`Evidence matrix artifact missing on disk: ${art.path} in dimension ${dim}`);
+                } else {
+                  const actualHash = crypto.createHash('sha256').update(fs.readFileSync(artFullPath)).digest('hex');
+                  if (actualHash !== art.sha256) {
+                    errors.push(`Evidence matrix artifact SHA-256 mismatch for ${art.path}: expected ${art.sha256}, actual ${actualHash}`);
+                  }
                 }
               }
             }

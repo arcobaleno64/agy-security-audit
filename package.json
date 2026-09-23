@@ -1,6 +1,6 @@
 {
   "name": "@arcobaleno64/agy-security-audit",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).",
   "type": "module",
   "license": "MIT",
@@ -52,7 +52,8 @@
     "test:harness": "node scripts/run-live-model-benchmark.mjs --test",
     "benchmark:canary": "node scripts/run-runtime-canary.mjs",
     "benchmark:oss": "node scripts/run-oss-transfer-eval.mjs",
-    "compare:cross-provider": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/holdout-paired --runs-b evals/live-runs/cross-provider/claude --protocol evals/protocols/v1.5-cross-model-protocol.json --report reports/cross-provider-replication-report-2026-09-22.md"
+    "compare:cross-provider": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/holdout-paired --runs-b evals/live-runs/cross-provider/claude --protocol evals/protocols/v1.5-cross-model-protocol.json --report reports/cross-provider-replication-report-2026-09-22.md",
+    "test:evidence-matrix": "node scripts/test-evidence-matrix-gate.mjs"
   },
   "keywords": [
     "antigravity",
