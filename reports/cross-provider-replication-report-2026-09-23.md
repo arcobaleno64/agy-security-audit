@@ -40,7 +40,7 @@
 
 ### 2.2 Temporal-Confound Disclosure
 
-Evaluation was executed under strict contemporaneous interleaved pass ordering (`A1 -> B1 -> A2 -> B2 -> A3 -> B3`) across both Provider A (`gemini-3.8-flash-high`) and Provider B (`claude-sonnet-5`). Both configurations operated under identical hermetic sandbox isolation (`HERMETIC_SANDBOX_V1`), label-blind projection (`LABEL_BLIND_V1`), and verified runtime telemetry attestation. The contemporaneous interleaved trial design eliminates temporal non-concurrency and temporal confounding between provider evaluations, satisfying Tier 3 cross-provider replication requirements.
+Evaluation was executed under strict contemporaneous interleaved pass ordering (`A1 -> B1 -> A2 -> B2 -> A3 -> B3`) across both Provider A (`gemini-3.8-flash-high`) and Provider B (`claude-sonnet-5`). Both configurations operated under identical hermetic sandbox isolation (`HERMETIC_SANDBOX_V1`), label-blind projection (`LABEL_BLIND_V1`), and verified runtime telemetry attestation. The contemporaneous interleaved trial design eliminates temporal non-concurrency and temporal confounding between provider evaluations, The contemporaneous interleaved trial design eliminates temporal non-concurrency and temporal confounding between evaluations across orthogonal axes: Provider Axis (CROSS_PROVIDER: Google vs Anthropic) and Runtime Axis (CROSS_RUNTIME: AGY native vs Claude CLI), establishing an authentic CROSS_SYSTEM_REPLICATION trial.
 
 ### 2.3 Execution Exposure & Censoring Audit
 
@@ -49,11 +49,11 @@ Failures (`TIMEOUT`, `SCHEMA_VIOLATION`) represent unexposed fixtures and are tr
 | Exposure Metric | Configuration A (`gemini-3.8-flash-high`) | Configuration B (`claude-sonnet-5`) | Delta / Comparison |
 | :--- | :--- | :--- | :--- |
 | **Total Attempted Exposures** | 60 | 60 | - |
-| **Successfully Completed Exposures** | 60 | 50 | **-10 exposures** |
-| **Censored Exposures (Timeout / Schema Violation)** | 0 | 10 | **+10 exposures** |
-| **Vulnerable Fixtures Completed / Attempted** | 30 / 30 | 30 / 30 | - |
-| **Vulnerable Fixture Completed Exposure Recall** | 80.0% (24/30) | 96.7% (29/30) | **+16.7% Recall across completed exposures** |
-| **Controlled Safe Exposures Completed / Attempted** | 30 / 30 | 20 / 30 | - |
+| **Successfully Completed Exposures** | 53 | 50 | **-3 exposures** |
+| **Censored Exposures (Timeout / Schema Violation)** | 7 | 10 | **+3 exposures** |
+| **Vulnerable Fixtures Completed / Attempted** | 25 / 30 | 30 / 30 | - |
+| **Vulnerable Fixture Completed Exposure Recall** | 96.0% (24/25) | 96.7% (29/30) | **+0.7% Recall across completed exposures** |
+| **Controlled Safe Exposures Completed / Attempted** | 28 / 30 | 20 / 30 | - |
 
 ## 3. Dual-Tier Jaccard Lineage Stability Matrix
 
@@ -87,19 +87,19 @@ Consensus lineages observed in $\ge \lceil 0.60 \times N \rceil$ passes across b
 
 ## 5. Efficiency Metrics, Token Deltas & Incremental Compute Cost
 
-### 5.1 Paired Exposure Telemetry (50 Mutually Completed Exposures)
+### 5.1 Paired Exposure Telemetry (44 Mutually Completed Exposures)
 
-Paired analysis isolates compute efficiency on the 50 mutually completed fixture exposures across identical seeds, filtering out distorted averages caused by timeouts and execution censoring.
+Paired analysis isolates compute efficiency on the 44 mutually completed fixture exposures across identical seeds, filtering out distorted averages caused by timeouts and execution censoring.
 
 | Token / Latency Dimension | Configuration A (`gemini-3.8-flash-high`) | Configuration B (`claude-sonnet-5`) | Paired Delta (B - A) | Relative Change |
 | :--- | :--- | :--- | :--- | :--- |
-| **Total Tokens (50 Pairs)** | 1,049,331 | 8,365,972 | **+7,316,641** | **697.3%** |
-| **Thinking Tokens (50 Pairs)** | 265,311 | 15,443 | **-249,868** | **-94.2%** |
-| **Input Tokens (50 Pairs)** | 775,725 | 304 | **-775,421** | **-100.0%** |
-| **Output Tokens (50 Pairs)** | 273,606 | 35,565 | **-238,041** | **-87.0%** |
-| **Cache Read Tokens (50 Pairs)** | 1,360,824 | 8,330,103 | **+6,969,279** | **512.1%** |
-| **Median Per-Exposure Latency Delta** | - | - | **-8.73s** | -8731 ms |
-| **P95 Per-Exposure Latency Delta** | - | - | **+96.90s** | +96896 ms |
+| **Total Tokens (44 Pairs)** | 928,540 | 7,451,910 | **+6,523,370** | **702.5%** |
+| **Thinking Tokens (44 Pairs)** | 265,311 | 14,608 | **-250,703** | **-94.5%** |
+| **Input Tokens (44 Pairs)** | 654,934 | 270 | **-654,664** | **-100.0%** |
+| **Output Tokens (44 Pairs)** | 273,606 | 32,613 | **-240,993** | **-88.1%** |
+| **Cache Read Tokens (44 Pairs)** | 1,360,824 | 7,419,027 | **+6,058,203** | **445.2%** |
+| **Median Per-Exposure Latency Delta** | - | - | **-10.67s** | -10670 ms |
+| **P95 Per-Exposure Latency Delta** | - | - | **+99.57s** | +99570 ms |
 
 ### 5.2 Pass-Level Aggregate Telemetry (Unadjusted)
 
@@ -114,8 +114,8 @@ Paired analysis isolates compute efficiency on the 50 mutually completed fixture
 ### 5.3 Incremental Compute Cost per Replicated True Positive
 
 - **Replicated True Positives ($TP_{replicated}$)**: 3
-- **Incremental Total Tokens per Replicated TP**: +2,438,880 tokens
-- **Incremental Thinking Tokens per Replicated TP**: -83,289 tokens
+- **Incremental Total Tokens per Replicated TP**: +2,174,457 tokens
+- **Incremental Thinking Tokens per Replicated TP**: -83,568 tokens
 - **Incremental Execution Duration per Replicated TP**: -56.60s
 
 ## 6. Safe Control Specificity & Oracle Defect Disclosure
@@ -126,12 +126,12 @@ Evaluated across genuine safe control fixtures (`HLD-01-SAFE` through `HLD-07-SA
 
 | Configuration | Observed False-Positive Exposures | Completed Genuine Safe Exposures | Empirical Specificity (%) | Mean FP per Run |
 | :--- | :--- | :--- | :--- | :--- |
-| **Configuration A** (`gemini-3.8-flash-high`) | 0 | 27 | **100.0%** | 0.00 |
+| **Configuration A** (`gemini-3.8-flash-high`) | 0 | 25 | **100.0%** | 0.00 |
 | **Configuration B** (`claude-sonnet-5`) | 8 | 18 | **55.6%** | 0.44 |
 | **Clean Control Agreement** | **DIVERGENT** | - | **Divergent (100.0% vs 55.6%)** | - |
 
 > [!NOTE] **Neutral Safe-Control Finding Disclosure**
-> - Configuration A: 0 observed false-positive exposures across 27 completed genuinely-safe exposures.
+> - Configuration A: 0 observed false-positive exposures across 25 completed genuinely-safe exposures.
 > - Configuration B: 8 observed false-positive exposures across 18 completed genuinely-safe exposures.
 
 ### 6.2 Benchmark Oracle Defect Disclosure (`HLD-08-SAFE`)

@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-minimist-post-9ea93582",
-  "recordedAt": "2026-09-23T09:10:39.083Z",
+  "runId": "run-oss-minimist-post-fee621c8",
+  "recordedAt": "2026-09-23T13:52:21.071Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-minimist-post.jsonl",
-    "sha256": "0892fd48d0cb8aefe01f5d21bee7f5dd80acd7bef9f90e3438125d0247b136ab",
-    "totalBytes": 32756,
-    "eventsCount": 68
+    "sha256": "018a9da0b30a2c77386f33542d62f3fc6d976eae1754bbff87f2c11e0763ef25",
+    "totalBytes": 46833,
+    "eventsCount": 107
   },
   "target": {
     "repositoryName": "minimistjs/minimist",
@@ -44,9 +44,9 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -61,13 +61,13 @@
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 183400
+    "executionDurationMs": 292443
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "260b530a-3494-4edf-b62d-163d185119e7",
-    "telemetryDigest": "0892fd48d0cb8aefe01f5d21bee7f5dd80acd7bef9f90e3438125d0247b136ab",
-    "totalEvents": 68,
+    "conversationId": "4f7be0ac-3cf6-4cc8-96c4-b3378f7765ed",
+    "telemetryDigest": "018a9da0b30a2c77386f33542d62f3fc6d976eae1754bbff87f2c11e0763ef25",
+    "totalEvents": 107,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -134,13 +134,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 226594,
-      "outputTokens": 17163,
-      "thinkingTokens": 14513,
-      "cacheReadTokens": 500570,
-      "totalTokens": 243757
+      "inputTokens": 299877,
+      "outputTokens": 49248,
+      "thinkingTokens": 45158,
+      "cacheReadTokens": 1331593,
+      "totalTokens": 349125
     },
-    "durationSeconds": 183.4000881
+    "durationSeconds": 288.2440008
   },
   "metadata": {
     "fixtureId": "OSS-01-FIX",

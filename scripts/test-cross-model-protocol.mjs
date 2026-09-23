@@ -10,6 +10,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditStreamIsolation } from './run-live-oss-transfer.mjs';
 import {
   normalizeModelTaxonomy,
   validateIndependenceAuthority,
@@ -434,6 +435,31 @@ function runSuite() {
   assert(matrixOutput.report.includes('Multi-Configuration Cross-Model Comparative Matrix Report'), 'Matrix report missing title');
   assert(matrixOutput.report.includes('Pairwise Comparison Matrix'), 'Matrix report missing matrix table');
   console.log('  ✔ 6.3 Multi-configuration matrix comparison (compareRunMatrix) verified with full pairwise matrix report.\n');
+
+  // ---------------------------------------------------------------------------
+  // Suite 7: Live Benchmark Hermetic Stream Isolation Invariant (Milestone G7-R)
+  // ---------------------------------------------------------------------------
+  console.log('Suite 7: Live Benchmark Stream Isolation Invariant');
+  // 7.1 Clean isolated stream passes
+  const cleanTarget = { name: 'ini-post' };
+  const cleanStream = 'view_file ini.js\nInspecting functions\n{"schemaVersion":"1.0.0","candidates":[]}';
+  const cleanAudit = auditStreamIsolation(cleanStream, cleanTarget);
+  assert(cleanAudit.isolated === true, 'Clean stream must pass isolation audit');
+  assert(cleanAudit.violations.length === 0, 'Clean stream must have 0 violations');
+
+  // 7.2 Sibling checkout leakage fails closed
+  const siblingLeakStream = 'git diff --no-index evals/oss-checkouts/ini-pre/ini.js ini.js';
+  const siblingAudit = auditStreamIsolation(siblingLeakStream, cleanTarget);
+  assert(siblingAudit.isolated === false, 'Sibling leakage must fail isolation audit');
+  assert(siblingAudit.violations.some(v => v.includes('ini-pre') || v.includes('git diff')), 'Must detect sibling leakage violation');
+
+  // 7.3 Parent repository path leakage fails closed
+  const parentLeakStream = 'view_file C:/Users/arcobaleno/Documents/Code/agy-security-audit/package.json';
+  const parentAudit = auditStreamIsolation(parentLeakStream, cleanTarget);
+  assert(parentAudit.isolated === false, 'Parent repository leakage must fail isolation audit');
+  assert(parentAudit.violations.some(v => v.includes('parent repository')), 'Must detect parent repository leakage violation');
+
+  console.log('  ✔ 7.1 Live benchmark stream isolation invariant enforces Default-Deny on sibling/parent/oracle leakage.\n');
 
   console.log('================================================================');
   console.log('All cross-model comparative validation protocol tests passed successfully.');

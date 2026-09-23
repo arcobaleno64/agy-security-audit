@@ -16,6 +16,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -104,10 +105,31 @@ export const OSS_TARGETS = [
   }
 ];
 
+
+export function auditStreamIsolation(candidateStdout, target) {
+  const violations = [];
+  if (/git\s+diff/i.test(candidateStdout)) {
+    violations.push('Agent executed git diff command');
+  }
+  const siblingName = target.name.endsWith('-post')
+    ? target.name.replace(/-post$/, '-pre')
+    : target.name.replace(/-pre$/, '-post');
+  if (candidateStdout.includes(siblingName)) {
+    violations.push(`Agent referenced sibling checkout (${siblingName})`);
+  }
+  if (candidateStdout.includes('oss-checkouts') || candidateStdout.includes('agy-security-audit')) {
+    violations.push('Agent referenced parent repository workspace path');
+  }
+  return {
+    isolated: violations.length === 0,
+    violations
+  };
+}
+
 export function buildOssPrompt() {
-  return `You are conducting a defensive code quality review on the local JavaScript files in this directory.
-Audit the codebase under Default-Deny for unhandled object property assignments or prototype mutations.
-Inspect files using list_dir, view_file, or grep_search.
+  return `Review the JavaScript files in this directory for logic defects and unhandled object mutation bugs.
+Inspect files using view_file, list_dir, or grep_search.
+Strictly confine your review exclusively to local files in this directory. Do NOT use search_web, open_browser_url, or network tools. Do not run git commands, do not search for external files, and do not inspect parent directories.
 If safe or properly mitigated, output:
 {"schemaVersion": "1.0.0", "candidates": []}
 If unmitigated defects exist, output JSON:
@@ -116,9 +138,9 @@ If unmitigated defects exist, output JSON:
   "candidates": [
     {
       "id": "CAND-1",
-      "ruleId": "CWE-1321",
+      "ruleId": "CWE-XXX",
       "title": "Brief defect description",
-      "securityProperty": "prototype-pollution",
+      "securityProperty": "integrity",
       "findingType": "VULNERABILITY",
       "proofKind": "STATIC_TRACE",
       "severity": "HIGH",
@@ -297,6 +319,8 @@ export function runSingleOssTarget(target, options = {}) {
     const prompt = buildOssPrompt();
     const agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy';
     const args = [
+      '--new-project',
+      '--disable-slash-commands',
       '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
       '--model', 'gemini-3.8-flash-high',
@@ -307,16 +331,26 @@ export function runSingleOssTarget(target, options = {}) {
     console.log(`Executing live run: ${target.name} (${target.repository} @ ${target.commitSha})`);
     console.log(`Expected State: ${target.state} (${target.expectedVerdict})`);
 
+    const isolatedDir = path.join(os.tmpdir(), 'agy-oss-disposable-roots', target.name);
+    fs.rmSync(isolatedDir, { recursive: true, force: true });
+    fs.mkdirSync(isolatedDir, { recursive: true });
+    fs.cpSync(absTargetDir, isolatedDir, { recursive: true });
+
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      console.log(`Attempt ${attempt}/${maxAttempts}: Spawning ${agyBin} in ${absTargetDir}...`);
+      console.log(`Attempt ${attempt}/${maxAttempts}: Spawning ${agyBin} in isolated root ${isolatedDir}...`);
 
       const startTime = Date.now();
       const spawnRes = spawnSync(agyBin, args, {
-        cwd: absTargetDir,
+        cwd: isolatedDir,
         encoding: 'utf8',
         timeout: timeoutMs,
-        env: { ...process.env, PAGER: 'cat' },
+        env: {
+          ...process.env,
+          PAGER: 'cat',
+          GIT_DIR: path.join(isolatedDir, '.git_disabled'),
+          GIT_CEILING_DIRECTORIES: path.dirname(isolatedDir)
+        },
         stdio: ['pipe', 'pipe', 'pipe']
       });
       durationMs = Date.now() - startTime;
@@ -337,7 +371,13 @@ export function runSingleOssTarget(target, options = {}) {
       const trace = parseStreamJsonTrace(candidateStdout);
       const extracted = parseModelJsonOutput(trace.rawResponse || candidateStdout);
 
-      const isFailed = (target.state === 'PRE_FIX' && extracted.length === 0) || isBlocked || isQuota || !trace.success;
+      const isolationRes = auditStreamIsolation(candidateStdout, target);
+      if (!isolationRes.isolated) {
+        console.warn(`  ⚠ Attempt ${attempt} failed isolation audit: ${isolationRes.violations.join('; ')}`);
+        fs.writeFileSync(path.resolve(REPO_ROOT, `scratch/debug-${target.name}-attempt${attempt}.jsonl`), candidateStdout, 'utf8');
+      }
+
+      const isFailed = (target.state === 'PRE_FIX' && extracted.length === 0) || isBlocked || isQuota || !trace.success || !isolationRes.isolated;
       if (isFailed) {
         console.warn(`  ⚠ Attempt ${attempt} failed validation (blocked: ${isBlocked}, quota: ${isQuota}, traceSuccess: ${trace.success}, candidates: ${extracted.length}).`);
         if (attempt < maxAttempts) {
@@ -353,6 +393,8 @@ export function runSingleOssTarget(target, options = {}) {
       rawStdout = candidateStdout;
       break;
     }
+
+    try { fs.rmSync(isolatedDir, { recursive: true, force: true }); } catch {}
 
     if (!rawStdout.trim()) {
       throw new Error(`Execution produced empty stdout stream for ${target.name}.`);

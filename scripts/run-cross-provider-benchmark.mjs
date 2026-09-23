@@ -316,7 +316,13 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
   let parsedRaw = [];
   let parseError = null;
 
-  if (trace.success && trace.rawResponse) {
+  const isBlocked = (trace.rawResponse && /blocked by Gemini's filters|safety filter|content filter/i.test(trace.rawResponse)) ||
+                    (!trace.success && /blocked by/i.test(trace.error || '')) ||
+                    (/blocked by Gemini's filters/i.test(stdout));
+
+  if (isBlocked) {
+    parseError = 'CENSORED_EXPOSURE: Response was blocked by Gemini safety filter';
+  } else if (trace.success && trace.rawResponse) {
     try {
       parsedRaw = parseModelJsonOutput(trace.rawResponse);
     } catch (e) {
@@ -622,8 +628,8 @@ export function runSinglePass(engine, passNumber, outDir, fixtures, options = {}
       modelFamily: 'gemini-flash',
       modelProvider: 'google',
       reasoningProfile: 'high',
-      runtimeId: 'claude',
-      runtimeAdapter: 'cli',
+      runtimeId: 'agy',
+      runtimeAdapter: 'native',
       identitySource: passIdentityAttested ? 'RUNTIME_ATTESTED' : 'UNKNOWN',
       identityConfidence: passIdentityAttested ? 'HIGH' : 'NONE'
     };
@@ -635,8 +641,8 @@ export function runSinglePass(engine, passNumber, outDir, fixtures, options = {}
       modelFamily: 'claude-sonnet',
       modelProvider: 'anthropic',
       reasoningProfile: 'high',
-      runtimeId: 'agy',
-      runtimeAdapter: 'native',
+      runtimeId: 'claude',
+      runtimeAdapter: 'cli',
       identitySource: passIdentityAttested ? 'RUNTIME_ATTESTED' : 'UNKNOWN',
       identityConfidence: passIdentityAttested ? 'HIGH' : 'NONE'
     };

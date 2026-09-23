@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-ini-post-ae5032f3",
-  "recordedAt": "2026-09-23T09:10:39.900Z",
+  "runId": "run-oss-ini-post-f6889b67",
+  "recordedAt": "2026-09-23T15:15:34.678Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-ini-post.jsonl",
-    "sha256": "38c6d6a9a4d52939be755aa2f9f67240bd929cc4fdac15adc8a1d6971b135c2d",
-    "totalBytes": 55636,
-    "eventsCount": 78
+    "sha256": "4f7dd50fca7f8cfa5ee4133fd6797fb84a4f0595eb1506d43fa8e86c65e4bc38",
+    "totalBytes": 51255,
+    "eventsCount": 148
   },
   "target": {
     "repositoryName": "npm/ini",
@@ -44,30 +44,79 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
   "findings": {
-    "candidates": [],
+    "candidates": [
+      {
+        "id": "CAND-CWE-1321-1",
+        "ruleId": "CWE-1321",
+        "title": "Unhandled object mutation and prototype pollution via constructor section",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "ini.js",
+          "startLine": 81,
+          "endLine": 91
+        },
+        "symbol": "decode",
+        "lineageId": "1b37dde344b0e1be5314bcf550cb48a2"
+      },
+      {
+        "id": "CAND-2",
+        "ruleId": "CWE-1321",
+        "title": "Prototype pollution via unvalidated terminal section property in dotSplit nesting",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "ini.js",
+          "startLine": 130,
+          "endLine": 143
+        },
+        "symbol": "decode",
+        "lineageId": "1b37dde344b0e1be5314bcf550cb48a2"
+      },
+      {
+        "id": "CAND-3",
+        "ruleId": "CWE-1321",
+        "title": "Unhandled prototype mutation via unvalidated non-array __proto__ key assignment",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "ini.js",
+          "startLine": 101,
+          "endLine": 117
+        },
+        "symbol": "decode",
+        "lineageId": "1b37dde344b0e1be5314bcf550cb48a2"
+      }
+    ],
     "verifiedFindings": null,
     "unresolvedCandidates": null,
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 0,
+    "candidateCount": 3,
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 175382
+    "executionDurationMs": 277342
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "ba2d22ce-6715-4f99-a92f-b999907de51d",
-    "telemetryDigest": "38c6d6a9a4d52939be755aa2f9f67240bd929cc4fdac15adc8a1d6971b135c2d",
-    "totalEvents": 78,
+    "conversationId": "063d1de4-a999-42da-9f1a-537264008f8d",
+    "telemetryDigest": "4f7dd50fca7f8cfa5ee4133fd6797fb84a4f0595eb1506d43fa8e86c65e4bc38",
+    "totalEvents": 148,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -134,13 +183,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 193565,
-      "outputTokens": 12694,
-      "thinkingTokens": 10203,
-      "cacheReadTokens": 813864,
-      "totalTokens": 206259
+      "inputTokens": 152373,
+      "outputTokens": 47673,
+      "thinkingTokens": 43871,
+      "cacheReadTokens": 898992,
+      "totalTokens": 200046
     },
-    "durationSeconds": 175.3824315
+    "durationSeconds": 274.164824
   },
   "metadata": {
     "fixtureId": "OSS-06-FIX",
