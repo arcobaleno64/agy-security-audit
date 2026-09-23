@@ -1,0 +1,134 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/cross-model-protocol.schema.json",
+  "protocolId": "v1.6-g8r-cross-provider",
+  "protocolVersion": "1.0.0",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "targetVersion": "1.6.2",
+  "status": "FROZEN",
+  "frozenAt": "2026-09-23T02:00:00Z",
+  "governance": {
+    "covenant": "Section 21 Holdout Covenant & Default-Deny Authority Invariant",
+    "rationale": "Milestone G8-R Cross-Provider Live Replication protocol freezing contemporaneous interleaved live execution across Provider A (Google Antigravity gemini-3.8-flash) and Provider B (Anthropic Claude Code sonnet) with raw stream retention, runtime identity attestation, and censored exposure accounting."
+  },
+  "corpus": {
+    "corpusId": "evals/holdout-benchmark",
+    "corpusType": "FROZEN_REPLICATION_CORPUS",
+    "fixtureCount": 20,
+    "vulnerableCount": 10,
+    "safeCount": 10,
+    "groundTruthFile": "evals/holdout-benchmark/ground-truth.json",
+    "groundTruthSha256": "77e6d7a71de9ad90fa848373a026041093800d5fce271d624ff184634ced66de"
+  },
+  "execution": {
+    "mode": "CONTEMPORANEOUS_INTERLEAVED",
+    "passSequence": [
+      "A1",
+      "B1",
+      "A2",
+      "B2",
+      "A3",
+      "B3"
+    ],
+    "interleaved": true,
+    "providerA": {
+      "name": "google",
+      "engine": "agy",
+      "executable": "agy.exe",
+      "model": "gemini-3.8-flash-high",
+      "baseModel": "gemini-3.8-flash",
+      "evidenceGrade": "L3_CROSS_PROVIDER_OBSERVED"
+    },
+    "providerB": {
+      "name": "anthropic",
+      "engine": "claude",
+      "executable": "claude.exe",
+      "model": "sonnet",
+      "baseModel": "claude-5-sonnet",
+      "evidenceGrade": "L3_CROSS_PROVIDER_OBSERVED"
+    },
+    "isolation": "HERMETIC_SANDBOX_V1",
+    "blinding": "LABEL_BLIND_V1",
+    "rawStreamRetention": true,
+    "runtimeIdentityAttestation": true,
+    "censoredExposureAccounting": true
+  },
+  "taxonomy": {
+    "tiers": {
+      "TIER_3_CROSS_PROVIDER_MODEL_REPLICATION": {
+        "tier": 3,
+        "name": "CROSS_PROVIDER_MODEL_REPLICATION",
+        "description": "Contemporaneous live cross-model replication across distinct model providers (Google Antigravity gemini-3.8-flash vs Anthropic Claude Code sonnet) under hermetic sandbox isolation with raw stream cryptographic attestation.",
+        "conditions": {
+          "differentProvider": true,
+          "sameHarness": true,
+          "interleavedExecution": true
+        },
+        "requiredAttestation": [
+          "RUNTIME_ATTESTED"
+        ],
+        "researchQuestion": "Can independent frontier models from different providers (Gemini vs Sonnet) independently corroborate vulnerability claims without synthetic reconstruction under contemporaneous interleaved execution?"
+      }
+    },
+    "attestationSources": [
+      "RUNTIME_ATTESTED",
+      "CONFIG_DECLARED",
+      "PARSED_INFERRED",
+      "UNKNOWN"
+    ],
+    "failClosedOnParsedInferredForTiers": [
+      2,
+      3,
+      4
+    ]
+  },
+  "matching": {
+    "level1": {
+      "name": "EXACT_LINEAGE_MATCH",
+      "description": "Identical cryptographic lineage fingerprint: SHA256(ruleId:uri:symbol)",
+      "hashAlgorithm": "sha256",
+      "fields": [
+        "ruleId",
+        "uri",
+        "symbol"
+      ]
+    },
+    "level2": {
+      "name": "GROUND_TRUTH_SEMANTIC_MATCH",
+      "description": "Identical target fixture + CWE family + vulnerability property / attack path",
+      "fields": [
+        "fixtureId",
+        "ruleId",
+        "securityProperty"
+      ]
+    }
+  },
+  "metrics": {
+    "strictThreshold": 0.6,
+    "recurrenceRule": "ceil(0.60 * N)",
+    "jaccard": {
+      "dualTier": true,
+      "anyFormula": "J_any(A, B) = |S_A intersect S_B| / |S_A union S_B|",
+      "strictFormula": "J_strict(A, B) = |S_A^0.6 intersect S_B^0.6| / |S_A^0.6 union S_B^0.6|",
+      "emptySetSemantics": {
+        "bothEmptyValue": null,
+        "reportLabel": "N/A",
+        "safeControlSuppressionAgreementReportedSeparately": true
+      }
+    }
+  },
+  "consensusLineageDispositions": {
+    "REPLICATED_TRUE_POSITIVE": {
+      "description": "Consensus lineage correctly matches ground-truth vulnerability specification"
+    },
+    "REPLICATED_FALSE_POSITIVE": {
+      "description": "Consensus lineage spurious finding on safe control fixture"
+    },
+    "GROUND_TRUTH_DISPUTE": {
+      "description": "Consensus lineage finding matches known defect in safe control benchmark oracle"
+    },
+    "REPLICATED_UNRESOLVED": {
+      "description": "Consensus lineage finding on un-oracled corpus without ground truth"
+    }
+  },
+  "protocolDigest": "7c4410c2427663f45be2163fc74cca3dcca924b6f1ab75920e25bf78bb02f7d5"
+}

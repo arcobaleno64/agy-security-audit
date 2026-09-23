@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-agy-cross-provider-p1-aa99e1c7",
+  "recordedAt": "2026-09-23T02:37:41.251Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "evidenceGrade": "L3_CROSS_PROVIDER_OBSERVED",
+  "interleavedOrder": "A1",
+  "rawStream": {
+    "path": "evals/live-runs/cross-provider/gemini/raw-stream-pass-1.jsonl",
+    "sha256": "3383f1d6b325e2375ee0f258cb5006b8e01fba79afe00293ce312869a8edba12",
+    "totalBytes": 102250,
+    "eventsCount": 297
+  },
+  "target": {
+    "repositoryName": "evals/holdout-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "corpus": "holdout-benchmark",
+    "fixtureCount": 20
+  },
+  "environment": {
+    "agyVersion": "1.2.8",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "baseModel": "gemini-3.8-flash",
+    "reasoningProfile": "high",
+    "identitySource": "RUNTIME_ATTESTED",
+    "modelTaxonomy": {
+      "rawModelId": "gemini-3.8-flash-high",
+      "canonicalModelId": "gemini-3.8-flash",
+      "baseModel": "gemini-3.8-flash",
+      "modelFamily": "gemini-flash",
+      "modelProvider": "google",
+      "reasoningProfile": "high",
+      "runtimeId": "agy",
+      "runtimeAdapter": "native",
+      "identitySource": "RUNTIME_ATTESTED",
+      "identityConfidence": "HIGH"
+    },
+    "os": "win32 (x64)",
+    "nodeVersion": "v24.14.1",
+    "skillRevision": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "toolVersion": "1.6.2",
+    "toolRevision": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "toolIntegrityDigest": null,
+    "toolDirty": true
+  },
+  "findings": {
+    "candidates": [
+      {
+        "id": "CAND-CWE-915-15",
+        "ruleId": "CWE-915",
+        "title": "Unrestricted mass assignment allows modifying sensitive user attributes",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/03-mass-assignment.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "symbol": "Object.assign",
+        "lineageId": "468d0bb13aa4f4c5775e13e8630d4270"
+      },
+      {
+        "id": "CAND-CWE-329-16",
+        "ruleId": "CWE-329",
+        "title": "Static hardcoded IV reused across multiple ciphertexts",
+        "securityProperty": "confidentiality",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
+          "startLine": 16,
+          "endLine": 16
+        },
+        "symbol": "createCipheriv",
+        "lineageId": "5db00ae3f04c9f249eb9dab1c7418e8a"
+      },
+      {
+        "id": "CAND-CWE-22-15",
+        "ruleId": "CWE-22",
+        "title": "Unchecked path join allows Zip Slip path traversal and arbitrary file write",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/07-zip-slip-traversal.js",
+          "startLine": 15,
+          "endLine": 16
+        },
+        "symbol": "fs.writeFileSync",
+        "lineageId": "3c52474cae97e6efd0cf4a0a2b40349e"
+      },
+      {
+        "id": "CAND-CWE-918-12",
+        "ruleId": "CWE-918",
+        "title": "Server-Side Request Forgery (SSRF) via unvalidated targetUrl in http.get",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/08-ssrf-dns-rebinding.js",
+          "startLine": 12,
+          "endLine": 14
+        },
+        "symbol": "http.get",
+        "lineageId": "33091c0371a9f50055f6463517b01a9d"
+      },
+      {
+        "id": "CAND-CWE-113-11",
+        "ruleId": "CWE-113",
+        "title": "CRLF injection in Set-Cookie header allows HTTP response splitting",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/09-crlf-header-injection.js",
+          "startLine": 11,
+          "endLine": 11
+        },
+        "symbol": "setHeader",
+        "lineageId": "2aff378664a02c80f8f834ee27d131c2"
+      },
+      {
+        "id": "CAND-CWE-367-15",
+        "ruleId": "CWE-367",
+        "title": "Time-of-check to time-of-use (TOCTOU) race condition allows concurrent reuse of one-time password reset token",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/10-race-token-reuse.js",
+          "startLine": 15,
+          "endLine": 23
+        },
+        "symbol": "router.post",
+        "lineageId": "0b11090393db8e00c0db228861ec813c"
+      }
+    ]
+  },
+  "summary": {
+    "candidateCount": 6,
+    "vulnerableFixturesCompleted": 10,
+    "safeFixturesCompleted": 10,
+    "censoredExposures": 0,
+    "totalExposures": 20,
+    "executionDurationMs": 561379
+  },
+  "metadata": {
+    "fixtureResults": [
+      {
+        "fixtureId": "HLD-01",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 15635,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-02",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 13381,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-03",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 29565,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-04",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 14755,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-05",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 41727,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 0,
+        "durationMs": 17024,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-07",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 51573,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-08",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 30685,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-09",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 50420,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-10",
+        "split": "HOLDOUT_SET",
+        "candidateCount": 1,
+        "durationMs": 29345,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-01-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 28522,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-02-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 17469,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-03-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 22409,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-04-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 25208,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-05-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 30684,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-06-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 22558,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-07-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 23694,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-08-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 36349,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-09-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 24050,
+        "error": null
+      },
+      {
+        "fixtureId": "HLD-10-SAFE",
+        "split": "SAFE_CONTROL",
+        "candidateCount": 0,
+        "durationMs": 36326,
+        "error": null
+      }
+    ],
+    "governanceNote": "Milestone G8-R: Contemporaneous interleaved live model execution across Google Antigravity and Anthropic Claude Code."
+  },
+  "executionTelemetry": {
+    "format": "AGY_STREAM_JSON_V1",
+    "conversationId": "81ff4e56-c97e-4747-99bb-fe64e67fb3f9",
+    "telemetryDigest": "3383f1d6b325e2375ee0f258cb5006b8e01fba79afe00293ce312869a8edba12",
+    "totalEvents": 297,
+    "availableTools": [
+      "view_file",
+      "list_dir",
+      "grep_search",
+      "find_by_name"
+    ],
+    "toolsUsed": [
+      "view_file"
+    ],
+    "subagentsInvoked": [],
+    "permissionMode": "always-proceed",
+    "sandboxEnabled": true,
+    "tokenUsage": {
+      "inputTokens": 324003,
+      "outputTokens": 62999,
+      "thinkingTokens": 60459,
+      "cacheReadTokens": 470614,
+      "totalTokens": 387002
+    },
+    "durationSeconds": 561.38
+  },
+  "rawStreamSha256": "3383f1d6b325e2375ee0f258cb5006b8e01fba79afe00293ce312869a8edba12",
+  "rawStreamPath": "evals/live-runs/cross-provider/gemini/raw-stream-pass-1.jsonl"
+}

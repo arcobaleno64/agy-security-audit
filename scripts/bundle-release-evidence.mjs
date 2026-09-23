@@ -84,7 +84,12 @@ export const MANDATORY_INDIVIDUAL_FILES = [
   {
     repoPath: 'reports/cross-provider-replication-report-2026-09-22.md',
     stagedName: 'cross-provider-replication-report-2026-09-22.md',
-    description: 'Cross-Provider Model Replication Report (Milestone G8)'
+    description: 'Cross-Provider Model Replication Report (Milestone G8 Superseded)'
+  },
+  {
+    repoPath: 'reports/cross-provider-replication-report-2026-09-23.md',
+    stagedName: 'cross-provider-replication-report-2026-09-23.md',
+    description: 'Live Cross-Provider Model Replication Report (Milestone G8-R)'
   },
   {
     repoPath: 'schemas/evidence-matrix.schema.json',

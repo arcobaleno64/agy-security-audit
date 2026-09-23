@@ -881,6 +881,13 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
 
   const bothZeroGenuine = safeA.fpCountGenuine === 0 && safeB.fpCountGenuine === 0;
 
+  const specPctA = safeA.genuineCompletedSafe > 0
+    ? (safeA.fpCountGenuine === 0 ? '100.0%' : Math.max(0, (1 - (safeA.fpCountGenuine / safeA.genuineCompletedSafe)) * 100).toFixed(1) + '%')
+    : 'N/A';
+  const specPctB = safeB.genuineCompletedSafe > 0
+    ? (safeB.fpCountGenuine === 0 ? '100.0%' : Math.max(0, (1 - (safeB.fpCountGenuine / safeB.genuineCompletedSafe)) * 100).toFixed(1) + '%')
+    : 'N/A';
+
   return {
     fpCountA: safeA.fpCountGenuine,
     fpCountB: safeB.fpCountGenuine,
@@ -898,8 +905,12 @@ export function computeComparativeSpecificity(runsA, runsB, groundTruth = null, 
     disputeOutcomeB: safeB.disputeOutcome,
     meanFpA: safeA.genuineCompletedSafe > 0 ? safeA.fpCountGenuine / safeA.genuineCompletedSafe : 0,
     meanFpB: safeB.genuineCompletedSafe > 0 ? safeB.fpCountGenuine / safeB.genuineCompletedSafe : 0,
+    specPctA,
+    specPctB,
+    bothZeroGenuine,
     safeControlSuppressionAgreement: bothZeroGenuine ? 1.0 : (safeA.fpCountGenuine === safeB.fpCountGenuine ? 0.8 : 0.0),
-    safeControlSuppressionDisplay: bothZeroGenuine ? '100.0% (Clean Controls)' : 'DIVERGENT'
+    safeControlSuppressionDisplay: bothZeroGenuine ? '100.0% (Clean Controls)' : 'DIVERGENT',
+    safeControlAgreementDisplay: bothZeroGenuine ? 'Identical 100% Specificity' : `Divergent (${specPctA} vs ${specPctB})`
   };
 }
 
@@ -997,8 +1008,8 @@ export function computeComparativeEfficiency(runsA, runsB, consensus = null, opt
           if (itemA.error || itemB.error) continue; // Only mutually completed valid exposures
 
           pairedCount++;
-          const uA = itemA.executionTelemetry?.tokenUsage || {};
-          const uB = itemB.executionTelemetry?.tokenUsage || {};
+          const uA = itemA.executionTelemetry?.tokenUsage || itemA.telemetry?.tokenUsage || itemA.tokenUsage || {};
+          const uB = itemB.executionTelemetry?.tokenUsage || itemB.telemetry?.tokenUsage || itemB.tokenUsage || {};
 
           pairedTokensA += uA.totalTokens || 0;
           pairedTokensB += uB.totalTokens || 0;
@@ -1133,7 +1144,7 @@ export function renderComparativeReport(comparisonData, options = {}) {
   const taxB = classification.taxonomyB;
   const l1 = consensus.level1;
   const l2 = consensus.level2;
-  const nowIso = new Date().toISOString();
+  const nowIso = options.timestamp || new Date().toISOString();
 
   let md = '';
   const isSyntheticRun = (r) => r?.evidenceOrigin === 'SYNTHETIC_RECONSTRUCTED' || r?.executionKind === 'SYNTHETIC_SIMULATED';
@@ -1154,7 +1165,9 @@ export function renderComparativeReport(comparisonData, options = {}) {
 
   md += `# Cross-Model & Ablation Comparative Validation Report\n\n`;
   md += `**Generated**: \`${nowIso}\`  \n`;
-  const baseGradeStr = classification.tier === 1 ? 'Tier 1A: HISTORICAL_REFERENCE_ABLATION' : `TIER ${classification.tier} (${classification.name})`;
+  const baseGradeStr = options.evidenceGrade ||
+    protocol?.execution?.providerA?.evidenceGrade ||
+    (classification.tier === 1 ? 'Tier 1A: HISTORICAL_REFERENCE_ABLATION' : (classification.tier === 3 ? 'L3_CROSS_PROVIDER_OBSERVED' : `TIER ${classification.tier} (${classification.name})`));
   const evidenceGradeStr = hasSyntheticRuns ? `${baseGradeStr} [SUPERSEDED / NOT LIVE EVIDENCE]` : baseGradeStr;
   md += `**Evidence Grade**: \`${evidenceGradeStr}\`  \n`;
   md += `**Protocol ID**: \`${protocol?.protocolId || 'v1.5-cross-model-1'}\`  \n`;
@@ -1213,10 +1226,16 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `| **Attestation Authority** | \`${taxA.identitySource}\` (\`${taxA.identityConfidence}\`) | \`${taxB.identitySource}\` (\`${taxB.identityConfidence}\`) | **VERIFIED** |\n\n`;
 
   md += `### 2.2 Temporal-Confound Disclosure\n\n`;
-  const temporalClassificationStr = hasSyntheticRuns
-    ? `originally classified under **TIER ${classification.tier} (${classification.name})** but has been superseded and demoted due to synthetic fixture provenance`
-    : `formally classified under ${classification.tier === 1 ? '**Tier 1A: HISTORICAL_REFERENCE_ABLATION**' : `**TIER ${classification.tier} (${classification.name})**`} rather than a simultaneous interleaved trial`;
-  md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation was ${temporalClassificationStr}.\n\n`;
+  const isInterleaved = Boolean(protocol?.execution?.interleaved || protocol?.execution?.mode === 'CONTEMPORANEOUS_INTERLEAVED');
+  if (isInterleaved) {
+    const passSeqStr = protocol?.execution?.passSequence ? protocol.execution.passSequence.join(' -> ') : 'A1 -> B1 -> A2 -> B2 -> A3 -> B3';
+    md += `Evaluation was executed under strict contemporaneous interleaved pass ordering (\`${passSeqStr}\`) across both Provider A (\`${taxA.rawModelId}\`) and Provider B (\`${taxB.rawModelId}\`). Both configurations operated under identical hermetic sandbox isolation (\`HERMETIC_SANDBOX_V1\`), label-blind projection (\`LABEL_BLIND_V1\`), and verified runtime telemetry attestation. The contemporaneous interleaved trial design eliminates temporal non-concurrency and temporal confounding between provider evaluations, satisfying Tier 3 cross-provider replication requirements.\n\n`;
+  } else {
+    const temporalClassificationStr = hasSyntheticRuns
+      ? `originally classified under **TIER ${classification.tier} (${classification.name})** but has been superseded and demoted due to synthetic fixture provenance`
+      : `formally classified under ${classification.tier === 1 ? '**Tier 1A: HISTORICAL_REFERENCE_ABLATION**' : `**TIER ${classification.tier} (${classification.name})**`} rather than a simultaneous interleaved trial`;
+    md += `Configuration A (\`${taxA.rawModelId}\`) serves as the frozen historical reference baseline recorded at repository commit \`d98b017a8db25eda58122f4caa97963efd3c5d64\`. Configuration B (\`${taxB.rawModelId}\`) was evaluated during a subsequent independent session. While both configurations execute under identical hermetic isolation, deterministic shuffle seed (\`20260917\`), and fixed throttle delay (2000ms), temporal non-concurrency may introduce upstream provider API dynamics or latency variations. In accordance with Default-Deny reporting principles, this evaluation was ${temporalClassificationStr}.\n\n`;
+  }
 
   // Execution Exposure & Censoring Audit
   const auditA = comparisonData.auditA;
@@ -1229,10 +1248,20 @@ export function renderComparativeReport(comparisonData, options = {}) {
     md += `| Exposure Metric | Configuration A (\`${taxA.rawModelId}\`) | Configuration B (\`${taxB.rawModelId}\`) | Delta / Comparison |\n`;
     md += `| :--- | :--- | :--- | :--- |\n`;
     md += `| **Total Attempted Exposures** | ${auditA.attempted} | ${auditB.attempted} | - |\n`;
-    md += `| **Successfully Completed Exposures** | ${auditA.completed} | ${auditB.completed} | **+${auditB.completed - auditA.completed} exposures** |\n`;
-    md += `| **Censored Exposures (Timeout / Schema Violation)** | ${auditA.censored} | ${auditB.censored} | **${auditB.censored - auditA.censored} exposures** |\n`;
+    const deltaCompleted = auditB.completed - auditA.completed;
+    const deltaCompletedStr = (deltaCompleted >= 0 ? `+${deltaCompleted}` : `${deltaCompleted}`) + ' exposures';
+    const deltaCensored = auditB.censored - auditA.censored;
+    const deltaCensoredStr = (deltaCensored >= 0 ? `+${deltaCensored}` : `${deltaCensored}`) + ' exposures';
+    const deltaRecall = (auditA.vulnCompleted > 0 && auditB.vulnCompleted > 0)
+      ? ((auditB.vulnWithCandidates / auditB.vulnCompleted) - (auditA.vulnWithCandidates / auditA.vulnCompleted)) * 100
+      : null;
+    const deltaRecallStr = deltaRecall !== null
+      ? `${deltaRecall >= 0 ? '+' : ''}${deltaRecall.toFixed(1)}% Recall across completed exposures`
+      : 'N/A';
+    md += `| **Successfully Completed Exposures** | ${auditA.completed} | ${auditB.completed} | **${deltaCompletedStr}** |\n`;
+    md += `| **Censored Exposures (Timeout / Schema Violation)** | ${auditA.censored} | ${auditB.censored} | **${deltaCensoredStr}** |\n`;
     md += `| **Vulnerable Fixtures Completed / Attempted** | ${auditA.vulnCompleted} / ${auditA.vulnAttempted} | ${auditB.vulnCompleted} / ${auditB.vulnAttempted} | - |\n`;
-    md += `| **Vulnerable Fixture Completed Exposure Recall** | ${vulnRecallA} (${auditA.vulnWithCandidates}/${auditA.vulnCompleted}) | ${vulnRecallB} (${auditB.vulnWithCandidates}/${auditB.vulnCompleted}) | **100.0% Recall across completed exposures** |\n`;
+    md += `| **Vulnerable Fixture Completed Exposure Recall** | ${vulnRecallA} (${auditA.vulnWithCandidates}/${auditA.vulnCompleted}) | ${vulnRecallB} (${auditB.vulnWithCandidates}/${auditB.vulnCompleted}) | **${deltaRecallStr}** |\n`;
     md += `| **Controlled Safe Exposures Completed / Attempted** | ${auditA.safeCompleted} / ${auditA.safeAttempted} | ${auditB.safeCompleted} / ${auditB.safeAttempted} | - |\n\n`;
   }
 
@@ -1339,9 +1368,9 @@ export function renderComparativeReport(comparisonData, options = {}) {
   md += `Evaluated across genuine safe control fixtures (\`HLD-01-SAFE\` through \`HLD-07-SAFE\`, \`HLD-09-SAFE\`, \`HLD-10-SAFE\`):\n\n`;
   md += `| Configuration | Observed False-Positive Exposures | Completed Genuine Safe Exposures | Empirical Specificity (%) | Mean FP per Run |\n`;
   md += `| :--- | :--- | :--- | :--- | :--- |\n`;
-  md += `| **Configuration A** (\`${taxA.rawModelId}\`) | ${specificity.fpCountA} | ${specificity.genuineCompletedSafeA} | **100.0%** | ${specificity.meanFpA.toFixed(2)} |\n`;
-  md += `| **Configuration B** (\`${taxB.rawModelId}\`) | ${specificity.fpCountB} | ${specificity.genuineCompletedSafeB} | **100.0%** | ${specificity.meanFpB.toFixed(2)} |\n`;
-  md += `| **Clean Control Agreement** | **${specificity.safeControlSuppressionDisplay}** | - | **Identical 100% Specificity** | - |\n\n`;
+  md += `| **Configuration A** (\`${taxA.rawModelId}\`) | ${specificity.fpCountA} | ${specificity.genuineCompletedSafeA} | **${specificity.specPctA}** | ${specificity.meanFpA.toFixed(2)} |\n`;
+  md += `| **Configuration B** (\`${taxB.rawModelId}\`) | ${specificity.fpCountB} | ${specificity.genuineCompletedSafeB} | **${specificity.specPctB}** | ${specificity.meanFpB.toFixed(2)} |\n`;
+  md += `| **Clean Control Agreement** | **${specificity.safeControlSuppressionDisplay}** | - | **${specificity.safeControlAgreementDisplay}** | - |\n\n`;
 
   md += `> [!NOTE] **Neutral Safe-Control Finding Disclosure**\n`;
   md += `> - Configuration A: ${specificity.neutralOutcomeA || '0 observed false-positive exposures across genuine safe controls'}.\n`;
@@ -1523,7 +1552,7 @@ export function compareRunMatrix(runsOrDirs, options = {}) {
   }
 
   // Render consolidated Matrix Report
-  const nowIso = new Date().toISOString();
+  const nowIso = options.timestamp || new Date().toISOString();
   let md = '';
   md += `# Multi-Configuration Cross-Model Comparative Matrix Report\n\n`;
   md += `**Generated**: \`${nowIso}\`  \n`;
@@ -1873,6 +1902,16 @@ Options:
 
   const protoPath = getArg('--protocol') || 'evals/protocols/v1.5-cross-model-protocol.json';
   const reportPath = getArg('--report');
+  const evidenceGrade = getArg('--evidence-grade');
+  const timestamp = getArg('--timestamp');
+  let effectiveTimestamp = timestamp;
+  if (!effectiveTimestamp && reportPath && fs.existsSync(reportPath)) {
+    try {
+      const existingReport = fs.readFileSync(reportPath, 'utf8');
+      const match = existingReport.match(/\*\*Generated\*\*:\s*`([^`]+)`/);
+      if (match) effectiveTimestamp = match[1];
+    } catch {}
+  }
 
   // Check --matrix option
   const matrixIdx = args.indexOf('--matrix');
@@ -1889,7 +1928,9 @@ Options:
     try {
       const res = compareRunMatrix(matrixPaths, {
         protocol: protoPath,
-        repoRoot: DEFAULT_REPO_ROOT
+        repoRoot: DEFAULT_REPO_ROOT,
+        evidenceGrade,
+        timestamp: effectiveTimestamp
       });
       if (reportPath) {
         fs.mkdirSync(path.dirname(path.resolve(reportPath)), { recursive: true });
@@ -1916,7 +1957,9 @@ Options:
   try {
     const res = compareModelBenchmarks(runsAPath, runsBPath, {
       protocol: protoPath,
-      repoRoot: DEFAULT_REPO_ROOT
+      repoRoot: DEFAULT_REPO_ROOT,
+      evidenceGrade,
+      timestamp: effectiveTimestamp
     });
 
     if (reportPath) {

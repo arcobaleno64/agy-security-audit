@@ -1,17 +1,17 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-claude-cross-provider-p3-0160cbd1",
-  "recordedAt": "2026-09-23T03:29:46.604Z",
+  "runId": "run-agy-cross-provider-p2-b3ab2ce6",
+  "recordedAt": "2026-09-23T02:57:24.521Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_CROSS_PROVIDER_OBSERVED",
-  "interleavedOrder": "B3",
+  "interleavedOrder": "A2",
   "rawStream": {
-    "path": "evals/live-runs/cross-provider/claude/raw-stream-pass-3.jsonl",
-    "sha256": "1b81e927d6aca058272fb2d2ef4b26572e2bb201e75d76e52f0910bc24dc6cc9",
-    "totalBytes": 908778,
-    "eventsCount": 435
+    "path": "evals/live-runs/cross-provider/gemini/raw-stream-pass-2.jsonl",
+    "sha256": "c5b868efea30084db340b5282d7a74a4f3ed06e602f6eb3d6f6f984439d65115",
+    "totalBytes": 118436,
+    "eventsCount": 382
   },
   "target": {
     "repositoryName": "evals/holdout-benchmark",
@@ -22,22 +22,22 @@
   },
   "environment": {
     "agyVersion": "1.2.8",
-    "modelId": "claude-sonnet-5",
-    "modelProvider": "anthropic",
-    "baseModel": "claude-5-sonnet",
+    "modelId": "gemini-3.8-flash-high",
+    "modelProvider": "google",
+    "baseModel": "gemini-3.8-flash",
     "reasoningProfile": "high",
-    "identitySource": "UNKNOWN",
+    "identitySource": "RUNTIME_ATTESTED",
     "modelTaxonomy": {
-      "rawModelId": "claude-sonnet-5",
-      "canonicalModelId": "claude-sonnet-5",
-      "baseModel": "claude-5-sonnet",
-      "modelFamily": "claude-sonnet",
-      "modelProvider": "anthropic",
+      "rawModelId": "gemini-3.8-flash-high",
+      "canonicalModelId": "gemini-3.8-flash",
+      "baseModel": "gemini-3.8-flash",
+      "modelFamily": "gemini-flash",
+      "modelProvider": "google",
       "reasoningProfile": "high",
-      "runtimeId": "claude",
-      "runtimeAdapter": "cli",
-      "identitySource": "UNKNOWN",
-      "identityConfidence": "NONE"
+      "runtimeId": "agy",
+      "runtimeAdapter": "native",
+      "identitySource": "RUNTIME_ATTESTED",
+      "identityConfidence": "HIGH"
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
@@ -50,41 +50,41 @@
   "findings": {
     "candidates": [
       {
-        "id": "CAND-CWE-94-6",
+        "id": "CAND-CWE-94-8",
         "ruleId": "CWE-94",
-        "title": "使用者可控字串以 new Function 動態編譯執行，達成任意程式碼執行",
-        "securityProperty": "input_validation",
-        "findingType": "VULNERABILITY",
-        "proofKind": "STATIC_TRACE",
-        "severity": "CRITICAL",
-        "location": {
-          "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
-          "startLine": 6,
-          "endLine": 8
-        },
-        "symbol": "renderDynamicTemplate",
-        "lineageId": "5cfdbbca200d392c422d4386f4c5ad39"
-      },
-      {
-        "id": "CAND-CWE-94-11",
-        "ruleId": "CWE-94",
-        "title": "未經身分驗證之路由直接將請求主體傳入任意程式碼執行的 sink",
+        "title": "Arbitrary template expression evaluation allows sandbox escape",
         "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
-          "startLine": 11,
-          "endLine": 19
+          "startLine": 8,
+          "endLine": 8
         },
-        "symbol": "router.post",
-        "lineageId": "7b0c53af3c54766a5fbfe6b943826659"
+        "symbol": "renderDynamicTemplate",
+        "lineageId": "5cfdbbca200d392c422d4386f4c5ad39"
       },
       {
-        "id": "CAND-CWE-1321-15",
-        "ruleId": "CWE-1321",
-        "title": "Mass assignment via Object.assign(user, req.body) allows privilege escalation (role/isSuperuser overwrite)",
+        "id": "CAND-CWE-611-19",
+        "ruleId": "CWE-611",
+        "title": "XML External Entity (XXE) injection via insecure parser configuration",
+        "securityProperty": "confidentiality",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/02-xxe-entity-expansion.js",
+          "startLine": 19,
+          "endLine": 19
+        },
+        "symbol": "parseXmlReport",
+        "lineageId": "ca61995ee6d5a0443005f667673f0c65"
+      },
+      {
+        "id": "CAND-CWE-915-15",
+        "ruleId": "CWE-915",
+        "title": "Unrestricted mass assignment allows overwriting role and isSuperuser attributes",
         "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
@@ -92,48 +92,32 @@
         "location": {
           "uri": "evals/holdout-benchmark/03-mass-assignment.js",
           "startLine": 15,
-          "endLine": 16
+          "endLine": 15
         },
-        "symbol": "router.put(/users/:id/profile)",
-        "lineageId": "5645d4d2bd1e1e45593438cc37be1db1"
+        "symbol": "Object.assign",
+        "lineageId": "468d0bb13aa4f4c5775e13e8630d4270"
       },
       {
-        "id": "CAND-CWE-1333-7",
+        "id": "CAND-CWE-1333-16",
         "ruleId": "CWE-1333",
-        "title": "Catastrophic backtracking ReDoS in email validation regex on unbounded user input",
+        "title": "Regular expression denial of service (ReDoS) via catastrophic backtracking",
         "securityProperty": "availability",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/04-redos-backtracking.js",
-          "startLine": 7,
+          "startLine": 16,
           "endLine": 16
         },
-        "symbol": "VULN_EMAIL_REGEX",
-        "lineageId": "77eb1b149f4c7a1503c5693d0234c615"
-      },
-      {
-        "id": "CAND-CWE-329-9",
-        "ruleId": "CWE-329",
-        "title": "AES-CBC cipher uses a static, hardcoded all-zero IV reused across every encryption call",
-        "securityProperty": "confidentiality",
-        "findingType": "VULNERABILITY",
-        "proofKind": "STATIC_TRACE",
-        "severity": "HIGH",
-        "location": {
-          "uri": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
-          "startLine": 9,
-          "endLine": 16
-        },
-        "symbol": "STATIC_IV",
-        "lineageId": "2ceeb7de1817ed7df2c3cb45f770df88"
+        "symbol": "VULN_EMAIL_REGEX.test",
+        "lineageId": "69f9ac1ab977e8404a7bc96f80b42404"
       },
       {
         "id": "CAND-CWE-347-15",
         "ruleId": "CWE-347",
-        "title": "jwt.verify() called without an `algorithms` allowlist, enabling algorithm-confusion / signature-bypass attacks",
-        "securityProperty": "authentication",
+        "title": "Missing algorithm restriction in jwt.verify allows algorithm confusion",
+        "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "CRITICAL",
@@ -148,8 +132,8 @@
       {
         "id": "CAND-CWE-22-15",
         "ruleId": "CWE-22",
-        "title": "Unvalidated entryName allows path traversal (Zip Slip) outside EXTRACT_DIR via path.join",
-        "securityProperty": "input_validation",
+        "title": "Path traversal via unchecked path join allows arbitrary file write",
+        "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "CRITICAL",
@@ -158,223 +142,222 @@
           "startLine": 15,
           "endLine": 16
         },
-        "symbol": "destinationPath",
-        "lineageId": "cf5ac0d8bd4d0c99e547d088503fd5ed"
+        "symbol": "fs.writeFileSync",
+        "lineageId": "3c52474cae97e6efd0cf4a0a2b40349e"
       },
       {
-        "id": "CAND-CWE-918-7",
+        "id": "CAND-CWE-918-12",
         "ruleId": "CWE-918",
-        "title": "SSRF via unvalidated targetUrl passed directly to http.get",
-        "securityProperty": "input-validation",
+        "title": "Server-Side Request Forgery via unvalidated targetUrl in http.get",
+        "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
-        "severity": "HIGH",
+        "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/08-ssrf-dns-rebinding.js",
-          "startLine": 7,
-          "endLine": 16
+          "startLine": 12,
+          "endLine": 14
         },
-        "symbol": "router.post('/webhook/test')",
-        "lineageId": "b829dde37cad0a2b03e4223edc33313c"
+        "symbol": "http.get",
+        "lineageId": "33091c0371a9f50055f6463517b01a9d"
       },
       {
-        "id": "CAND-CWE-113-7",
+        "id": "CAND-CWE-113-11",
         "ruleId": "CWE-113",
-        "title": "Unsanitized query parameter embedded in Set-Cookie header enables HTTP response header/CRLF injection",
-        "securityProperty": "input-validation",
+        "title": "Unsanitized input embedded in Set-Cookie header allows CRLF injection",
+        "securityProperty": "sanitization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/09-crlf-header-injection.js",
-          "startLine": 7,
+          "startLine": 11,
           "endLine": 11
         },
-        "symbol": "router.get('/auth/callback')",
-        "lineageId": "5f2835f3b4f95ff2a9445c782537895f"
+        "symbol": "res.setHeader",
+        "lineageId": "f2ad84522cfc607b1758b7a250a7927c"
       },
       {
-        "id": "CAND-CWE-367-10",
+        "id": "CAND-CWE-367-15",
         "ruleId": "CWE-367",
-        "title": "TOCTOU race condition allows password reset token reuse",
+        "title": "Time-of-check to time-of-use (TOCTOU) race condition permits concurrent token reuse",
         "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/10-race-token-reuse.js",
-          "startLine": 10,
-          "endLine": 25
+          "startLine": 15,
+          "endLine": 23
         },
-        "symbol": "router.post(/auth/reset-password)",
-        "lineageId": "c3d0a1b4da68c6215a97e59d0ec071bc"
+        "symbol": "router.post",
+        "lineageId": "0b11090393db8e00c0db228861ec813c"
       }
     ]
   },
   "summary": {
-    "candidateCount": 10,
+    "candidateCount": 9,
     "vulnerableFixturesCompleted": 10,
-    "safeFixturesCompleted": 0,
-    "censoredExposures": 10,
+    "safeFixturesCompleted": 10,
+    "censoredExposures": 0,
     "totalExposures": 20,
-    "executionDurationMs": 454137
+    "executionDurationMs": 631893
   },
   "metadata": {
     "fixtureResults": [
       {
         "fixtureId": "HLD-01",
         "split": "HOLDOUT_SET",
-        "candidateCount": 2,
-        "durationMs": 16673,
+        "candidateCount": 1,
+        "durationMs": 74838,
         "error": null
       },
       {
         "fixtureId": "HLD-02",
         "split": "HOLDOUT_SET",
-        "candidateCount": 0,
-        "durationMs": 145986,
+        "candidateCount": 1,
+        "durationMs": 41280,
         "error": null
       },
       {
         "fixtureId": "HLD-03",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 13300,
+        "durationMs": 26873,
         "error": null
       },
       {
         "fixtureId": "HLD-04",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 19227,
+        "durationMs": 40509,
         "error": null
       },
       {
         "fixtureId": "HLD-05",
         "split": "HOLDOUT_SET",
-        "candidateCount": 1,
-        "durationMs": 15316,
+        "candidateCount": 0,
+        "durationMs": 18944,
         "error": null
       },
       {
         "fixtureId": "HLD-06",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 13021,
+        "durationMs": 37417,
         "error": null
       },
       {
         "fixtureId": "HLD-07",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 16529,
+        "durationMs": 34542,
         "error": null
       },
       {
         "fixtureId": "HLD-08",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 12413,
+        "durationMs": 30372,
         "error": null
       },
       {
         "fixtureId": "HLD-09",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 11999,
+        "durationMs": 33332,
         "error": null
       },
       {
         "fixtureId": "HLD-10",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 133777,
+        "durationMs": 25793,
         "error": null
       },
       {
         "fixtureId": "HLD-01-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 9645,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 22337,
+        "error": null
       },
       {
         "fixtureId": "HLD-02-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5368,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 20255,
+        "error": null
       },
       {
         "fixtureId": "HLD-03-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5447,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 23539,
+        "error": null
       },
       {
         "fixtureId": "HLD-04-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5174,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 25449,
+        "error": null
       },
       {
         "fixtureId": "HLD-05-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 4968,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 23239,
+        "error": null
       },
       {
         "fixtureId": "HLD-06-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 4813,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 25927,
+        "error": null
       },
       {
         "fixtureId": "HLD-07-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5104,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 23179,
+        "error": null
       },
       {
         "fixtureId": "HLD-08-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5134,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 51003,
+        "error": null
       },
       {
         "fixtureId": "HLD-09-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 4923,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 27304,
+        "error": null
       },
       {
         "fixtureId": "HLD-10-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 5320,
-        "error": "CENSORED_EXPOSURE: Claude stream parsing failed: 429"
+        "durationMs": 25761,
+        "error": null
       }
     ],
     "governanceNote": "Milestone G8-R: Contemporaneous interleaved live model execution across Google Antigravity and Anthropic Claude Code."
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "0cb740ae-6cd5-41cc-8b83-ed18ead817b8",
-    "telemetryDigest": "1b81e927d6aca058272fb2d2ef4b26572e2bb201e75d76e52f0910bc24dc6cc9",
-    "totalEvents": 435,
+    "conversationId": "1b942e56-619b-4373-8b97-114b5d7cd4b0",
+    "telemetryDigest": "c5b868efea30084db340b5282d7a74a4f3ed06e602f6eb3d6f6f984439d65115",
+    "totalEvents": 382,
     "availableTools": [
       "view_file",
-      "edit",
-      "bash",
-      "grep",
-      "glob"
+      "list_dir",
+      "grep_search",
+      "find_by_name"
     ],
     "toolsUsed": [
       "view_file"
@@ -383,14 +366,14 @@
     "permissionMode": "always-proceed",
     "sandboxEnabled": true,
     "tokenUsage": {
-      "inputTokens": 56,
-      "outputTokens": 4787,
-      "thinkingTokens": 1018,
-      "cacheReadTokens": 1498209,
-      "totalTokens": 1503052
+      "inputTokens": 274840,
+      "outputTokens": 96227,
+      "thinkingTokens": 93040,
+      "cacheReadTokens": 554203,
+      "totalTokens": 371067
     },
-    "durationSeconds": 454.14
+    "durationSeconds": 631.89
   },
-  "rawStreamSha256": "1b81e927d6aca058272fb2d2ef4b26572e2bb201e75d76e52f0910bc24dc6cc9",
-  "rawStreamPath": "evals/live-runs/cross-provider/claude/raw-stream-pass-3.jsonl"
+  "rawStreamSha256": "c5b868efea30084db340b5282d7a74a4f3ed06e602f6eb3d6f6f984439d65115",
+  "rawStreamPath": "evals/live-runs/cross-provider/gemini/raw-stream-pass-2.jsonl"
 }
