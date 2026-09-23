@@ -92,6 +92,11 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     description: 'Live Cross-Provider Model Replication Report (Milestone G8-R)'
   },
   {
+    repoPath: 'reports/oss-transfer-live-report-2026-09-23.md',
+    stagedName: 'oss-transfer-live-report-2026-09-23.md',
+    description: 'Live Full Upstream Repository Transfer Evaluation Report (Milestone G7-R)'
+  },
+  {
     repoPath: 'schemas/evidence-matrix.schema.json',
     stagedName: 'evidence-matrix.schema.json',
     description: 'Draft-07 JSON Schema for Evidence Matrix Artifact'
@@ -108,6 +113,11 @@ export const MANDATORY_ENVELOPE_DIRS = [
     repoDir: 'evals/live-runs',
     archivePrefix: 'evals/live-runs',
     description: 'Machine-readable MODEL_OBSERVED run envelopes'
+  },
+  {
+    repoDir: 'evals/live-runs/oss-transfer',
+    archivePrefix: 'evals/live-runs/oss-transfer',
+    description: 'Machine-readable MODEL_OBSERVED OSS transfer run envelopes'
   },
   {
     repoDir: 'evals/recorded-runs',

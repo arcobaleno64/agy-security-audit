@@ -11,10 +11,10 @@
   },
   "summary": {
     "totalDimensions": 5,
-    "supportedDimensions": 4,
-    "partiallyHoldsDimensions": 1,
+    "supportedDimensions": 5,
+    "partiallyHoldsDimensions": 0,
     "reopenedDimensions": 0,
-    "provisionalDimensions": 1,
+    "provisionalDimensions": 0,
     "overallStatus": "SUBSTANTIATED"
   },
   "dimensions": {
@@ -220,16 +220,17 @@
       ]
     },
     "EXTERNAL_OSS_TRANSFER": {
-      "status": "PARTIALLY_HOLDS",
-      "grade": "CURATED_EXTERNAL_ORIGIN_FIXTURE_VALIDATION",
-      "claim": "Curated external-origin CVE deterministic fixture validation supported; full upstream repository transfer REOPENED.",
-      "scope": "Real-World CVE-Derived Curated Fixture Evaluation (6 paired CVE slices across minimist, lodash, json-pointer, node-tar, axios, ini)",
-      "partiallyHoldsDetail": {
-        "curatedFixtureValidation": "SUPPORTED",
-        "fullUpstreamRepoTransfer": "REOPENED"
-      },
-      "scopeClarification": "Evaluates deterministic finalizer disposition logic on extracted single-file slices (evals/oss-corpus/pre-fix/*.js and post-fix/*.js) with synthetic 3-lens ballots; does NOT constitute live agent discovery over full upstream git repository checkouts.",
+      "status": "SUPPORTED",
+      "grade": "L3_FULL_REPO_TRANSFER_OBSERVED",
+      "claim": "Milestone G7-R live autonomous full upstream repository transfer evaluation across 3 authentic OSS repositories (minimist, json-pointer, ini: 3 vulnerable pre-fix vs 3 remediated post-fix pairs) verified under Default-Deny with raw stream cryptographic attestation.",
+      "scope": "Real-World Upstream Repository Live Agent Discovery & Transfer Evaluation (6 full repository checkouts across minimist, json-pointer, ini)",
+      "verificationMethod": "Autonomous live agent execution (Google Antigravity gemini-3.8-flash-high) across 6 complete upstream repository trees under Default-Deny without file path or line number hints, achieving 100% pre-fix recall (3/3 true positives), 100% post-fix specificity (3/3 clean safe convergence), 0% rediscovery rate, and cryptographic attestation over raw NDJSON stdout streams.",
       "artifacts": [
+        {
+          "path": "reports/oss-transfer-live-report-2026-09-23.md",
+          "sha256": "6f050e70a1751a202b1945b359eab07b0fda7ef6c52b9f105b1199863784cdf8",
+          "description": "Live Full Upstream Repository Transfer Evaluation Report (Milestone G7-R)"
+        },
         {
           "path": "reports/oss-transfer-benchmark-report-2026-09-22.md",
           "sha256": "e1524d5462f1e094c991c3712b0f843f4c36d035a0947bb31646705bc6d31e2c",
@@ -244,6 +245,71 @@
           "path": "scripts/run-oss-transfer-eval.mjs",
           "sha256": "4b6872f17c5840062843ee9ed62cc2de745e19b78ea8cadbe014bcdcc744b7e3",
           "description": "Curated External-Origin Fixture Validation runner"
+        },
+        {
+          "path": "scripts/run-live-oss-transfer.mjs",
+          "sha256": "d38873c5afcc74425bf9fb58688879af2d422d21dedfa6861bf66dc8c0de9717",
+          "description": "Live Full Upstream Repository Transfer Evaluation Runner"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-minimist-pre.json",
+          "sha256": "4c12726b0ccb204b157a80ae3593bc24abf63e1f175360324af4912a7d53503d",
+          "description": "Authentic MODEL_OBSERVED live run minimist-pre envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-minimist-pre.jsonl",
+          "sha256": "3d610764b541b3b776de3cf8c9da3dfcf94dfcc4e8df4a87575c7308119d6ac7",
+          "description": "Cryptographically attested raw stdout stream for minimist-pre"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-minimist-post.json",
+          "sha256": "0a2edde22587876ee883311855c7939999f7cf40cdb5f305f2cf7f79b7dbe86a",
+          "description": "Authentic MODEL_OBSERVED live run minimist-post envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-minimist-post.jsonl",
+          "sha256": "0892fd48d0cb8aefe01f5d21bee7f5dd80acd7bef9f90e3438125d0247b136ab",
+          "description": "Cryptographically attested raw stdout stream for minimist-post"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-json-pointer-pre.json",
+          "sha256": "f98d07890b34d3953ce72b8343c79ea7b1e529e8ea030a118a846ae6ffdc346e",
+          "description": "Authentic MODEL_OBSERVED live run json-pointer-pre envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-pre.jsonl",
+          "sha256": "985f433dd0d96303f6300b8f25565e1e9d6352e70b9d62d0d67e736de8d62e64",
+          "description": "Cryptographically attested raw stdout stream for json-pointer-pre"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-json-pointer-post.json",
+          "sha256": "bd1ed2a5470091f68cab9d56c0efe813c4ff40f4cd595e5ddd6caf0918197412",
+          "description": "Authentic MODEL_OBSERVED live run json-pointer-post envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-post.jsonl",
+          "sha256": "a44eab3930cc3c431b30c66925f92f00604e2f502cb78d94ad347b6d7887da00",
+          "description": "Cryptographically attested raw stdout stream for json-pointer-post"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-ini-pre.json",
+          "sha256": "8217401d9436eb339db8024fa62ffe3ad0dd132044b6addddae5d58c606945a0",
+          "description": "Authentic MODEL_OBSERVED live run ini-pre envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-ini-pre.jsonl",
+          "sha256": "44325255b5f98820b5a879bde2e7991e3538521806ec026c5af61a2200322247",
+          "description": "Cryptographically attested raw stdout stream for ini-pre"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/run-ini-post.json",
+          "sha256": "aa79bf4043520688f8594ac9e8f61f30411c365cefb34ebd4e9f950e3e8f670d",
+          "description": "Authentic MODEL_OBSERVED live run ini-post envelope"
+        },
+        {
+          "path": "evals/live-runs/oss-transfer/raw-stream-ini-post.jsonl",
+          "sha256": "38c6d6a9a4d52939be755aa2f9f67240bd929cc4fdac15adc8a1d6971b135c2d",
+          "description": "Cryptographically attested raw stdout stream for ini-post"
         }
       ]
     }
