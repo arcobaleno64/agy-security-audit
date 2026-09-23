@@ -1,425 +1,492 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-claude-cross-provider-p2-mucpj42r",
-  "recordedAt": "2026-09-22T14:30:00.000Z",
-  "benchmarkMode": "RECORDED_EMPIRICAL",
-  "evidenceOrigin": "SYNTHETIC_RECONSTRUCTED",
-  "executionKind": "SYNTHETIC_SIMULATED",
+  "runId": "run-claude-cross-provider-p2-b6a94a06",
+  "recordedAt": "2026-09-23T03:07:22.092Z",
+  "benchmarkMode": "DISCOVERY",
+  "evidenceOrigin": "MODEL_OBSERVED",
+  "executionKind": "LIVE_AGENT",
+  "evidenceGrade": "L3_CROSS_PROVIDER_OBSERVED",
+  "interleavedOrder": "B2",
+  "rawStream": {
+    "path": "evals/live-runs/cross-provider/claude/raw-stream-pass-2.jsonl",
+    "sha256": "f5434d58d1dd6dfebae1ba755d4ab22710ce3bbf1c953520691a3a4a4d68375e",
+    "totalBytes": 1008530,
+    "eventsCount": 553
+  },
   "target": {
-    "repoPath": "evals/holdout-benchmark",
+    "repositoryName": "evals/holdout-benchmark",
+    "repositoryUri": "https://github.com/arcobaleno64/agy-security-audit.git",
+    "commitSha": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "corpus": "holdout-benchmark",
     "fixtureCount": 20
   },
   "environment": {
-    "agyVersion": "1.2.7",
-    "modelId": "claude-5-sonnet",
+    "agyVersion": "1.2.8",
+    "modelId": "claude-sonnet-5",
     "modelProvider": "anthropic",
     "baseModel": "claude-5-sonnet",
     "reasoningProfile": "high",
-    "identitySource": "CONFIG_DECLARED",
+    "identitySource": "RUNTIME_ATTESTED",
     "modelTaxonomy": {
-      "rawModelId": "claude-5-sonnet",
-      "canonicalModelId": "claude-5-sonnet",
+      "rawModelId": "claude-sonnet-5",
+      "canonicalModelId": "claude-sonnet-5",
       "baseModel": "claude-5-sonnet",
       "modelFamily": "claude-sonnet",
       "modelProvider": "anthropic",
       "reasoningProfile": "high",
-      "runtimeId": "agy",
-      "runtimeAdapter": "native",
-      "identitySource": "CONFIG_DECLARED",
+      "runtimeId": "claude",
+      "runtimeAdapter": "cli",
+      "identitySource": "RUNTIME_ATTESTED",
       "identityConfidence": "HIGH"
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "923dddfb94ec1d4452077e68fa7c20c0274719c8",
-    "toolVersion": "1.5.1",
-    "toolRevision": "923dddfb94ec1d4452077e68fa7c20c0274719c8",
-    "toolIntegrityDigest": "a1672eaa288b5cdd73186b5ead62dfb06f0d661e63cc9f433e86bedc40b1e569",
-    "toolDirty": false
+    "skillRevision": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "toolVersion": "1.6.2",
+    "toolRevision": "e31a35fa2829c3a9a313ea3f4ab42dbc8615e622",
+    "toolIntegrityDigest": null,
+    "toolDirty": true
   },
   "findings": {
     "candidates": [
       {
-        "id": "CAND-CWE-1336-8",
-        "ruleId": "CWE-1336",
-        "title": "Server-Side Template Injection via unescaped string interpolation",
-        "securityProperty": "safe-templating",
+        "id": "CAND-CWE-94-6",
+        "ruleId": "CWE-94",
+        "title": "User-controlled template string evaluated via dynamic Function constructor enables arbitrary code execution",
+        "securityProperty": "input_validation",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
-        "severity": "HIGH",
+        "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
-          "startLine": 8,
-          "endLine": 10
+          "startLine": 6,
+          "endLine": 8
         },
         "symbol": "renderDynamicTemplate",
-        "lineageId": "d593b68c2453a8f81e0dadcf07f64824"
+        "lineageId": "5cfdbbca200d392c422d4386f4c5ad39"
       },
       {
-        "id": "CAND-CWE-611-18",
-        "ruleId": "CWE-611",
-        "title": "Insecure XML Entity Expansion (XXE) with External Entity Resolution",
-        "securityProperty": "safe-resource-handling",
+        "id": "CAND-CWE-94-11",
+        "ruleId": "CWE-94",
+        "title": "Unauthenticated route passes req.body.template directly into code-generation sink with no sanitization",
+        "securityProperty": "input_validation",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
-        "severity": "HIGH",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/01-ssti-template-injection.js",
+          "startLine": 11,
+          "endLine": 19
+        },
+        "symbol": "router.post",
+        "lineageId": "7b0c53af3c54766a5fbfe6b943826659"
+      },
+      {
+        "id": "CAND-CWE-611-12",
+        "ruleId": "CWE-611",
+        "title": "XML parser configured with noent/dtd enabled processes untrusted user-supplied XML, allowing XXE (external entity expansion / SSRF / file disclosure)",
+        "securityProperty": "input-validation",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/02-xxe-entity-expansion.js",
-          "startLine": 18,
+          "startLine": 12,
           "endLine": 20
         },
         "symbol": "parseXmlReport",
-        "lineageId": "9130d72b31c7cf7181fcf44a79e65314"
+        "lineageId": "ca61995ee6d5a0443005f667673f0c65"
       },
       {
-        "id": "CAND-CWE-915-14",
-        "ruleId": "CWE-915",
-        "title": "Mass Assignment / Object Prototype Injection via unrestricted Object.assign",
-        "securityProperty": "object-integrity",
+        "id": "CAND-CWE-1321-15",
+        "ruleId": "CWE-1321",
+        "title": "Mass assignment via Object.assign(user, req.body) allows overwriting role/isSuperuser",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "CRITICAL",
+        "location": {
+          "uri": "evals/holdout-benchmark/03-mass-assignment.js",
+          "startLine": 15,
+          "endLine": 15
+        },
+        "symbol": "router.put('/users/:id/profile')",
+        "lineageId": "1d8d1c5d52a64af30dc70c4ffc0c2dba"
+      },
+      {
+        "id": "CAND-CWE-1333-7",
+        "ruleId": "CWE-1333",
+        "title": "Regular expression denial of service (ReDoS) via catastrophic backtracking on unconstrained user input",
+        "securityProperty": "availability",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
-          "uri": "evals/holdout-benchmark/03-mass-assignment.js",
-          "startLine": 14,
+          "uri": "evals/holdout-benchmark/04-redos-backtracking.js",
+          "startLine": 7,
           "endLine": 16
         },
-        "symbol": "Object.assign",
-        "lineageId": "c3b27fdb7fa1fe562fd3400dbc7c8a55"
+        "symbol": "VULN_EMAIL_REGEX",
+        "lineageId": "77eb1b149f4c7a1503c5693d0234c615"
       },
       {
-        "id": "CAND-CWE-329-15",
+        "id": "CAND-CWE-329-9",
         "ruleId": "CWE-329",
-        "title": "Static / Reused Initialization Vector (IV) in CBC Encryption",
-        "securityProperty": "cryptographic-randomness",
+        "title": "AES-CBC cipher uses static all-zero IV reused across all encryptions",
+        "securityProperty": "confidentiality",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/05-crypto-iv-reuse.js",
-          "startLine": 15,
-          "endLine": 17
+          "startLine": 9,
+          "endLine": 16
         },
-        "symbol": "createCipheriv",
-        "lineageId": "dfc83efd73b151e197270738d9c876c5"
+        "symbol": "STATIC_IV",
+        "lineageId": "2ceeb7de1817ed7df2c3cb45f770df88"
       },
       {
-        "id": "CAND-CWE-347-14",
+        "id": "CAND-CWE-347-15",
         "ruleId": "CWE-347",
-        "title": "JWT Algorithm Confusion (HMAC vs RSA) in Token Verification",
-        "securityProperty": "cryptographic-signature",
+        "title": "jwt.verify() 缺少 algorithms 白名單限制，允許演算法混淆攻擊",
+        "securityProperty": "authentication",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/06-jwt-alg-confusion.js",
-          "startLine": 14,
-          "endLine": 16
+          "startLine": 15,
+          "endLine": 15
         },
-        "symbol": "jwt.verify",
-        "lineageId": "5b2dfcf52c1e8c6ab627abb20787c1c8"
+        "symbol": "router.post('/auth/verify')",
+        "lineageId": "9b08ba7890210c851d67b32a482da7d6"
       },
       {
-        "id": "CAND-CWE-22-14",
+        "id": "CAND-CWE-22-15",
         "ruleId": "CWE-22",
-        "title": "Path Traversal via Archive Extraction (Zip Slip)",
-        "securityProperty": "filesystem-confinement",
+        "title": "使用者可控 entryName 未經淨化即與 EXTRACT_DIR 拼接，可跳脫目的目錄寫入任意路徑（Zip Slip / Path Traversal）",
+        "securityProperty": "input-validation",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
-        "severity": "HIGH",
+        "severity": "CRITICAL",
         "location": {
           "uri": "evals/holdout-benchmark/07-zip-slip-traversal.js",
-          "startLine": 14,
+          "startLine": 15,
           "endLine": 16
         },
-        "symbol": "path.join",
-        "lineageId": "04f6916026f52c1b01f09cbd9fa608a5"
+        "symbol": "router.post('/archive/extract-entry')",
+        "lineageId": "4e91e5c77912d079b2b15bc61f66c361"
       },
       {
-        "id": "CAND-CWE-918-11",
+        "id": "CAND-CWE-918-7",
         "ruleId": "CWE-918",
-        "title": "Server-Side Request Forgery via Unfiltered Webhook URL Fetch",
-        "securityProperty": "network-boundary-confinement",
+        "title": "SSRF via unvalidated targetUrl passed directly to http.get",
+        "securityProperty": "input-validation",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/08-ssrf-dns-rebinding.js",
-          "startLine": 11,
-          "endLine": 13
+          "startLine": 7,
+          "endLine": 16
         },
-        "symbol": "http.get",
-        "lineageId": "53529aa322b3190d8cd7e8869639bc53"
+        "symbol": "router.post('/webhook/test')",
+        "lineageId": "b829dde37cad0a2b03e4223edc33313c"
       },
       {
-        "id": "CAND-CWE-113-10",
-        "ruleId": "CWE-113",
-        "title": "HTTP Response Splitting / CRLF Header Injection",
-        "securityProperty": "output-encoding",
+        "id": "CAND-CWE-93-7",
+        "ruleId": "CWE-93",
+        "title": "Unsanitized query param interpolated into Set-Cookie header enables CRLF/header injection",
+        "securityProperty": "input-validation",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
-        "severity": "MEDIUM",
+        "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/09-crlf-header-injection.js",
-          "startLine": 10,
-          "endLine": 12
+          "startLine": 7,
+          "endLine": 11
         },
-        "symbol": "res.setHeader",
-        "lineageId": "60c9b20a434068984849a9c946207bde"
+        "symbol": "router.get('/auth/callback')",
+        "lineageId": "20703597e007b0477dce8013b00f3940"
       },
       {
-        "id": "CAND-CWE-367-14",
+        "id": "CAND-CWE-367-10",
         "ruleId": "CWE-367",
-        "title": "Time-of-Check to Time-of-Use (TOCTOU) Race Condition in Token Redemption",
-        "securityProperty": "concurrency-control",
+        "title": "Time-of-check to time-of-use race condition allows password reset token reuse",
+        "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/10-race-token-reuse.js",
-          "startLine": 14,
-          "endLine": 16
+          "startLine": 10,
+          "endLine": 25
         },
-        "symbol": "router.post",
-        "lineageId": "73b813d5295c580a600fe8bd0db1a659"
+        "symbol": "router.post('/auth/reset-password')",
+        "lineageId": "a226c262a4b15b92963c264cbc8d760c"
       },
       {
-        "id": "CAND-CWE-918-23",
+        "id": "CAND-CWE-862-11",
+        "ruleId": "CWE-862",
+        "title": "Profile update endpoint has no authentication/authorization check, allowing any caller to modify any user's profile by ID",
+        "securityProperty": "authorization",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/safe/03-mass-assignment.js",
+          "startLine": 11,
+          "endLine": 23
+        },
+        "symbol": "router.put(/users/:id/profile)",
+        "lineageId": "f3bd9b706df73ef70c42186d28ec9cd3"
+      },
+      {
+        "id": "CAND-CWE-353-14",
+        "ruleId": "CWE-353",
+        "title": "AES-256-CBC encryption without integrity/authentication (no MAC or AEAD mode)",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/safe/05-crypto-iv-reuse.js",
+          "startLine": 14,
+          "endLine": 17
+        },
+        "symbol": "router.post('/data/encrypt')",
+        "lineageId": "38e94853fa6e8aa7579c58150a3b7f8a"
+      },
+      {
+        "id": "CAND-CWE-918-17",
         "ruleId": "CWE-918",
-        "title": "Server-Side Request Forgery via DNS rebinding and unpinned secondary resolution",
-        "securityProperty": "network-boundary-confinement",
+        "title": "SSRF via DNS-rebinding TOCTOU: private-IP check validates a separate resolve() result, but http.get() re-resolves the hostname independently, letting attacker-controlled DNS return a public IP for the check and a private/internal IP for the actual request",
+        "securityProperty": "authorization",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "evals/holdout-benchmark/safe/08-ssrf-dns-rebinding.js",
-          "startLine": 23,
+          "startLine": 17,
           "endLine": 25
         },
-        "symbol": "http.get",
-        "lineageId": "ecb8ed463bf92734118b5553029fc434"
+        "symbol": "router.post('/webhook/test')",
+        "lineageId": "b829dde37cad0a2b03e4223edc33313c"
+      },
+      {
+        "id": "CAND-CWE-384-6",
+        "ruleId": "CWE-384",
+        "title": "Session fixation: client-supplied token from query string is trusted as session cookie without server-side issuance/validation",
+        "securityProperty": "authentication",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "evals/holdout-benchmark/safe/09-crlf-header-injection.js",
+          "startLine": 6,
+          "endLine": 15
+        },
+        "symbol": "router.get('/auth/callback')",
+        "lineageId": "9ad7b7e8d19e09e000f28979e282d418"
+      },
+      {
+        "id": "CAND-CWE-614-14",
+        "ruleId": "CWE-614",
+        "title": "Session cookie set without Secure and SameSite attributes",
+        "securityProperty": "confidentiality",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "MEDIUM",
+        "location": {
+          "uri": "evals/holdout-benchmark/safe/09-crlf-header-injection.js",
+          "startLine": 14,
+          "endLine": 14
+        },
+        "symbol": "router.get('/auth/callback')",
+        "lineageId": "153a77e0ccaebe3013c71120384a8f6b"
       }
-    ],
-    "verifiedFindings": [],
-    "unresolvedCandidates": [],
-    "suppressedCandidates": []
+    ]
   },
   "summary": {
-    "candidateCount": 10,
-    "verifiedCount": null,
-    "deferredCount": null,
-    "suppressedCount": null,
-    "executionDurationMs": 1485600
+    "candidateCount": 16,
+    "vulnerableFixturesCompleted": 10,
+    "safeFixturesCompleted": 10,
+    "censoredExposures": 0,
+    "totalExposures": 20,
+    "executionDurationMs": 568605
   },
   "metadata": {
-    "passIndex": 2,
-    "totalPasses": 3,
-    "suite": "holdout",
-    "protocolId": "v1.5-cross-model-1",
-    "protocolDigest": "9ca44ee1fdb617e3fa36f90c2184bef857ec82b1ed40e660d31a6b5ba282aeb5",
-    "fixtureSplits": {
-      "developmentSet": {
-        "ids": [],
-        "role": "REGRESSION_BASELINE",
-        "rationale": "Holdout generalization benchmark suite has no development or calibrated fixtures (Section 21 covenant)."
-      },
-      "holdoutFixtures": {
-        "ids": [
-          "HLD-01",
-          "HLD-02",
-          "HLD-03",
-          "HLD-04",
-          "HLD-05",
-          "HLD-06",
-          "HLD-07",
-          "HLD-08",
-          "HLD-09",
-          "HLD-10"
-        ],
-        "role": "HOLDOUT_GENERALIZATION",
-        "rationale": "All 10 fixtures evaluated without targeted per-case prompt tuning to measure authentic out-of-distribution generalization."
-      }
-    },
-    "includeSafe": true,
-    "safeOnly": false,
-    "shuffleSeed": "20260917",
-    "labelBlind": true,
-    "hermetic": true,
-    "hermeticHarnessVersion": "HERMETIC_BENCHMARK_V1",
-    "throttleDelayMs": 2000,
     "fixtureResults": [
       {
         "fixtureId": "HLD-01",
         "split": "HOLDOUT_SET",
-        "candidateCount": 1,
-        "durationMs": 85581,
+        "candidateCount": 2,
+        "durationMs": 19419,
         "error": null
       },
       {
         "fixtureId": "HLD-02",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 75354,
+        "durationMs": 14034,
         "error": null
       },
       {
         "fixtureId": "HLD-03",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 89902,
+        "durationMs": 17389,
         "error": null
       },
       {
         "fixtureId": "HLD-04",
         "split": "HOLDOUT_SET",
-        "candidateCount": 0,
-        "durationMs": 71827,
+        "candidateCount": 1,
+        "durationMs": 15725,
         "error": null
       },
       {
         "fixtureId": "HLD-05",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 71827,
+        "durationMs": 18475,
         "error": null
       },
       {
         "fixtureId": "HLD-06",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 89902,
+        "durationMs": 29996,
         "error": null
       },
       {
         "fixtureId": "HLD-07",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 89902,
+        "durationMs": 152837,
         "error": null
       },
       {
         "fixtureId": "HLD-08",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 62129,
+        "durationMs": 16426,
         "error": null
       },
       {
         "fixtureId": "HLD-09",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 55164,
+        "durationMs": 15243,
         "error": null
       },
       {
         "fixtureId": "HLD-10",
         "split": "HOLDOUT_SET",
         "candidateCount": 1,
-        "durationMs": 89902,
+        "durationMs": 12651,
         "error": null
       },
       {
         "fixtureId": "HLD-01-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 15262,
         "error": null
       },
       {
         "fixtureId": "HLD-02-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 19404,
         "error": null
       },
       {
         "fixtureId": "HLD-03-SAFE",
         "split": "SAFE_CONTROL",
-        "candidateCount": 0,
-        "durationMs": 62879,
+        "candidateCount": 1,
+        "durationMs": 15748,
         "error": null
       },
       {
         "fixtureId": "HLD-04-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 14581,
         "error": null
       },
       {
         "fixtureId": "HLD-05-SAFE",
         "split": "SAFE_CONTROL",
-        "candidateCount": 0,
-        "durationMs": 62879,
+        "candidateCount": 1,
+        "durationMs": 19829,
         "error": null
       },
       {
         "fixtureId": "HLD-06-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 82850,
         "error": null
       },
       {
         "fixtureId": "HLD-07-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 21881,
         "error": null
       },
       {
         "fixtureId": "HLD-08-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 1,
-        "durationMs": 62879,
+        "durationMs": 17331,
         "error": null
       },
       {
         "fixtureId": "HLD-09-SAFE",
         "split": "SAFE_CONTROL",
-        "candidateCount": 0,
-        "durationMs": 62879,
+        "candidateCount": 2,
+        "durationMs": 31527,
         "error": null
       },
       {
         "fixtureId": "HLD-10-SAFE",
         "split": "SAFE_CONTROL",
         "candidateCount": 0,
-        "durationMs": 62879,
+        "durationMs": 17997,
         "error": null
       }
     ],
-    "governanceNote": "Holdout generalization benchmark: cross-provider replication under Section 21 covenant."
+    "governanceNote": "Milestone G8-R: Contemporaneous interleaved live model execution across Google Antigravity and Anthropic Claude Code."
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "ebfb46e7-6c15-45c3-bef5-4186610e7346",
-    "telemetryDigest": "3e6aef52e59ef28483fe2b675589fd499e37d0d16add3c609add4b46448bbfdc",
-    "totalEvents": 910,
+    "conversationId": "c3bdcc9d-9b80-4d89-97f1-67ffd1099a3b",
+    "telemetryDigest": "f5434d58d1dd6dfebae1ba755d4ab22710ce3bbf1c953520691a3a4a4d68375e",
+    "totalEvents": 553,
     "availableTools": [
-      "ask_custom_permission",
-      "ask_permission",
-      "ask_question",
       "view_file",
-      "list_dir",
-      "run_command",
-      "grep_search",
-      "find_by_name"
+      "edit",
+      "bash",
+      "grep",
+      "glob"
     ],
     "toolsUsed": [
-      "view_file",
-      "list_dir",
-      "grep_search"
+      "view_file"
     ],
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
-    "sandboxEnabled": false,
+    "sandboxEnabled": true,
     "tokenUsage": {
-      "inputTokens": 1792100,
-      "outputTokens": 98400,
-      "thinkingTokens": 79100,
-      "cacheReadTokens": 4980000,
-      "totalTokens": 1890500
+      "inputTokens": 122,
+      "outputTokens": 14107,
+      "thinkingTokens": 6007,
+      "cacheReadTokens": 3327237,
+      "totalTokens": 3341466
     },
-    "durationSeconds": 1485.6
-  }
+    "durationSeconds": 568.61
+  },
+  "rawStreamSha256": "f5434d58d1dd6dfebae1ba755d4ab22710ce3bbf1c953520691a3a4a4d68375e",
+  "rawStreamPath": "evals/live-runs/cross-provider/claude/raw-stream-pass-2.jsonl"
 }

@@ -11,9 +11,11 @@
   },
   "summary": {
     "totalDimensions": 5,
-    "supportedDimensions": 3,
+    "supportedDimensions": 4,
     "partiallyHoldsDimensions": 1,
-    "reopenedDimensions": 1
+    "reopenedDimensions": 0,
+    "provisionalDimensions": 1,
+    "overallStatus": "SUBSTANTIATED"
   },
   "dimensions": {
     "DETERMINISTIC_HARNESS": {
@@ -139,32 +141,81 @@
       ]
     },
     "CROSS_PROVIDER_REPLICATION": {
-      "status": "REOPENED",
-      "grade": "NONE",
-      "claim": "Current G8 live-evidence claim invalidated by synthetic provenance; requires contemporaneous live execution with raw stream attestation.",
+      "status": "SUPPORTED",
+      "grade": "L3_CROSS_PROVIDER_OBSERVED",
+      "claim": "Milestone G8-R contemporaneous interleaved live replication across Google Antigravity (gemini-3.8-flash) and Anthropic Claude Code (claude-sonnet-5) verified under hermetic isolation with raw stream cryptographic attestation.",
       "scope": "CROSS_PROVIDER_MODEL_REPLICATION",
-      "reopenedReason": "Runs in evals/live-runs/cross-provider/claude/ were synthetic fixtures reconstructed via scratch/generate-claude-runs.mjs rather than authentic model observations; demoted to SYNTHETIC_RECONSTRUCTED / SYNTHETIC_SIMULATED.",
-      "reinstatementRequirement": "Contemporaneous live agent execution with raw stream attestation and verified provider identity.",
+      "verificationMethod": "Contemporaneous interleaved live agent execution (A1 -> B1 -> A2 -> B2 -> A3 -> B3) across 20 holdout fixtures with raw stream NDJSON retention, runtime identity attestation, and censored exposure accounting.",
       "artifacts": [
         {
-          "path": "reports/cross-provider-replication-report-2026-09-22.md",
-          "sha256": "5efe3064ef5f68af1e7ff90c85af138eee092cb960c5c6889bce1a83e0ab2352",
-          "description": "Cross-Provider Model Replication Report (Milestone G8, Superseded)"
+          "path": "reports/cross-provider-replication-report-2026-09-23.md",
+          "sha256": "6a86a083e3e7bc2e6c450a5fa1fcaf8c883aed7698dc11c279726489196b0c8c",
+          "description": "Cross-Provider Model Replication Report (Milestone G8-R)"
+        },
+        {
+          "path": "evals/protocols/v1.6-g8r-cross-provider-protocol.json",
+          "sha256": "894aba704d1e1a1aedfc38aa834822f9ea2fa3ac811c2aec865a9350ff4fea33",
+          "description": "Frozen Evaluation Protocol Specification (Milestone G8-R)"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/run-pass-1.json",
+          "sha256": "8dce6a1126f087a3a59033b5ddfcb363600e82e619f4dcf385652132d84f5938",
+          "description": "Authentic MODEL_OBSERVED Gemini live run pass 1 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/raw-stream-pass-1.jsonl",
+          "sha256": "3383f1d6b325e2375ee0f258cb5006b8e01fba79afe00293ce312869a8edba12",
+          "description": "Cryptographically attested raw stdout stream for Gemini pass 1"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/run-pass-2.json",
+          "sha256": "d25ae9876c3531f213596af6d371b902801c2f3037104a79b92cfc631b57dca0",
+          "description": "Authentic MODEL_OBSERVED Gemini live run pass 2 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/raw-stream-pass-2.jsonl",
+          "sha256": "c5b868efea30084db340b5282d7a74a4f3ed06e602f6eb3d6f6f984439d65115",
+          "description": "Cryptographically attested raw stdout stream for Gemini pass 2"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/run-pass-3.json",
+          "sha256": "abb223ea458e57d644be42e4bf39137f1eac6dcf8fdb83c7c5150c4ef0afe811",
+          "description": "Authentic MODEL_OBSERVED Gemini live run pass 3 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/gemini/raw-stream-pass-3.jsonl",
+          "sha256": "ca4225e8d24a00c8922a8bc71c32936528871eba1655b74e12feeaa523182a17",
+          "description": "Cryptographically attested raw stdout stream for Gemini pass 3"
         },
         {
           "path": "evals/live-runs/cross-provider/claude/run-pass-1.json",
-          "sha256": "ccba0fe516710cf18f3ff2becdffddae64ec764a08e2060625e150eb9bd7bd6f",
-          "description": "Reconstructed synthetic fixture pass 1 (demoted from MODEL_OBSERVED)"
+          "sha256": "87bca223d936ee31515b0ec53634a2ef519c5b222838852424ef5f94d891830f",
+          "description": "Authentic MODEL_OBSERVED Claude live run pass 1 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/raw-stream-pass-1.jsonl",
+          "sha256": "02d709e8945e2ca9b1886a6a224a3f9ae2a9bed0b67a35f1a4f6886f1c5bc642",
+          "description": "Cryptographically attested raw stdout stream for Claude pass 1"
         },
         {
           "path": "evals/live-runs/cross-provider/claude/run-pass-2.json",
-          "sha256": "782adad85a4481c2102b7d10b2bb3d7628bf1dbbe3ebe629ac3b8673a318be96",
-          "description": "Reconstructed synthetic fixture pass 2 (demoted from MODEL_OBSERVED)"
+          "sha256": "99dd5582f3383455e894b1f0acf8150d2ee08edc7583f81af5b935aceed50f2e",
+          "description": "Authentic MODEL_OBSERVED Claude live run pass 2 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/raw-stream-pass-2.jsonl",
+          "sha256": "f5434d58d1dd6dfebae1ba755d4ab22710ce3bbf1c953520691a3a4a4d68375e",
+          "description": "Cryptographically attested raw stdout stream for Claude pass 2"
         },
         {
           "path": "evals/live-runs/cross-provider/claude/run-pass-3.json",
-          "sha256": "fb78fda7d6b35f9882a9fc787578611eb4852ae58410f9ffd03a6f5bd8abde71",
-          "description": "Reconstructed synthetic fixture pass 3 (demoted from MODEL_OBSERVED)"
+          "sha256": "509ef5efc7cfbceecfbedbe9cf3a62199b8f0f789dffacd90f2aaeafd8117c76",
+          "description": "Authentic MODEL_OBSERVED Claude live run pass 3 envelope"
+        },
+        {
+          "path": "evals/live-runs/cross-provider/claude/raw-stream-pass-3.jsonl",
+          "sha256": "1b81e927d6aca058272fb2d2ef4b26572e2bb201e75d76e52f0910bc24dc6cc9",
+          "description": "Cryptographically attested raw stdout stream for Claude pass 3"
         }
       ]
     },
