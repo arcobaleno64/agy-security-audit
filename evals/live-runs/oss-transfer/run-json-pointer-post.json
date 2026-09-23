@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-json-pointer-post-205833ea",
-  "recordedAt": "2026-09-23T09:10:39.477Z",
+  "runId": "run-oss-json-pointer-post-4593415c",
+  "recordedAt": "2026-09-23T15:04:23.772Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-post.jsonl",
-    "sha256": "a44eab3930cc3c431b30c66925f92f00604e2f502cb78d94ad347b6d7887da00",
-    "totalBytes": 50149,
-    "eventsCount": 48
+    "sha256": "dade143345b3d08b733257856729811bf7e60ea4c8d5b77be654d76659937d21",
+    "totalBytes": 37761,
+    "eventsCount": 101
   },
   "target": {
     "repositoryName": "manuelstofer/json-pointer",
@@ -44,30 +44,63 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
   "findings": {
-    "candidates": [],
+    "candidates": [
+      {
+        "id": "CAND-CWE-1321-1",
+        "ruleId": "CWE-1321",
+        "title": "Prototype pollution and unhandled object mutation in set",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "index.js",
+          "startLine": 68,
+          "endLine": 100
+        },
+        "symbol": "set",
+        "lineageId": "dbc162b187c82cd9116eb0ec3a527a28"
+      },
+      {
+        "id": "CAND-2",
+        "ruleId": "CWE-1321",
+        "title": "Prototype pollution via unhandled property deletion in remove",
+        "securityProperty": "integrity",
+        "findingType": "VULNERABILITY",
+        "proofKind": "STATIC_TRACE",
+        "severity": "HIGH",
+        "location": {
+          "uri": "index.js",
+          "startLine": 108,
+          "endLine": 126
+        },
+        "symbol": "remove",
+        "lineageId": "42d790142bcd9a67bd4bbae334404f82"
+      }
+    ],
     "verifiedFindings": null,
     "unresolvedCandidates": null,
     "suppressedCandidates": null
   },
   "summary": {
-    "candidateCount": 0,
+    "candidateCount": 2,
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 125937
+    "executionDurationMs": 221284
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "d7dfd365-fbf3-47df-8748-0cbbb087eeb4",
-    "telemetryDigest": "a44eab3930cc3c431b30c66925f92f00604e2f502cb78d94ad347b6d7887da00",
-    "totalEvents": 48,
+    "conversationId": "274b1d39-eac2-4223-8d85-e632bd392386",
+    "telemetryDigest": "dade143345b3d08b733257856729811bf7e60ea4c8d5b77be654d76659937d21",
+    "totalEvents": 101,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -134,13 +167,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 180240,
-      "outputTokens": 10963,
-      "thinkingTokens": 9041,
-      "cacheReadTokens": 341567,
-      "totalTokens": 191203
+      "inputTokens": 150442,
+      "outputTokens": 44031,
+      "thinkingTokens": 41329,
+      "cacheReadTokens": 570516,
+      "totalTokens": 194473
     },
-    "durationSeconds": 125.9367045
+    "durationSeconds": 216.3431206
   },
   "metadata": {
     "fixtureId": "OSS-03-FIX",

@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-minimist-pre-d56ad105",
-  "recordedAt": "2026-09-23T09:10:38.856Z",
+  "runId": "run-oss-minimist-pre-2b0aafb7",
+  "recordedAt": "2026-09-23T14:37:19.470Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-minimist-pre.jsonl",
-    "sha256": "3d610764b541b3b776de3cf8c9da3dfcf94dfcc4e8df4a87575c7308119d6ac7",
-    "totalBytes": 14188,
-    "eventsCount": 43
+    "sha256": "a9cf63842fcdb4d0e3211a5d550aa6408cf6d45544ddd31bb4f38d60a69ca968",
+    "totalBytes": 22801,
+    "eventsCount": 58
   },
   "target": {
     "repositoryName": "minimistjs/minimist",
@@ -44,9 +44,9 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -55,8 +55,8 @@
       {
         "id": "CAND-CWE-1321-1",
         "ruleId": "CWE-1321",
-        "title": "Prototype pollution via unvalidated key path in setKey",
-        "securityProperty": "prototype-pollution",
+        "title": "Prototype pollution in setKey via unvalidated object keys",
+        "securityProperty": "integrity",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
@@ -78,13 +78,13 @@
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 76751
+    "executionDurationMs": 97411
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "4fd02905-33df-4900-8a84-d5494a5f5f5e",
-    "telemetryDigest": "3d610764b541b3b776de3cf8c9da3dfcf94dfcc4e8df4a87575c7308119d6ac7",
-    "totalEvents": 43,
+    "conversationId": "dfb00c32-ddc4-4bee-87f2-77fe0f3b2126",
+    "telemetryDigest": "a9cf63842fcdb4d0e3211a5d550aa6408cf6d45544ddd31bb4f38d60a69ca968",
+    "totalEvents": 58,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -151,13 +151,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 54331,
-      "outputTokens": 4373,
-      "thinkingTokens": 3731,
-      "cacheReadTokens": 113280,
-      "totalTokens": 58704
+      "inputTokens": 46938,
+      "outputTokens": 9187,
+      "thinkingTokens": 8074,
+      "cacheReadTokens": 276096,
+      "totalTokens": 56125
     },
-    "durationSeconds": 76.7513966
+    "durationSeconds": 94.5504231
   },
   "metadata": {
     "fixtureId": "OSS-01",

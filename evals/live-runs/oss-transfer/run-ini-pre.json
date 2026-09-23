@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-ini-pre-ed320a0c",
-  "recordedAt": "2026-09-23T09:10:39.683Z",
+  "runId": "run-oss-ini-pre-51bb9574",
+  "recordedAt": "2026-09-23T15:08:04.419Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-ini-pre.jsonl",
-    "sha256": "44325255b5f98820b5a879bde2e7991e3538521806ec026c5af61a2200322247",
-    "totalBytes": 26538,
-    "eventsCount": 63
+    "sha256": "fdb8c101bbfe6f3f579b919d81cdb4c0de34121640c97240355308b63b5f498e",
+    "totalBytes": 21975,
+    "eventsCount": 61
   },
   "target": {
     "repositoryName": "npm/ini",
@@ -44,9 +44,9 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -55,15 +55,15 @@
       {
         "id": "CAND-CWE-1321-1",
         "ruleId": "CWE-1321",
-        "title": "Prototype pollution via unvalidated section and key assignment in decode",
-        "securityProperty": "prototype-pollution",
+        "title": "Prototype pollution via unhandled __proto__ assignment in decode",
+        "securityProperty": "integrity",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
         "location": {
           "uri": "ini.js",
-          "startLine": 83,
-          "endLine": 134
+          "startLine": 69,
+          "endLine": 141
         },
         "symbol": "decode",
         "lineageId": "1b37dde344b0e1be5314bcf550cb48a2"
@@ -78,13 +78,13 @@
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 119123
+    "executionDurationMs": 114138
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "0fc0814d-175c-44d0-bb8a-f9193e7c8fe9",
-    "telemetryDigest": "44325255b5f98820b5a879bde2e7991e3538521806ec026c5af61a2200322247",
-    "totalEvents": 63,
+    "conversationId": "250d1fd4-30ad-4da6-abd7-482b5800d527",
+    "telemetryDigest": "fdb8c101bbfe6f3f579b919d81cdb4c0de34121640c97240355308b63b5f498e",
+    "totalEvents": 61,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -151,13 +151,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 93215,
-      "outputTokens": 6917,
-      "thinkingTokens": 5405,
-      "cacheReadTokens": 320529,
-      "totalTokens": 100132
+      "inputTokens": 86738,
+      "outputTokens": 17137,
+      "thinkingTokens": 15781,
+      "cacheReadTokens": 292456,
+      "totalTokens": 103875
     },
-    "durationSeconds": 119.1226955
+    "durationSeconds": 111.3888434
   },
   "metadata": {
     "fixtureId": "OSS-06",

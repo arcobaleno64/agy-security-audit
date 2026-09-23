@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
-  "runId": "run-oss-json-pointer-pre-6525d1ac",
-  "recordedAt": "2026-09-23T09:10:39.281Z",
+  "runId": "run-oss-json-pointer-pre-c1c60e9c",
+  "recordedAt": "2026-09-23T14:59:14.487Z",
   "benchmarkMode": "DISCOVERY",
   "evidenceOrigin": "MODEL_OBSERVED",
   "executionKind": "LIVE_AGENT",
   "evidenceGrade": "L3_FULL_REPO_TRANSFER_OBSERVED",
   "rawStream": {
     "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-pre.jsonl",
-    "sha256": "985f433dd0d96303f6300b8f25565e1e9d6352e70b9d62d0d67e736de8d62e64",
-    "totalBytes": 39178,
-    "eventsCount": 67
+    "sha256": "40f203143e16c2a9e049ba44f538c09918ad2382b49b44bc2ed2fc09e6e8f556",
+    "totalBytes": 17902,
+    "eventsCount": 52
   },
   "target": {
     "repositoryName": "manuelstofer/json-pointer",
@@ -44,9 +44,9 @@
     },
     "os": "win32 (x64)",
     "nodeVersion": "v24.14.1",
-    "skillRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
-    "toolVersion": "1.6.2",
-    "toolRevision": "68b5e92ad7aff0a75acc299ca7d71acca40db741",
+    "skillRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
+    "toolVersion": "1.7.0",
+    "toolRevision": "374d7aefd15fdee34d465f1ea8424847bec2b3d3",
     "toolIntegrityDigest": null,
     "toolDirty": true
   },
@@ -55,8 +55,8 @@
       {
         "id": "CAND-CWE-1321-1",
         "ruleId": "CWE-1321",
-        "title": "Prototype pollution via unvalidated object property assignment in api.set",
-        "securityProperty": "prototype-pollution",
+        "title": "Prototype pollution via set method",
+        "securityProperty": "integrity",
         "findingType": "VULNERABILITY",
         "proofKind": "STATIC_TRACE",
         "severity": "HIGH",
@@ -65,8 +65,8 @@
           "startLine": 68,
           "endLine": 97
         },
-        "symbol": "api.set",
-        "lineageId": "ab1ab1d8db3d1e6c4e2ede0c27293f60"
+        "symbol": "set",
+        "lineageId": "dbc162b187c82cd9116eb0ec3a527a28"
       }
     ],
     "verifiedFindings": null,
@@ -78,13 +78,13 @@
     "verifiedCount": null,
     "deferredCount": null,
     "suppressedCount": null,
-    "executionDurationMs": 98780
+    "executionDurationMs": 67581
   },
   "executionTelemetry": {
     "format": "AGY_STREAM_JSON_V1",
-    "conversationId": "21f00637-b511-424f-b393-bd338ac07db1",
-    "telemetryDigest": "985f433dd0d96303f6300b8f25565e1e9d6352e70b9d62d0d67e736de8d62e64",
-    "totalEvents": 67,
+    "conversationId": "59572cb9-ed69-4e79-bd25-f0ea200b95f6",
+    "telemetryDigest": "40f203143e16c2a9e049ba44f538c09918ad2382b49b44bc2ed2fc09e6e8f556",
+    "totalEvents": 52,
     "availableTools": [
       "ask_custom_permission",
       "ask_permission",
@@ -151,13 +151,13 @@
     "subagentsInvoked": [],
     "permissionMode": "always-proceed",
     "tokenUsage": {
-      "inputTokens": 127505,
-      "outputTokens": 6761,
-      "thinkingTokens": 5185,
-      "cacheReadTokens": 312738,
-      "totalTokens": 134266
+      "inputTokens": 105059,
+      "outputTokens": 10278,
+      "thinkingTokens": 9288,
+      "cacheReadTokens": 239670,
+      "totalTokens": 115337
     },
-    "durationSeconds": 98.7796932
+    "durationSeconds": 62.5377202
   },
   "metadata": {
     "fixtureId": "OSS-03",

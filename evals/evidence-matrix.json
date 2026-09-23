@@ -3,11 +3,12 @@
   "schemaVersion": "1.0.0",
   "generatedAt": "2026-09-22T15:11:01.485Z",
   "targetSystem": "@arcobaleno64/agy-security-audit",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "governance": {
     "standard": "NIST SSDF (SP 800-218) / Default-Deny Authority Invariant",
     "covenant": "Section 21 Holdout Covenant & v1.6.1 Evidence Integrity Correction",
-    "provenancePolicy": "Strict Fail-Closed: synthetic fixtures must never be represented as live model observations."
+    "provenancePolicy": "Strict Fail-Closed: synthetic fixtures must never be represented as live model observations.",
+    "lastEvaluatedAt": "2026-09-23T15:28:27.349Z"
   },
   "summary": {
     "totalDimensions": 5,
@@ -37,7 +38,7 @@
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "f7595cf055d0a62ddcf997cd04d6739d0850c2e083b979a59749af25f979568d",
+          "sha256": "e070c1ee7c76100de3a95b3102d7f4968cd8396d49bc091dd6a8ef792b89f35c",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {
@@ -149,7 +150,7 @@
       "artifacts": [
         {
           "path": "reports/cross-provider-replication-report-2026-09-23.md",
-          "sha256": "6a86a083e3e7bc2e6c450a5fa1fcaf8c883aed7698dc11c279726489196b0c8c",
+          "sha256": "4e28ffd6c805aabdfd09f4ed8f400571d33a1ba2084e88eb7791602459d4c467",
           "description": "Cross-Provider Model Replication Report (Milestone G8-R)"
         },
         {
@@ -159,7 +160,7 @@
         },
         {
           "path": "evals/live-runs/cross-provider/gemini/run-pass-1.json",
-          "sha256": "8dce6a1126f087a3a59033b5ddfcb363600e82e619f4dcf385652132d84f5938",
+          "sha256": "e4a5da6672160ac9dbb9d943e2e966c012489b7c59a4ace68f68dc3c9d33f082",
           "description": "Authentic MODEL_OBSERVED Gemini live run pass 1 envelope"
         },
         {
@@ -169,7 +170,7 @@
         },
         {
           "path": "evals/live-runs/cross-provider/gemini/run-pass-2.json",
-          "sha256": "d25ae9876c3531f213596af6d371b902801c2f3037104a79b92cfc631b57dca0",
+          "sha256": "1866e72813454eb0f6b31b9150b28fca82ba9e9fafeaca4c737f9d15041d54a4",
           "description": "Authentic MODEL_OBSERVED Gemini live run pass 2 envelope"
         },
         {
@@ -179,7 +180,7 @@
         },
         {
           "path": "evals/live-runs/cross-provider/gemini/run-pass-3.json",
-          "sha256": "abb223ea458e57d644be42e4bf39137f1eac6dcf8fdb83c7c5150c4ef0afe811",
+          "sha256": "34652fbaac61fe58afcb51cca951e42f834ccf94f14b56a99bd6ebbd785e1a33",
           "description": "Authentic MODEL_OBSERVED Gemini live run pass 3 envelope"
         },
         {
@@ -228,7 +229,7 @@
       "artifacts": [
         {
           "path": "reports/oss-transfer-live-report-2026-09-23.md",
-          "sha256": "6f050e70a1751a202b1945b359eab07b0fda7ef6c52b9f105b1199863784cdf8",
+          "sha256": "bb9e22ec143b149cfc48d0e9a55a27e1853a5bfb7e5d7eaf73ef5ce984522407",
           "description": "Live Full Upstream Repository Transfer Evaluation Report (Milestone G7-R)"
         },
         {
@@ -248,67 +249,67 @@
         },
         {
           "path": "scripts/run-live-oss-transfer.mjs",
-          "sha256": "d38873c5afcc74425bf9fb58688879af2d422d21dedfa6861bf66dc8c0de9717",
+          "sha256": "ee239b8bcf3106160087507a3236ec408edcff7f787e815d8b6c6d32acf8fd1a",
           "description": "Live Full Upstream Repository Transfer Evaluation Runner"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-minimist-pre.json",
-          "sha256": "4c12726b0ccb204b157a80ae3593bc24abf63e1f175360324af4912a7d53503d",
+          "sha256": "f16d701bf7b95ed8ba415e441eb24cce992b8ee3ff439bd3cc7e405c10696b9f",
           "description": "Authentic MODEL_OBSERVED live run minimist-pre envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-minimist-pre.jsonl",
-          "sha256": "3d610764b541b3b776de3cf8c9da3dfcf94dfcc4e8df4a87575c7308119d6ac7",
+          "sha256": "a9cf63842fcdb4d0e3211a5d550aa6408cf6d45544ddd31bb4f38d60a69ca968",
           "description": "Cryptographically attested raw stdout stream for minimist-pre"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-minimist-post.json",
-          "sha256": "0a2edde22587876ee883311855c7939999f7cf40cdb5f305f2cf7f79b7dbe86a",
+          "sha256": "4198ecb2981a0aa72c922428035d0bdb3cf452297d9f9fe3372b9417a24e72d5",
           "description": "Authentic MODEL_OBSERVED live run minimist-post envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-minimist-post.jsonl",
-          "sha256": "0892fd48d0cb8aefe01f5d21bee7f5dd80acd7bef9f90e3438125d0247b136ab",
+          "sha256": "018a9da0b30a2c77386f33542d62f3fc6d976eae1754bbff87f2c11e0763ef25",
           "description": "Cryptographically attested raw stdout stream for minimist-post"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-json-pointer-pre.json",
-          "sha256": "f98d07890b34d3953ce72b8343c79ea7b1e529e8ea030a118a846ae6ffdc346e",
+          "sha256": "5b0402da327133d03da9e7fe22ee498dc28290b852cf19400353c53a6bbbf61f",
           "description": "Authentic MODEL_OBSERVED live run json-pointer-pre envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-pre.jsonl",
-          "sha256": "985f433dd0d96303f6300b8f25565e1e9d6352e70b9d62d0d67e736de8d62e64",
+          "sha256": "40f203143e16c2a9e049ba44f538c09918ad2382b49b44bc2ed2fc09e6e8f556",
           "description": "Cryptographically attested raw stdout stream for json-pointer-pre"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-json-pointer-post.json",
-          "sha256": "bd1ed2a5470091f68cab9d56c0efe813c4ff40f4cd595e5ddd6caf0918197412",
+          "sha256": "7297b55c5713dd16a9dcaeb0c26c98cc3353b4877cffd360adda22b7d6051e03",
           "description": "Authentic MODEL_OBSERVED live run json-pointer-post envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-json-pointer-post.jsonl",
-          "sha256": "a44eab3930cc3c431b30c66925f92f00604e2f502cb78d94ad347b6d7887da00",
+          "sha256": "dade143345b3d08b733257856729811bf7e60ea4c8d5b77be654d76659937d21",
           "description": "Cryptographically attested raw stdout stream for json-pointer-post"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-ini-pre.json",
-          "sha256": "8217401d9436eb339db8024fa62ffe3ad0dd132044b6addddae5d58c606945a0",
+          "sha256": "734c94c1ffdef5e9ab2dea23f0728621e36178e48a5bd7a6b217354cd96d67e9",
           "description": "Authentic MODEL_OBSERVED live run ini-pre envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-ini-pre.jsonl",
-          "sha256": "44325255b5f98820b5a879bde2e7991e3538521806ec026c5af61a2200322247",
+          "sha256": "fdb8c101bbfe6f3f579b919d81cdb4c0de34121640c97240355308b63b5f498e",
           "description": "Cryptographically attested raw stdout stream for ini-pre"
         },
         {
           "path": "evals/live-runs/oss-transfer/run-ini-post.json",
-          "sha256": "aa79bf4043520688f8594ac9e8f61f30411c365cefb34ebd4e9f950e3e8f670d",
+          "sha256": "2d053f1976ca4700b6eab6c775163da18e3be497bffad079dcf5ebea0909bae6",
           "description": "Authentic MODEL_OBSERVED live run ini-post envelope"
         },
         {
           "path": "evals/live-runs/oss-transfer/raw-stream-ini-post.jsonl",
-          "sha256": "38c6d6a9a4d52939be755aa2f9f67240bd929cc4fdac15adc8a1d6971b135c2d",
+          "sha256": "4f7dd50fca7f8cfa5ee4133fd6797fb84a4f0595eb1506d43fa8e86c65e4bc38",
           "description": "Cryptographically attested raw stdout stream for ini-post"
         }
       ]

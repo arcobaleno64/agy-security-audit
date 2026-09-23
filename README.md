@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.7.0
+# agy-security-audit (plugin ID: `security-audit`) v1.7.1
 
 agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
 
