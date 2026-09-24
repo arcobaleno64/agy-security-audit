@@ -110,10 +110,45 @@ Under RFC 0002 §6.3 and §8:
 
 ---
 
-## 4. Submitting an Independent Reproduction
+## 4. Phase D3: Operator Readiness & Friction Observability
+
+Conforming to [RFC 0002 §7](../rfcs/0002-external-reproducibility-and-adoption-readiness.md), Track D rejects subjective surveys in favor of quantitative operational friction measurements.
+
+```bash
+# Output a blank operator metrics template JSON
+node scripts/operator-metrics.mjs --template
+
+# Validate an operator metrics JSON file against schema and evaluate interface recommendations
+node scripts/operator-metrics.mjs metrics.json
+node scripts/operator-metrics.mjs --check metrics.json
+
+# Run operator metrics test suite (13/13 PASS)
+npm run test:operator-metrics
+
+# Attach operator metrics to a reproduction check envelope
+npm run check:reproducibility -- --metrics metrics.json --json
+```
+
+The metrics conform to `schemas/operator-metrics.schema.json`. Under RFC 0002 §7.2 (**Interface Decision Gate**), metrics empirically dictate the necessity of CLI, TUI, or GUI investments based on navigation and invocation friction thresholds:
+- High raw SARIF/JSON navigation friction (`manualFilesOpenedCount > 5` or `findingAdjudicationSeconds > 300`) triggers `TUI_RECOMMENDED`.
+- High invocation friction (`rerunsRequiredCount > 1` or `commandsRetriedCount > 2`) triggers `CLI_WORKFLOW_IMPROVEMENT_RECOMMENDED`.
+- Ambiguity in evidence vocabulary (`misinterpretedStatusesCount > 0`) triggers `STATUS_VOCABULARY_CLARIFICATION_RECOMMENDED`.
+- Occam's razor strictly prohibits building a GUI until CLI and TUI optimizations are empirically proven insufficient.
+
+---
+
+## 5. Provenance & Platform Compatibility References
+
+- **Consumer Provenance Verification Path (D-AC-06)**: Complete instructions for verifying published releases via Sigstore/Rekor/gh are provided in [`docs/verify-release.md`](../verify-release.md).
+- **Platform Compatibility Matrix (D-AC-07)**: Detailed transparency matrix categorizing platforms into five evidence grades (`LIVE_RUNTIME_VALIDATED`, `CI_TESTED`, `DECLARED`, `UNKNOWN`, `UNSUPPORTED`) is provided in [`platform-compatibility.md`](./platform-compatibility.md).
+
+---
+
+## 6. Submitting an Independent Reproduction
 
 Once Track D implementation is complete in `v1.9.0`:
 1. Execute the reproduction protocol autonomously (`npm run check:reproducibility -- --tier2 --out reproduction-record.json`).
-2. Record execution environment, commands, and resulting artifact hashes.
-3. Submit the resulting `reproduction-record.json` via a GitHub issue or discussion for maintainer adjudication.
+2. Optionally record and attach operator friction metrics (`--metrics <path>`).
+3. Record execution environment, commands, and resulting artifact hashes.
+4. Submit the resulting `reproduction-record.json` via a GitHub issue or discussion for maintainer adjudication.
 

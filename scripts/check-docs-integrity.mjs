@@ -167,4 +167,42 @@ assert(reproductionReadme.includes('npm run check:micro-corpus'), 'reproduction 
 assert(reproductionReadme.includes('npm run test:micro-corpus'), 'reproduction README must document npm run test:micro-corpus');
 assert(reproductionReadme.includes('--tier2'), 'reproduction README must document --tier2 flag');
 
+// 8. Track D Phase D3 Operator Metrics, Release Verification & Platform Compatibility contract
+assert(pkg.scripts?.['test:operator-metrics'] === 'node scripts/test-operator-metrics.mjs', 'package.json must expose npm run test:operator-metrics');
+const operatorScriptPath = path.join(REPO_ROOT, 'scripts', 'operator-metrics.mjs');
+const operatorTestPath = path.join(REPO_ROOT, 'scripts', 'test-operator-metrics.mjs');
+const operatorSchemaPath = path.join(REPO_ROOT, 'schemas', 'operator-metrics.schema.json');
+const verifyReleasePath = path.join(REPO_ROOT, 'docs', 'verify-release.md');
+const platformCompatPath = path.join(REPO_ROOT, 'docs', 'reproduction', 'platform-compatibility.md');
+
+assert(fs.existsSync(operatorScriptPath), 'scripts/operator-metrics.mjs must exist');
+assert(fs.existsSync(operatorTestPath), 'scripts/test-operator-metrics.mjs must exist');
+assert(fs.existsSync(operatorSchemaPath), 'schemas/operator-metrics.schema.json must exist');
+assert(fs.existsSync(verifyReleasePath), 'docs/verify-release.md must exist');
+assert(fs.existsSync(platformCompatPath), 'docs/reproduction/platform-compatibility.md must exist');
+
+const operatorSchema = JSON.parse(fs.readFileSync(operatorSchemaPath, 'utf8'));
+assert(
+  operatorSchema.$id === 'https://antigravity.google/schemas/security-audit/operator-metrics.schema.json',
+  'operator metrics schema $id must remain canonical'
+);
+
+const verifyRelease = fs.readFileSync(verifyReleasePath, 'utf8');
+assert(verifyRelease.includes('gh attestation verify'), 'verify-release.md must document gh attestation verify');
+assert(verifyRelease.includes('SHA256SUMS.txt'), 'verify-release.md must document SHA256SUMS.txt');
+assert(verifyRelease.includes('--deny-self-hosted-runners'), 'verify-release.md must document --deny-self-hosted-runners');
+
+const platformCompat = fs.readFileSync(platformCompatPath, 'utf8');
+assert(platformCompat.includes('LIVE_RUNTIME_VALIDATED'), 'platform-compatibility.md must document LIVE_RUNTIME_VALIDATED');
+assert(platformCompat.includes('CI_TESTED'), 'platform-compatibility.md must document CI_TESTED');
+assert(platformCompat.includes('DECLARED'), 'platform-compatibility.md must document DECLARED');
+assert(platformCompat.includes('UNKNOWN'), 'platform-compatibility.md must document UNKNOWN');
+assert(platformCompat.includes('UNSUPPORTED'), 'platform-compatibility.md must document UNSUPPORTED');
+
+assert(reproductionReadme.includes('Phase D3: Operator Readiness & Friction Observability'), 'reproduction README must document Phase D3');
+assert(reproductionReadme.includes('npm run test:operator-metrics'), 'reproduction README must document npm run test:operator-metrics');
+assert(reproductionReadme.includes('platform-compatibility.md'), 'reproduction README must link platform-compatibility.md');
+assert(reproductionReadme.includes('docs/verify-release.md'), 'reproduction README must link docs/verify-release.md');
+
 console.log(`✔ Documentation integrity gate PASSED! All documentation matches v${currentVersion} and baseline invariants.`);
+

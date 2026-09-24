@@ -18,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runDoctor } from './doctor.mjs';
 import { executeTier2Reproduction } from './run-micro-corpus.mjs';
+import { validateOperatorMetricsShape } from './operator-metrics.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,9 +84,13 @@ export function validateReproductionRecordShape(record) {
     'completedAt',
     'overallVerdict'
   ];
-  const optionalTopKeys = ['tier2Results', 'notes'];
+  const optionalTopKeys = ['tier2Results', 'notes', 'operatorMetrics'];
 
   if (!exactAllowedKeys(record, requiredTopKeys, optionalTopKeys)) return false;
+
+  if ('operatorMetrics' in record && record.operatorMetrics !== null) {
+    if (!validateOperatorMetricsShape(record.operatorMetrics)) return false;
+  }
 
   if (record.$schema !== REPRODUCTION_SCHEMA_ID) return false;
   if (!/^1\.[0-9]+\.[0-9]+$/.test(String(record.schemaVersion))) return false;
@@ -375,6 +380,10 @@ export function buildReproductionRecord(tier1Results, options = {}) {
     notes
   };
 
+  if (options.operatorMetrics) {
+    record.operatorMetrics = options.operatorMetrics;
+  }
+
   return record;
 }
 
@@ -386,7 +395,8 @@ function parseArgs(argv) {
     assisted: false,
     dryRun: false,
     tier2: false,
-    mock: false
+    mock: false,
+    metrics: null
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -398,6 +408,7 @@ function parseArgs(argv) {
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--tier2') opts.tier2 = true;
     else if (a === '--mock') opts.mock = true;
+    else if (a === '--metrics' && i + 1 < argv.length) opts.metrics = argv[++i];
     else if (a === '-h' || a === '--help') {
       console.log(`Usage: node scripts/run-reproducibility-check.mjs [options]
   --json               Output reproduction-record JSON to stdout
@@ -407,6 +418,7 @@ function parseArgs(argv) {
   --dry-run            Dry run shape generation without re-running long tests
   --tier2              Execute Tier 2 micro-corpus live assurance verification
   --mock               Use deterministic synthetic execution for Tier 2 (offline/CI mode)
+  --metrics <path>     Attach and validate operator metrics JSON conforming to RFC 0002 §7
   -h, --help           Show help`);
       process.exit(0);
     }
@@ -417,6 +429,16 @@ function parseArgs(argv) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const startedAt = new Date().toISOString();
+
+  let operatorMetrics = null;
+  if (opts.metrics) {
+    const rawMetrics = JSON.parse(fs.readFileSync(path.resolve(opts.metrics), 'utf8'));
+    if (!validateOperatorMetricsShape(rawMetrics)) {
+      console.error(`❌ Validation failed: ${opts.metrics} does not conform to schemas/operator-metrics.schema.json`);
+      process.exit(1);
+    }
+    operatorMetrics = rawMetrics;
+  }
 
   let tier1Results;
   if (opts.dryRun) {
@@ -452,6 +474,7 @@ function main() {
     operatorClass: opts.operatorClass,
     maintainerAssistance: opts.assisted,
     tier2Results,
+    operatorMetrics,
     startedAt,
     completedAt
   });
@@ -479,6 +502,13 @@ function main() {
     console.log(`Reproduction Classification: ${record.reproductionClassification}`);
     console.log(`Operator Class:             ${record.operatorClass}`);
     console.log(`Maintainer Assistance:      ${record.maintainerAssistance}`);
+    if (record.operatorMetrics) {
+      console.log('--- Operator Usability Metrics ---');
+      console.log(`  Time to Install:          ${record.operatorMetrics.timeToInstallSeconds}s`);
+      console.log(`  Time to First Audit:      ${record.operatorMetrics.timeToFirstSuccessfulAuditSeconds}s`);
+      console.log(`  Manual Files Opened:      ${record.operatorMetrics.manualFilesOpenedCount}`);
+      console.log(`  Reruns Required:          ${record.operatorMetrics.rerunsRequiredCount}`);
+    }
     if (record.tier2Results) {
       console.log('--- Tier 2 Micro-Corpus ---');
       console.log(`Tier 2 Status:              ${record.tier2Results.status}`);
