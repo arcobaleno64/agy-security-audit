@@ -3008,7 +3008,136 @@ export function runTests() {
     fs.rmSync(syntheticTempDir, { recursive: true, force: true });
   }
 
-  console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model & Granular Coverage Classification.');
+  // 71.6 Path B regression: a Visual Studio solution is not evidence of C#/web by itself.
+  // Physical native artifacts must drive language/profile/runtime classification.
+  const nativeTempDir71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-native-path-b-'));
+  try {
+    const nativeProjectDir = path.join(nativeTempDir71, 'src', 'apps', 'mpc-hc');
+    fs.mkdirSync(nativeProjectDir, { recursive: true });
+    fs.writeFileSync(path.join(nativeTempDir71, 'mpc-hc.sln'), [
+      'Microsoft Visual Studio Solution File, Format Version 12.00',
+      'Project("{00000000-0000-0000-0000-000000000000}") = "mpc-hc", "src\\apps\\mpc-hc\\mpc-hc.vcxproj", "{11111111-1111-1111-1111-111111111111}"',
+      'EndProject'
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(nativeProjectDir, 'mpc-hc.vcxproj'), '<Project><ItemGroup><ClCompile Include="WebClientSocket.cpp" /></ItemGroup></Project>', 'utf8');
+    fs.writeFileSync(path.join(nativeProjectDir, 'mpc-hc.vcxproj.filters'), '<Project />', 'utf8');
+    fs.writeFileSync(path.join(nativeProjectDir, 'WebClientSocket.cpp'), '#include "WebClientSocket.h"\nint parse_packet(const char* p) { return p ? 0 : -1; }\n', 'utf8');
+    fs.writeFileSync(path.join(nativeProjectDir, 'WebClientSocket.h'), '#pragma once\nint parse_packet(const char* p);\n', 'utf8');
+    fs.writeFileSync(path.join(nativeProjectDir, 'meson.build'), `project('mpc-hc-native', 'cpp')\n`, 'utf8');
+
+    const nativeInv71 = detectRepositoryInventory(nativeTempDir71);
+    if (!nativeInv71.languages.includes('C/C++') ||
+        !nativeInv71.profiles.includes('native') ||
+        nativeInv71.primaryProfile !== 'native' ||
+        nativeInv71.languages.includes('C#') ||
+        nativeInv71.profiles.includes('web-app')) {
+      throw new Error(`PATH-B VIOLATION: native Visual Studio solution misclassified: ${JSON.stringify(nativeInv71)}`);
+    }
+    if (!nativeInv71.manifests.some(m => m.path === 'src/apps/mpc-hc/mpc-hc.vcxproj' && m.type === 'visual-cpp-project') ||
+        !nativeInv71.manifests.some(m => m.path === 'src/apps/mpc-hc/meson.build' && m.type === 'meson')) {
+      throw new Error(`PATH-B VIOLATION: deep native build manifests were not inventoried: ${JSON.stringify(nativeInv71.manifests)}`);
+    }
+
+    const nativeContextRes71 = initProjectContext(nativeTempDir71);
+    if (!nativeContextRes71.success) {
+      throw new Error(`PATH-B VIOLATION: initProjectContext failed for native fixture: ${JSON.stringify(nativeContextRes71)}`);
+    }
+    const nativeProject71 = JSON.parse(fs.readFileSync(path.join(nativeTempDir71, '.security-audit', 'project.json'), 'utf8'));
+    if (nativeProject71.projectType !== 'native' ||
+        nativeProject71.framework !== 'Native C/C++ Application / Library' ||
+        !nativeProject71.languages.includes('C/C++') ||
+        !nativeProject71.runtime.includes('Native / C++ (MSVC/Clang/GCC)') ||
+        nativeProject71.runtime.includes('.NET Framework / IIS')) {
+      throw new Error(`PATH-B VIOLATION: native Project Security Context was misclassified: ${JSON.stringify(nativeProject71)}`);
+    }
+  } finally {
+    fs.rmSync(nativeTempDir71, { recursive: true, force: true });
+  }
+
+  // 71.7 A desktop C# solution is C# only when .csproj/.cs evidence exists, and
+  // it must not become web-app without explicit ASP.NET/web artifacts.
+  const csharpTempDir71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-csharp-desktop-'));
+  try {
+    fs.mkdirSync(path.join(csharpTempDir71, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(csharpTempDir71, 'desktop.sln'), [
+      'Microsoft Visual Studio Solution File, Format Version 12.00',
+      'Project("{00000000-0000-0000-0000-000000000000}") = "Desktop", "src\\Desktop.csproj", "{22222222-2222-2222-2222-222222222222}"',
+      'EndProject'
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(csharpTempDir71, 'src', 'Desktop.csproj'), '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>WinExe</OutputType></PropertyGroup></Project>', 'utf8');
+    fs.writeFileSync(path.join(csharpTempDir71, 'src', 'Program.cs'), 'class Program { static void Main() {} }', 'utf8');
+    const csharpInv71 = detectRepositoryInventory(csharpTempDir71);
+    if (!csharpInv71.languages.includes('C#') || csharpInv71.profiles.includes('web-app')) {
+      throw new Error(`PATH-B VIOLATION: desktop C# solution was not evidence-bound or was falsely classified web-app: ${JSON.stringify(csharpInv71)}`);
+    }
+  } finally {
+    fs.rmSync(csharpTempDir71, { recursive: true, force: true });
+  }
+
+  // 71.8 A .sln reference that lexically stays inside the repository but resolves
+  // through a symlink to an external native project must not become architecture evidence.
+  const nativeSymlinkRoot71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-native-sln-symlink-'));
+  try {
+    const repo71 = path.join(nativeSymlinkRoot71, 'repo');
+    const outside71 = path.join(nativeSymlinkRoot71, 'outside');
+    fs.mkdirSync(path.join(repo71, 'src'), { recursive: true });
+    fs.mkdirSync(outside71, { recursive: true });
+    fs.writeFileSync(path.join(outside71, 'external.vcxproj'), '<Project />', 'utf8');
+    fs.writeFileSync(path.join(repo71, 'escape.sln'), [
+      'Microsoft Visual Studio Solution File, Format Version 12.00',
+      'Project("{00000000-0000-0000-0000-000000000000}") = "External", "src\\external.vcxproj", "{33333333-3333-3333-3333-333333333333}"',
+      'EndProject'
+    ].join('\n'), 'utf8');
+
+    const link71 = path.join(repo71, 'src', 'external.vcxproj');
+    let symlinkCreated71 = true;
+    try {
+      fs.symlinkSync(path.join('..', '..', 'outside', 'external.vcxproj'), link71, 'file');
+    } catch {
+      symlinkCreated71 = false;
+    }
+
+    if (symlinkCreated71) {
+      const symlinkInv71 = detectRepositoryInventory(repo71);
+      if (symlinkInv71.languages.includes('C/C++') || symlinkInv71.profiles.includes('native') ||
+          symlinkInv71.manifests.some(m => m.path === 'src/external.vcxproj')) {
+        throw new Error(`PATH-B VIOLATION: .sln project reference escaped repository through symlink: ${JSON.stringify(symlinkInv71)}`);
+      }
+    }
+  } finally {
+    fs.rmSync(nativeSymlinkRoot71, { recursive: true, force: true });
+  }
+
+  // 71.9 Repository-root aliases must not corrupt canonical relative manifest paths.
+  // This reproduces macOS /var -> /private/var behavior using a synthetic symlink root.
+  const nativeRootAliasBase71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-native-root-alias-'));
+  try {
+    const realRepo71 = path.join(nativeRootAliasBase71, 'real-repo');
+    const aliasRepo71 = path.join(nativeRootAliasBase71, 'repo-alias');
+    const nativeDir71 = path.join(realRepo71, 'src', 'native');
+    fs.mkdirSync(nativeDir71, { recursive: true });
+    fs.writeFileSync(path.join(nativeDir71, 'player.vcxproj'), '<Project />', 'utf8');
+    fs.writeFileSync(path.join(nativeDir71, 'player.cpp'), 'int main() { return 0; }\n', 'utf8');
+
+    let rootAliasCreated71 = true;
+    try {
+      fs.symlinkSync(realRepo71, aliasRepo71, 'dir');
+    } catch {
+      rootAliasCreated71 = false;
+    }
+
+    if (rootAliasCreated71) {
+      const aliasInv71 = detectRepositoryInventory(aliasRepo71);
+      if (!aliasInv71.manifests.some(m => m.path === 'src/native/player.vcxproj' && m.type === 'visual-cpp-project') ||
+          aliasInv71.manifests.some(m => m.path.startsWith('../') || path.isAbsolute(m.path))) {
+        throw new Error(`PATH-B VIOLATION: canonical root alias corrupted relative manifest paths: ${JSON.stringify(aliasInv71.manifests)}`);
+      }
+    }
+  } finally {
+    fs.rmSync(nativeRootAliasBase71, { recursive: true, force: true });
+  }
+
+  console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model, native Path B classification, and Granular Coverage Classification.');
 
   // 72. R2-P0-11 / R2-P0-12 Invariant: Finding Type & Safe Proof Policy
   // 72.1 validateFindingType validates types and infers hardening/informational without misclassifying information disclosure

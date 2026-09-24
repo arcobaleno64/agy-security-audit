@@ -1,14 +1,14 @@
 {
   "$schema": "https://antigravity.google/schemas/security-audit/evidence-matrix.schema.json",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-22T15:11:01.485Z",
+  "generatedAt": "2026-09-24T15:36:38.661Z",
   "targetSystem": "@arcobaleno64/agy-security-audit",
   "version": "1.9.0",
   "governance": {
     "standard": "NIST SSDF (SP 800-218) / Default-Deny Authority Invariant",
     "covenant": "Section 21 Holdout Covenant & v1.6.1 Evidence Integrity Correction",
     "provenancePolicy": "Strict Fail-Closed: synthetic fixtures must never be represented as live model observations.",
-    "lastEvaluatedAt": "2026-09-24T00:18:53.394Z"
+    "lastEvaluatedAt": "2026-09-24T15:36:38.661Z"
   },
   "summary": {
     "totalDimensions": 5,
@@ -28,17 +28,17 @@
       "artifacts": [
         {
           "path": "skills/security-audit/scripts/render-sarif.mjs",
-          "sha256": "ba633aa20be99725f668b552296b40835564e05d527b738f204c8342b2783464",
+          "sha256": "87e1c2ba695c6566c4199d4e162e08c1f9dba588fbcfe9374bb40d8ae65e87ee",
           "description": "Canonical SARIF renderer and 121 automated release invariants test suite"
         },
         {
           "path": "skills/security-audit/scripts/check-release-invariants.mjs",
           "sha256": "d9880ab1e3f51b87d2ae0859c40f32e06dfa9285466967196ac1e946ce57df7d",
-          "description": "Release Invariants Gate specification checker (60 specs, 40 security invariants)"
+          "description": "Release Invariants Gate specification checker (62 specs, 40 security invariants)"
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "b2129af8ffe4cd22d3f795ed734d310b1e4b15641360da1a9f795d62201a8541",
+          "sha256": "230dd5c11eae5a19d7e321f27410a4ac545908befe0aed287a891fd6bf73e24b",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {

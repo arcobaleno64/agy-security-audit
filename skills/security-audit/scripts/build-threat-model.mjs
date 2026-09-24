@@ -19,7 +19,7 @@ import {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint
 } from './project-context.mjs';
-import { isPathContained } from './path-containment.mjs';
+import { isPathContained, isRealPathContained } from './path-containment.mjs';
 
 /**
  * Stage A: Scans repository for deterministic facts: languages, manifests, frameworks, entrypoints, and profiles (R2-P0-09).
@@ -33,6 +33,81 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
   const entrypoints = [];
 
   const exists = (rel) => fs.existsSync(path.join(rootResolved, rel));
+  const canonicalPath = (value) => {
+    try { return fs.realpathSync(value); }
+    catch { return path.resolve(value); }
+  };
+  const rootCanonical = canonicalPath(rootResolved);
+  const toRel = (absPath) => path.relative(rootCanonical, canonicalPath(absPath)).replace(/\\/g, '/');
+  const rootEntries = (() => {
+    try { return fs.readdirSync(rootResolved, { withFileTypes: true }); }
+    catch { return []; }
+  })();
+  const rootFiles = rootEntries.filter(entry => entry.isFile()).map(entry => entry.name);
+  const standardSourceDirs = ['src', 'source', 'include', 'lib', 'core', 'app'];
+  const nativeSourcePattern = /\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx)$/i;
+  const csharpSourcePattern = /\.cs$/i;
+  const nativeProjectPattern = /\.(?:vcxproj|vcproj)$/i;
+  const nativeProjectAuxPattern = /\.vcxproj\.filters$/i;
+  const csharpProjectPattern = /\.csproj$/i;
+  const webSourcePattern = /\.(?:aspx|asax|cshtml|razor)$/i;
+  const nativeBuildNames = new Set(['CMakeLists.txt', 'Makefile', 'makefile', 'meson.build', 'configure.ac']);
+
+  const discoveredFiles = [];
+  const visitedDirs = new Set();
+  const scanDir = (dirPath, depth = 0, maxDepth = 12) => {
+    if (depth > maxDepth) return;
+    let realDir;
+    try { realDir = fs.realpathSync(dirPath); } catch { return; }
+    if (visitedDirs.has(realDir)) return;
+    visitedDirs.add(realDir);
+    let entries = [];
+    try { entries = fs.readdirSync(realDir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(realDir, entry.name);
+      if (entry.isFile()) {
+        discoveredFiles.push(full);
+      } else if (entry.isDirectory()) {
+        scanDir(full, depth + 1, maxDepth);
+      }
+    }
+  };
+
+  // Inventory root files plus standard source trees. This deliberately avoids a
+  // blanket recursive walk of unrelated vendor/cache trees while still finding
+  // deeply nested native projects such as src/apps/*/*.vcxproj.
+  for (const entry of rootEntries) {
+    if (entry.isFile()) discoveredFiles.push(path.join(rootResolved, entry.name));
+  }
+  for (const relDir of standardSourceDirs) {
+    const dirPath = path.join(rootResolved, relDir);
+    if (fs.existsSync(dirPath)) scanDir(dirPath);
+  }
+
+  const uniqueDiscoveredFiles = Array.from(new Set(discoveredFiles.map(file => path.resolve(file))));
+  const solutionFiles = rootFiles.filter(file => file.toLowerCase().endsWith('.sln'));
+  const solutionProjectRefs = [];
+  for (const solution of solutionFiles) {
+    detectedManifests.push({ path: solution, type: 'visual-studio-solution' });
+    try {
+      const content = fs.readFileSync(path.join(rootResolved, solution), 'utf8');
+      for (const match of content.matchAll(/["']([^"']+\.(?:vcxproj|vcproj|csproj))["']/gi)) {
+        const rel = match[1].replace(/\\/g, '/');
+        const abs = path.resolve(rootResolved, rel);
+        if (isPathContained(rootResolved, abs) && fs.existsSync(abs) && isRealPathContained(rootResolved, abs)) {
+          solutionProjectRefs.push(fs.realpathSync(abs));
+        }
+      }
+    } catch {}
+  }
+  const physicalFiles = Array.from(new Set([...uniqueDiscoveredFiles, ...solutionProjectRefs]));
+
+  const addManifest = (absPath, type) => {
+    const rel = toRel(absPath);
+    if (!detectedManifests.some(item => item.path === rel && item.type === type)) {
+      detectedManifests.push({ path: rel, type });
+    }
+  };
 
   // 1. Node.js / TypeScript
   let pkg = {};
@@ -81,6 +156,7 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
   // 4. Rust
   if (exists('Cargo.toml')) {
     detectedLanguages.add('Rust');
+    detectedProfiles.add('native');
     detectedManifests.push({ path: 'Cargo.toml', type: 'cargo' });
     if (exists('src/main.rs')) entrypoints.push({ path: 'src/main.rs', type: 'cargo_bin', evidence: { manifestOrigin: 'src/main.rs', confidence: 'high' } });
   }
@@ -92,24 +168,56 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
     if (exists('build.gradle')) detectedManifests.push({ path: 'build.gradle', type: 'gradle' });
   }
 
-  // 6. .NET / C#
-  try {
-    const rootFiles = fs.readdirSync(rootResolved);
-    if (rootFiles.some(f => f.endsWith('.csproj') || f.endsWith('.sln') || f.endsWith('.fsproj') || f.endsWith('.cs') || f.endsWith('.aspx') || f.toLowerCase() === 'web.config')) {
-      detectedLanguages.add('C#');
-      detectedProfiles.add('web-app');
-      const manifestFile = rootFiles.find(f => f.endsWith('.csproj') || f.endsWith('.sln') || f.toLowerCase() === 'web.config');
-      if (manifestFile) detectedManifests.push({ path: manifestFile, type: 'dotnet' });
-      const aspxFile = rootFiles.find(f => f.endsWith('.aspx'));
-      if (aspxFile) entrypoints.push({ path: aspxFile, type: 'webforms_page', evidence: { manifestOrigin: 'webforms', confidence: 'high' } });
-    }
-  } catch {}
+  // 6. .NET / C# and explicit web evidence
+  // A .sln file is only a container. It MUST NOT imply C#, ASP.NET, or web-app
+  // without concrete .csproj/.cs/web artifacts.
+  const csharpProjects = physicalFiles.filter(file => csharpProjectPattern.test(file));
+  const csharpSources = physicalFiles.filter(file => csharpSourcePattern.test(file));
+  const explicitWebFiles = physicalFiles.filter(file => webSourcePattern.test(file) || path.basename(file).toLowerCase() === 'web.config');
+  let hasAspNetProjectEvidence = false;
 
-  // 7. C / C++
-  if (exists('CMakeLists.txt') || exists('Makefile')) {
+  for (const projectFile of csharpProjects) {
+    addManifest(projectFile, 'dotnet-project');
+    try {
+      const content = fs.readFileSync(projectFile, 'utf8');
+      if (/Microsoft\.NET\.Sdk\.Web|Microsoft\.AspNetCore/i.test(content)) hasAspNetProjectEvidence = true;
+    } catch {}
+  }
+
+  if (csharpProjects.length > 0 || csharpSources.length > 0) {
+    detectedLanguages.add('C#');
+  }
+  if (explicitWebFiles.length > 0 || hasAspNetProjectEvidence) {
+    detectedProfiles.add('web-app');
+    if (!detectedLanguages.has('C#') && (csharpProjects.length > 0 || csharpSources.length > 0)) detectedLanguages.add('C#');
+    for (const webFile of explicitWebFiles) {
+      if (path.basename(webFile).toLowerCase() === 'web.config') addManifest(webFile, 'aspnet-web-config');
+      if (/\.aspx$/i.test(webFile)) {
+        entrypoints.push({ path: toRel(webFile), type: 'webforms_page', evidence: { manifestOrigin: 'webforms', confidence: 'high' } });
+      }
+    }
+  }
+
+  // 7. C / C++ native inventory
+  const nativeProjects = physicalFiles.filter(file => nativeProjectPattern.test(file));
+  const nativeProjectAux = physicalFiles.filter(file => nativeProjectAuxPattern.test(file));
+  const nativeSources = physicalFiles.filter(file => nativeSourcePattern.test(file));
+  const nativeBuildFiles = physicalFiles.filter(file => nativeBuildNames.has(path.basename(file)));
+  const hasNativeEvidence = nativeProjects.length > 0 || nativeProjectAux.length > 0 || nativeSources.length > 0 || nativeBuildFiles.length > 0;
+
+  for (const file of nativeProjects) addManifest(file, /\.vcproj$/i.test(file) ? 'visual-cpp-project-legacy' : 'visual-cpp-project');
+  for (const file of nativeProjectAux) addManifest(file, 'visual-cpp-project-filters');
+  for (const file of nativeBuildFiles) {
+    const base = path.basename(file);
+    const type = base === 'CMakeLists.txt' ? 'cmake'
+      : (base.toLowerCase() === 'makefile' ? 'make'
+        : (base === 'meson.build' ? 'meson' : 'autoconf'));
+    addManifest(file, type);
+  }
+
+  if (hasNativeEvidence) {
     detectedLanguages.add('C/C++');
-    if (exists('CMakeLists.txt')) detectedManifests.push({ path: 'CMakeLists.txt', type: 'cmake' });
-    if (exists('Makefile')) detectedManifests.push({ path: 'Makefile', type: 'make' });
+    detectedProfiles.add('native');
   }
 
   // 8. Infrastructure as Code / Container
@@ -173,9 +281,14 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
     detectedProfiles.add('library');
   }
 
-  const primaryProfile = detectedProfiles.has('agent-plugin')
-    ? 'agent-plugin'
-    : (detectedProfiles.has('web-api') ? 'web-api' : (detectedProfiles.has('cli') ? 'cli' : Array.from(detectedProfiles)[0]));
+  const hasWebServiceProfile = detectedProfiles.has('web-api') || detectedProfiles.has('web-app');
+  const primaryProfile = detectedProfiles.has('native') && !hasWebServiceProfile
+    ? 'native'
+    : (detectedProfiles.has('agent-plugin')
+      ? 'agent-plugin'
+      : (detectedProfiles.has('web-api')
+        ? 'web-api'
+        : (detectedProfiles.has('web-app') ? 'web-app' : (detectedProfiles.has('cli') ? 'cli' : Array.from(detectedProfiles)[0]))));
 
   return {
     languages: Array.from(detectedLanguages),
