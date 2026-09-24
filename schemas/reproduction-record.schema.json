@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/reproduction-record.schema.json",
+  "title": "ReproductionRecord",
+  "description": "Schema for machine-readable clean-room and independent reproduction records conforming to RFC 0002 (Track D).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "projectVersion",
+    "sourceCommit",
+    "releaseTag",
+    "releaseAssetDigest",
+    "operatorClass",
+    "reproductionClassification",
+    "maintainerAssistance",
+    "executionMode",
+    "environment",
+    "tier1Results",
+    "startedAt",
+    "completedAt",
+    "overallVerdict"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://antigravity.google/schemas/security-audit/reproduction-record.schema.json"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "projectVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "sourceCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "releaseTag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "releaseAssetDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "operatorClass": {
+      "type": "string",
+      "enum": [
+        "MAINTAINER",
+        "CONTRIBUTOR",
+        "INDEPENDENT_OPERATOR",
+        "AUTOMATED_CI"
+      ]
+    },
+    "reproductionClassification": {
+      "type": "string",
+      "enum": [
+        "SELF_REPLAY",
+        "INDEPENDENT_ENVIRONMENT_REPLAY",
+        "INDEPENDENT_OPERATOR_REPRODUCTION",
+        "EXTERNAL_SYSTEM_REPLICATION"
+      ]
+    },
+    "maintainerAssistance": {
+      "type": "boolean"
+    },
+    "executionMode": {
+      "type": "string",
+      "enum": [
+        "SOURCE_CHECKOUT",
+        "PUBLISHED_RELEASE"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch", "nodeVersion"],
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "nodeVersion": { "type": "string" },
+        "gitVersion": { "type": ["string", "null"] },
+        "agyVersion": { "type": ["string", "null"] },
+        "ghVersion": { "type": ["string", "null"] }
+      }
+    },
+    "tier1Results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "steps"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "UNVERIFIABLE"]
+        },
+        "section24Invariants": { "type": "string" },
+        "provenancePolicy": { "type": "string" },
+        "docsIntegrity": { "type": "string" },
+        "releaseInvariants": { "type": "string" },
+        "doctorStatus": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "status", "durationMs"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "status": {
+                "type": "string",
+                "enum": ["PASS", "FAIL", "SKIPPED"]
+              },
+              "durationMs": { "type": "number", "minimum": 0 },
+              "details": { "type": ["string", "object", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "tier2Results": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "SKIPPED", "UNVERIFIABLE"]
+        },
+        "vulnerableControl": { "type": ["string", "null"] },
+        "safeControl": { "type": ["string", "null"] },
+        "disputeControl": { "type": ["string", "null"] },
+        "streamDigest": { "type": ["string", "null"] }
+      }
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "overallVerdict": {
+      "type": "string",
+      "enum": ["PASS", "PARTIAL", "FAIL", "UNVERIFIABLE"]
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -50,13 +50,37 @@ The machine-readable report includes local executable and plugin paths because R
 ### Tier 1: Deterministic Reproduction (Offline & Fast)
 - **Prerequisites**: Node.js `>= 20.0.0`, Git `>= 2.30.0`.
 - **Zero Dependencies**: Requires no `npm install` and zero external npm packages.
-- **Verification Steps**:
-  1. Clone clean tag or extract published release archive.
-  2. Run preflight environment check: `npm run doctor`
-  3. Verify release provenance: `node scripts/verify-release-provenance.mjs`
-  4. Verify Section 24 invariant suite: `npm test` (121/121 PASS)
-  5. Verify documentation integrity: `npm run check:docs`
-  6. Verify release invariants gate: `npm run check:release`
+- **Commands**:
+  ```bash
+  # Execute all 7 deterministic Tier 1 verification gates and emit summary
+  npm run check:reproducibility
+
+  # Output machine-readable reproduction record JSON to stdout
+  npm run check:reproducibility -- --json
+
+  # Write reproduction record JSON to target path
+  npm run check:reproducibility -- --out reproduction-record.json
+
+  # Run the deterministic reproduction policy & regression suite (14 tests)
+  npm run test:reproducibility
+  ```
+- **Automated Verification Gates**:
+  1. `doctor-preflight`: Deterministic Environment Doctor Preflight (`scripts/doctor.mjs`)
+  2. `evidence-bundle-completeness`: Release evidence and archive packaging (`scripts/bundle-release-evidence.mjs --check`)
+  3. `docs-integrity-gate`: Documentation in lockstep with invariants (`scripts/check-docs-integrity.mjs`)
+  4. `provenance-policy-tests`: SLSA provenance & attestation policy suite (`scripts/test-release-provenance.mjs` - 19/19 PASS)
+  5. `doctor-policy-tests`: Doctor preflight & schema policy suite (`scripts/test-doctor.mjs` - 13/13 PASS)
+  6. `section-24-release-gate`: Section 24 release-invariant gate (62 specifications, 40 invariants, 0 dependencies)
+  7. `section-24-invariant-suite`: Section 24 global security invariant suite (`render-sarif.mjs` - 121/121 PASS)
+
+### Maintainer Intervention Degradation Rule
+Under RFC 0002 §6.3 and §8:
+- If a reproduction run involves any out-of-band maintainer assistance, coaching, or privileged debugging, the operator must execute with `--assisted`:
+  ```bash
+  npm run check:reproducibility -- --assisted
+  ```
+- The harness sets `maintainerAssistance: true` and strictly degrades `reproductionClassification` from `INDEPENDENT_OPERATOR_REPRODUCTION` to `INDEPENDENT_ENVIRONMENT_REPLAY`.
+- Any reproduction record asserting `maintainerAssistance: true` while simultaneously claiming `INDEPENDENT_OPERATOR_REPRODUCTION` or `EXTERNAL_SYSTEM_REPLICATION` is rejected as an invalid capability overclaim.
 
 ### Tier 2: Live Assurance Reproduction (Authentic LLM Execution)
 - **Prerequisites**: Antigravity CLI (`agy`) `>= 1.2.0`, supported LLM credentials.
@@ -74,6 +98,7 @@ The machine-readable report includes local executable and plugin paths because R
 ## 4. Submitting an Independent Reproduction
 
 Once Track D implementation is complete in `v1.9.0`:
-1. Execute the reproduction protocol autonomously.
+1. Execute the reproduction protocol autonomously (`npm run check:reproducibility -- --out reproduction-record.json`).
 2. Record execution environment, commands, and resulting artifact hashes.
 3. Submit the resulting `reproduction-record.json` via a GitHub issue or discussion for maintainer adjudication.
+
