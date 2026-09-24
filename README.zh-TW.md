@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.8.1
+# agy-security-audit (plugin ID: `security-audit`) v1.9.0
 
 agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
@@ -116,7 +116,7 @@ agy --sandbox "audit this repository for security vulnerabilities"
 
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.8.1)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.9.0)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
 ├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
 ├── hooks/                                # 生命週期勾點實作
