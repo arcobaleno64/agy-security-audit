@@ -26,14 +26,14 @@ let testsRun = 0;
 const workflowPath = process.env.PROVENANCE_WORKFLOW_PATH ?? path.join(REPO_ROOT, '.github', 'workflows', 'release.yml');
 const workflow = fs.readFileSync(workflowPath, 'utf8');
 const workflowChecks = [
-  ['four-stage jobs', /\n  verify:\n[\s\S]*\n  attest:\n[\s\S]*\n  publish:\n[\s\S]*\n  verify-published:\n/],
-  ['attest depends on verify', /  attest:\n    needs: verify/],
-  ['publish depends on attest', /  publish:\n    needs: attest/],
-  ['verify-published depends on publish', /  verify-published:\n    needs: publish/],
+  ['four-stage jobs', /\r?\n  verify:\r?\n[\s\S]*\r?\n  attest:\r?\n[\s\S]*\r?\n  publish:\r?\n[\s\S]*\r?\n  verify-published:\r?\n/],
+  ['attest depends on verify', /  attest:\r?\n    needs: verify/],
+  ['publish depends on attest', /  publish:\r?\n    needs: attest/],
+  ['verify-published depends on publish', /  verify-published:\r?\n    needs: publish/],
   ['attest OIDC permission', /  attest:[\s\S]*?id-token: write[\s\S]*?attestations: write[\s\S]*?artifact-metadata: write/],
   ['pinned actions attest v4.2.2', /actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/],
-  ['publish lacks OIDC and attestation write', /  publish:[\s\S]*?permissions:\n      contents: write\n    steps:/],
-  ['verify-published attestation read', /  verify-published:[\s\S]*?permissions:\n      contents: read\n      attestations: read/],
+  ['publish lacks OIDC and attestation write', /  publish:[\s\S]*?permissions:\r?\n      contents: write\r?\n    steps:/],
+  ['verify-published attestation read', /  verify-published:[\s\S]*?permissions:\r?\n      contents: read\r?\n      attestations: read/],
   ['immutable release pre-gate', /immutable-releases/],
   ['strict source identity flags', /--signer-workflow[\s\S]*--source-ref[\s\S]*--source-digest/]
 ];
@@ -46,7 +46,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-policy-test-'));
 try {
   fs.writeFileSync(path.join(temp, 'a.txt'), 'alpha');
   fs.writeFileSync(path.join(temp, 'b.txt'), 'beta');
-  const sums = `${sha(Buffer.from('alpha'))}  a.txt\n${sha(Buffer.from('beta'))}  b.txt\n`;
+  const sums = `${sha(Buffer.from('alpha'))}  a.txt\r?\n${sha(Buffer.from('beta'))}  b.txt\r?\n`;
   fs.writeFileSync(path.join(temp, 'SHA256SUMS.txt'), sums);
 
   const integrity = verifyIntegrity(temp);
@@ -57,7 +57,7 @@ try {
   assert(parsed.size === 2 && parsed.get('a.txt') === sha(Buffer.from('alpha')), 'checksum manifest parses deterministically');
   testsRun++;
 
-  expectThrow(() => parseSha256Sums(`${'0'.repeat(64)}  ../evil\n`), 'basename');
+  expectThrow(() => parseSha256Sums(`${'0'.repeat(64)}  ../evil\r?\n`), 'basename');
   testsRun++;
 
   fs.writeFileSync(path.join(temp, 'extra.txt'), 'extra');
