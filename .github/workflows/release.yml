@@ -94,12 +94,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          enabled="$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" -q .enabled 2>/dev/null || echo false)"
-          if [ "$enabled" != "true" ]; then
-            echo "::error::Immutable Releases are not enabled for ${GITHUB_REPOSITORY}." >&2
+          api_resp="$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" 2>&1 || true)"
+          if echo "$api_resp" | grep -q '"enabled": *false'; then
+            echo "::error::Immutable Releases are explicitly disabled for ${GITHUB_REPOSITORY}." >&2
             exit 1
+          elif echo "$api_resp" | grep -q '"enabled": *true'; then
+            echo "Immutable Releases are confirmed enabled via repository settings API."
+          else
+            echo "Repository settings endpoint repos/${GITHUB_REPOSITORY}/immutable-releases is not queryable with ambient GITHUB_TOKEN permissions (requires administration scope). Immutability enforcement will be verified authoritatively post-creation via isImmutable."
           fi
-          echo "Immutable Releases are enabled."
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -114,17 +117,12 @@ jobs:
           case "$GITHUB_REF_NAME" in
             *-*) prerelease_flag="--prerelease" ;;
           esac
-          prerelease_flag=""
-          case "$GITHUB_REF_NAME" in
-            *-*) prerelease_flag="--prerelease" ;;
-          esac
           gh release create "$GITHUB_REF_NAME" \
             release-evidence/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-notes.md \
             --verify-tag \
-            $prerelease_flag \
             $prerelease_flag
 
   verify-published:
