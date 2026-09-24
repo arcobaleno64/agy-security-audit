@@ -19,7 +19,7 @@ import {
   computeProjectContextFingerprint,
   computeSecurityPropertiesFingerprint
 } from './project-context.mjs';
-import { isPathContained } from './path-containment.mjs';
+import { isPathContained, isRealPathContained } from './path-containment.mjs';
 
 /**
  * Stage A: Scans repository for deterministic facts: languages, manifests, frameworks, entrypoints, and profiles (R2-P0-09).
@@ -89,7 +89,9 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
       for (const match of content.matchAll(/["']([^"']+\.(?:vcxproj|vcproj|csproj))["']/gi)) {
         const rel = match[1].replace(/\\/g, '/');
         const abs = path.resolve(rootResolved, rel);
-        if (abs.startsWith(rootResolved + path.sep) && fs.existsSync(abs)) solutionProjectRefs.push(abs);
+        if (isPathContained(rootResolved, abs) && fs.existsSync(abs) && isRealPathContained(rootResolved, abs)) {
+          solutionProjectRefs.push(fs.realpathSync(abs));
+        }
       }
     } catch {}
   }

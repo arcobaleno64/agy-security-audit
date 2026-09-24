@@ -3074,6 +3074,40 @@ export function runTests() {
     fs.rmSync(csharpTempDir71, { recursive: true, force: true });
   }
 
+  // 71.8 A .sln reference that lexically stays inside the repository but resolves
+  // through a symlink to an external native project must not become architecture evidence.
+  const nativeSymlinkRoot71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-native-sln-symlink-'));
+  try {
+    const repo71 = path.join(nativeSymlinkRoot71, 'repo');
+    const outside71 = path.join(nativeSymlinkRoot71, 'outside');
+    fs.mkdirSync(path.join(repo71, 'src'), { recursive: true });
+    fs.mkdirSync(outside71, { recursive: true });
+    fs.writeFileSync(path.join(outside71, 'external.vcxproj'), '<Project />', 'utf8');
+    fs.writeFileSync(path.join(repo71, 'escape.sln'), [
+      'Microsoft Visual Studio Solution File, Format Version 12.00',
+      'Project("{00000000-0000-0000-0000-000000000000}") = "External", "src\\external.vcxproj", "{33333333-3333-3333-3333-333333333333}"',
+      'EndProject'
+    ].join('\n'), 'utf8');
+
+    const link71 = path.join(repo71, 'src', 'external.vcxproj');
+    let symlinkCreated71 = true;
+    try {
+      fs.symlinkSync(path.join('..', '..', 'outside', 'external.vcxproj'), link71, 'file');
+    } catch {
+      symlinkCreated71 = false;
+    }
+
+    if (symlinkCreated71) {
+      const symlinkInv71 = detectRepositoryInventory(repo71);
+      if (symlinkInv71.languages.includes('C/C++') || symlinkInv71.profiles.includes('native') ||
+          symlinkInv71.manifests.some(m => m.path === 'src/external.vcxproj')) {
+        throw new Error(`PATH-B VIOLATION: .sln project reference escaped repository through symlink: ${JSON.stringify(symlinkInv71)}`);
+      }
+    }
+  } finally {
+    fs.rmSync(nativeSymlinkRoot71, { recursive: true, force: true });
+  }
+
   console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model, native Path B classification, and Granular Coverage Classification.');
 
   // 72. R2-P0-11 / R2-P0-12 Invariant: Finding Type & Safe Proof Policy
