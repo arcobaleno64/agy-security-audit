@@ -1244,7 +1244,7 @@ export function renderComparativeReport(comparisonData, options = {}) {
     const vulnRecallA = auditA.vulnCompleted > 0 ? ((auditA.vulnWithCandidates / auditA.vulnCompleted) * 100).toFixed(1) + '%' : 'N/A';
     const vulnRecallB = auditB.vulnCompleted > 0 ? ((auditB.vulnWithCandidates / auditB.vulnCompleted) * 100).toFixed(1) + '%' : 'N/A';
     md += `### 2.3 Execution Exposure & Censoring Audit\n\n`;
-    md += `Failures (\`TIMEOUT\`, \`SCHEMA_VIOLATION\`) represent unexposed fixtures and are treated strictly as \`CENSORED_EXPOSURE\`, not negative findings. Metrics are calculated over completed exposures rather than assuming negative outcomes for unexposed runs.\n\n`;
+    md += `Failures and model provider safety interventions (\`SAFETY_FILTER_BLOCK\`, \`TIMEOUT\`, \`SCHEMA_VIOLATION\`) represent unexposed fixtures and are treated strictly as \`CENSORED_EXPOSURE\`, not negative findings. Metrics are calculated over completed exposures rather than assuming negative outcomes for unexposed runs.\n\n`;
     md += `| Exposure Metric | Configuration A (\`${taxA.rawModelId}\`) | Configuration B (\`${taxB.rawModelId}\`) | Delta / Comparison |\n`;
     md += `| :--- | :--- | :--- | :--- |\n`;
     md += `| **Total Attempted Exposures** | ${auditA.attempted} | ${auditB.attempted} | - |\n`;
@@ -1259,7 +1259,7 @@ export function renderComparativeReport(comparisonData, options = {}) {
       ? `${deltaRecall >= 0 ? '+' : ''}${deltaRecall.toFixed(1)}% Recall across completed exposures`
       : 'N/A';
     md += `| **Successfully Completed Exposures** | ${auditA.completed} | ${auditB.completed} | **${deltaCompletedStr}** |\n`;
-    md += `| **Censored Exposures (Timeout / Schema Violation)** | ${auditA.censored} | ${auditB.censored} | **${deltaCensoredStr}** |\n`;
+    md += `| **Censored Exposures (Safety Filter Block / Timeout / Schema Violation)** | ${auditA.censored} | ${auditB.censored} | **${deltaCensoredStr}** |\n`;
     md += `| **Vulnerable Fixtures Completed / Attempted** | ${auditA.vulnCompleted} / ${auditA.vulnAttempted} | ${auditB.vulnCompleted} / ${auditB.vulnAttempted} | - |\n`;
     md += `| **Vulnerable Fixture Completed Exposure Recall** | ${vulnRecallA} (${auditA.vulnWithCandidates}/${auditA.vulnCompleted}) | ${vulnRecallB} (${auditB.vulnWithCandidates}/${auditB.vulnCompleted}) | **${deltaRecallStr}** |\n`;
     md += `| **Controlled Safe Exposures Completed / Attempted** | ${auditA.safeCompleted} / ${auditA.safeAttempted} | ${auditB.safeCompleted} / ${auditB.safeAttempted} | - |\n\n`;

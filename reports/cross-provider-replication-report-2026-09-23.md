@@ -44,13 +44,13 @@ Evaluation was executed under strict contemporaneous interleaved pass ordering (
 
 ### 2.3 Execution Exposure & Censoring Audit
 
-Failures (`TIMEOUT`, `SCHEMA_VIOLATION`) represent unexposed fixtures and are treated strictly as `CENSORED_EXPOSURE`, not negative findings. Metrics are calculated over completed exposures rather than assuming negative outcomes for unexposed runs.
+Failures and model provider safety interventions (`SAFETY_FILTER_BLOCK`, `TIMEOUT`, `SCHEMA_VIOLATION`) represent unexposed fixtures and are treated strictly as `CENSORED_EXPOSURE`, not negative findings. Metrics are calculated over completed exposures rather than assuming negative outcomes for unexposed runs.
 
 | Exposure Metric | Configuration A (`gemini-3.8-flash-high`) | Configuration B (`claude-sonnet-5`) | Delta / Comparison |
 | :--- | :--- | :--- | :--- |
 | **Total Attempted Exposures** | 60 | 60 | - |
 | **Successfully Completed Exposures** | 53 | 50 | **-3 exposures** |
-| **Censored Exposures (Timeout / Schema Violation)** | 7 | 10 | **+3 exposures** |
+| **Censored Exposures (Safety Filter Block / Timeout / Schema Violation)** | 7 | 10 | **+3 exposures** |
 | **Vulnerable Fixtures Completed / Attempted** | 25 / 30 | 30 / 30 | - |
 | **Vulnerable Fixture Completed Exposure Recall** | 96.0% (24/25) | 96.7% (29/30) | **+0.7% Recall across completed exposures** |
 | **Controlled Safe Exposures Completed / Attempted** | 28 / 30 | 20 / 30 | - |
