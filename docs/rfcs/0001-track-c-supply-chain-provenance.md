@@ -2,7 +2,7 @@
 
 - **RFC Number**: 0001
 - **Title**: Track C - Supply-Chain Provenance & Cryptographic Assurance Architecture
-- **Status**: Proposed
+- **Status**: Accepted
 - **Authors**: Antigravity Pair Programming Engine & Maintainers
 - **Created**: 2026-09-24
 - **Target Release**: v1.8.0
