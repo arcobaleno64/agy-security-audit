@@ -333,12 +333,47 @@ export function inspectNode(options = {}) {
 }
 
 export function validateDoctorReportShape(report) {
-  if (!report || typeof report !== 'object') return false;
+  if (!report || typeof report !== 'object' || Array.isArray(report)) return false;
+
+  const exactKeys = (value, expected) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const actual = Object.keys(value).sort();
+    const wanted = [...expected].sort();
+    return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+  };
+  const isStatus = value => DOCTOR_STATES.includes(value);
+  const isStringOrNull = value => typeof value === 'string' || value === null;
+
+  if (!exactKeys(report, ['$schema', 'schemaVersion', 'generatedAt', 'toolVersion', 'overallStatus', 'profiles', 'environment', 'capabilities', 'checks'])) return false;
   if (report.$schema !== DOCTOR_SCHEMA_ID || report.schemaVersion !== DOCTOR_SCHEMA_VERSION) return false;
-  if (!DOCTOR_STATES.includes(report.overallStatus)) return false;
-  if (!report.profiles || !DOCTOR_STATES.includes(report.profiles.tier1) || !DOCTOR_STATES.includes(report.profiles.tier2)) return false;
+  if (typeof report.generatedAt !== 'string' || Number.isNaN(Date.parse(report.generatedAt))) return false;
+  if (typeof report.toolVersion !== 'string' || report.toolVersion.length === 0) return false;
+  if (!isStatus(report.overallStatus)) return false;
+
+  if (!exactKeys(report.profiles, ['tier1', 'tier2'])) return false;
+  if (!isStatus(report.profiles.tier1) || !isStatus(report.profiles.tier2)) return false;
+
+  if (!exactKeys(report.environment, ['platform', 'arch', 'shell', 'pluginRoot'])) return false;
+  if (typeof report.environment.platform !== 'string' || typeof report.environment.arch !== 'string') return false;
+  if (!isStringOrNull(report.environment.shell) || typeof report.environment.pluginRoot !== 'string') return false;
+
+  if (!exactKeys(report.capabilities, ['deterministicTier1', 'liveTier2Executable', 'strictReleaseProvenance', 'liveSandboxEnforcementObserved'])) return false;
+  if (!['deterministicTier1', 'liveTier2Executable', 'strictReleaseProvenance', 'liveSandboxEnforcementObserved']
+    .every(key => typeof report.capabilities[key] === 'boolean')) return false;
+  if (report.capabilities.liveSandboxEnforcementObserved !== false) return false;
+
   if (!Array.isArray(report.checks) || report.checks.length < 8) return false;
-  if (!report.checks.every(c => c && typeof c.id === 'string' && DOCTOR_STATES.includes(c.status) && Array.isArray(c.requiredFor))) return false;
+  const ids = new Set();
+  for (const check of report.checks) {
+    if (!exactKeys(check, ['id', 'status', 'requiredFor', 'requirement', 'summary', 'observed'])) return false;
+    if (typeof check.id !== 'string' || check.id.length === 0 || ids.has(check.id)) return false;
+    ids.add(check.id);
+    if (!isStatus(check.status)) return false;
+    if (!Array.isArray(check.requiredFor) || new Set(check.requiredFor).size !== check.requiredFor.length) return false;
+    if (!check.requiredFor.every(value => value === 'TIER1' || value === 'TIER2')) return false;
+    if (typeof check.requirement !== 'string' || typeof check.summary !== 'string') return false;
+    if (!check.observed || typeof check.observed !== 'object' || Array.isArray(check.observed)) return false;
+  }
   return true;
 }
 
@@ -363,8 +398,8 @@ export function runDoctor(options = {}) {
     commandProbe({
       id: 'agy', label: 'Antigravity CLI', command: platform === 'win32' ? 'agy.exe' : 'agy', minimumVersion: MINIMUM_VERSIONS.agy,
       requiredFor: ['TIER2'], requirement: `Antigravity CLI >= ${MINIMUM_VERSIONS.agy}`,
-      missingStatus: 'DEGRADED', belowStatus: 'UNSUPPORTED',
-      missingSummary: 'Antigravity CLI is unavailable; deterministic Tier 1 remains usable, but live Tier 2 reproduction is unavailable.'
+      missingStatus: 'UNSUPPORTED', belowStatus: 'UNSUPPORTED',
+      missingSummary: 'Antigravity CLI is unavailable; deterministic Tier 1 remains usable, but live Tier 2 reproduction is unsupported.'
     }),
     commandProbe({
       id: 'gh', label: 'GitHub CLI', command: platform === 'win32' ? 'gh.exe' : 'gh', minimumVersion: MINIMUM_VERSIONS.gh,
@@ -401,7 +436,7 @@ export function runDoctor(options = {}) {
       pluginRoot: repoRoot
     },
     capabilities: {
-      deterministicTier1: profiles.tier1 !== 'UNSUPPORTED',
+      deterministicTier1: profiles.tier1 === 'READY' || profiles.tier1 === 'DEGRADED',
       liveTier2Executable: checks.find(c => c.id === 'agy')?.status === 'READY',
       strictReleaseProvenance: checks.find(c => c.id === 'gh')?.status === 'READY',
       liveSandboxEnforcementObserved: false
