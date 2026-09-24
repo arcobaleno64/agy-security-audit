@@ -138,7 +138,7 @@ sequenceDiagram
 | Job | Checkout? | Executed Code | Token Permissions | Output / Role |
 | :--- | :--- | :--- | :--- | :--- |
 | **`verify`** | Yes (Tag) | Full repository test suite & build scripts | `contents: read` | Passes all 121 invariants; produces immutable `release-evidence` artifact. |
-| **`attest`** | **NO** | First-party `actions/attest@<SHA>` only | `contents: read`<br/>`id-token: write`<br/>`attestations: write`<br/>`artifact-metadata: write` | Signs all 18 release assets with in-toto SLSA L2 provenance predicate. |
+| **`attest`** | **NO** | First-party `download-artifact@<SHA>` + `actions/attest@<SHA>` only | `contents: read`<br/>`id-token: write`<br/>`attestations: write`<br/>`artifact-metadata: write` | Signs all 18 release assets with in-toto SLSA L2 provenance predicate. |
 | **`publish`** | **NO** | First-party `download-artifact` & `gh` CLI | `contents: write` | Validates immutable release enablement; publishes immutable GitHub Release. |
 | **`verify-published`** | Yes (Bare clone) | Tag gates + `gh` CLI verification | `contents: read`<br/>`attestations: read` | Independent verification closure: bare clone gates, immutability, and 18-subject provenance. |
 
@@ -162,8 +162,16 @@ Where:
 1. $R = S$ (All published release assets match the checksum manifest exactly).
 2. $S = A$ (All checksum manifest entries match the attested provenance subjects exactly).
 3. Digest Equality:
-   $$\forall \text{asset} \in R: \text{SHA256}(\text{local}) = \text{Digest}(S) = \text{Digest}(A)$$
+   - For standard payload assets:
+     $$\forall \text{asset} \in R \setminus \{\text{"SHA256SUMS.txt"}\}: \text{SHA256}(\text{local}) = \text{Digest}(S) = \text{Digest}(A)$$
+   - For `SHA256SUMS.txt` itself:
+     $$\text{SHA256}(\text{local}) = \text{Digest}(A)$$
+     (Manifest self-digest is N/A to prevent recursive hashing).
 4. Subject Normalization: All subjects are evaluated strictly by filename basename. Subdirectories, parent traversals (`..`), symlinks, and duplicate basenames are rejected fail-closed.
+
+> [!NOTE]
+> **Checksum Self-Reference Erratum**:
+> $R = S = A$ applies to canonical asset-name sets. `SHA256SUMS.txt` is included in $S$ for name-set equality but cannot self-list its own checksum. Its byte digest is therefore validated against the attested subject digest, while payload assets require three-way local / manifest / attestation digest equality.
 
 ### 5.2 Strict Multi-Axis Verification Policy
 `gh attestation verify` must never be run with repository scope alone. Verification mandates strict multi-axis identity binding:
@@ -190,7 +198,7 @@ $$\text{Sigstore Cryptographic Certificate} > \text{Signer Workflow} > \text{Sou
 ### 6.1 Action Pinning
 All actions in the release workflow must be pinned to full 40-character commit SHAs. In particular, `actions/attest` must reference a reviewed, immutable release revision:
 ```yaml
-uses: actions/attest@c074443f1a5fb4aee83904b7112375973fb06763 # v4.x.y reviewed SHA
+uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2 reviewed SHA
 ```
 
 ### 6.2 Pre-Publish Immutable Releases Gate

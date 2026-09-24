@@ -4,13 +4,11 @@ on:
     tags:
       - "v*"
 
-# Read-only by default. The write token is granted to one job, and that job
-# runs no code from the tag — see the comment on `publish`.
+# Default read-only. Elevated scopes are granted only to the job that needs them.
 permissions:
   contents: read
 
 jobs:
-  # Everything that executes repository code, with a token that cannot publish.
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -19,7 +17,6 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 20
-      # No dependencies and no lockfile by design.
       - name: Assert tag matches package.json version
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -29,10 +26,6 @@ jobs:
             exit 1
           fi
           echo "Tag and package.json agree on $pkg."
-      # What users install is `main`, not this tag: `agy plugin install` resolves
-      # the repository's default branch, so a bump that merged to main is already
-      # live before this workflow ever runs. A tag that main cannot reach
-      # publishes a release for code nobody receives.
       - name: Assert the tag is on main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,7 +34,7 @@ jobs:
           case "$status" in
             identical|behind) ;;
             *)
-              echo "::error::$GITHUB_REF_NAME is not reachable from main (compare status: $status). Users install from main, so this tag would publish a release nobody can install." >&2
+              echo "::error::$GITHUB_REF_NAME is not reachable from main (compare status: $status)." >&2
               exit 1
               ;;
           esac
@@ -52,37 +45,61 @@ jobs:
       - run: npm run test:discovery
       - run: npm run test:stability
       - run: npm run test:stability-recorded
+      - run: npm run test:provenance
       - run: npm run check-version
       - run: npm run check:release
       - name: Bundle release evidence
         run: node scripts/bundle-release-evidence.mjs --out-dir release-evidence
+      - name: Verify staged release integrity and exact asset count
+        run: node scripts/verify-release-provenance.mjs --integrity-only --dir release-evidence --expected-assets 18
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: release-evidence
           path: release-evidence
-      # No equivalent of `claude plugin validate --strict` here: `agy plugin
-      # validate` needs the proprietary, authenticated Antigravity CLI binary,
-      # which cannot run on a GitHub-hosted runner. This gate is deliberately
-      # skipped, not silently absent -- validate locally with `agy plugin
-      # validate .` before tagging.
+
+  attest:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download verified release evidence bundle
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Generate SLSA build provenance attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: 'release-evidence/*'
 
   publish:
-    # The only job granted a write token below, and deliberately the only one
-    # with no checkout and no repository code of any kind: whoever can push a
-    # `v*` tag chooses what `npm test` and this tag's scripts run, and that must
-    # not share a job with a token that can publish.
-    needs: verify
+    needs: attest
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Download release evidence bundle
+      - name: Download attested release evidence bundle
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: release-evidence
           path: release-evidence
+      - name: Assert Immutable Releases are enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          enabled="$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" -q .enabled 2>/dev/null || echo false)"
+          if [ "$enabled" != "true" ]; then
+            echo "::error::Immutable Releases are not enabled for ${GITHUB_REPOSITORY}." >&2
+            exit 1
+          fi
+          echo "Immutable Releases are enabled."
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,13 +117,13 @@ jobs:
             --notes-file release-notes.md \
             --verify-tag
 
-  # Everything above tests the working copy the workflow was handed. This tests
-  # what a user gets: a bare clone of the published ref, with no build step --
-  # exactly how AGY's plugin install resolves a repository.
   verify-published:
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: read
     steps:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
@@ -129,5 +146,36 @@ jobs:
             exit 1
           fi
           npm test
+          npm run test:provenance
           npm run check:release
-          echo "A bare clone of $GITHUB_REF_NAME passes its own release gate and reports $reported."
+      - name: Download all published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p published-assets
+          gh release download "$GITHUB_REF_NAME" --dir published-assets --repo "$GITHUB_REPOSITORY"
+      - name: Verify immutable release attestation and all release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          immutable="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)"
+          if [ "$immutable" != "true" ]; then
+            echo "::error::Published release is not immutable." >&2
+            exit 1
+          fi
+          gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
+          for asset in published-assets/*; do
+            gh release verify-asset "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
+          done
+      - name: Verify content integrity and strict SLSA provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node published/scripts/verify-release-provenance.mjs \
+            --dir published-assets \
+            --expected-assets 18 \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$GITHUB_REF_NAME" \
+            --source-digest "$GITHUB_SHA"
+          echo "A bare clone of $GITHUB_REF_NAME passes its release gates and strict provenance verification."
