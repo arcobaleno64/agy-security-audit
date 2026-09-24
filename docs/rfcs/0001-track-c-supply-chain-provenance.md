@@ -162,8 +162,16 @@ Where:
 1. $R = S$ (All published release assets match the checksum manifest exactly).
 2. $S = A$ (All checksum manifest entries match the attested provenance subjects exactly).
 3. Digest Equality:
-   $$\forall \text{asset} \in R: \text{SHA256}(\text{local}) = \text{Digest}(S) = \text{Digest}(A)$$
+   - For standard payload assets:
+     $$\forall \text{asset} \in R \setminus \{\text{"SHA256SUMS.txt"}\}: \text{SHA256}(\text{local}) = \text{Digest}(S) = \text{Digest}(A)$$
+   - For `SHA256SUMS.txt` itself:
+     $$\text{SHA256}(\text{local}) = \text{Digest}(A)$$
+     (Manifest self-digest is N/A to prevent recursive hashing).
 4. Subject Normalization: All subjects are evaluated strictly by filename basename. Subdirectories, parent traversals (`..`), symlinks, and duplicate basenames are rejected fail-closed.
+
+> [!NOTE]
+> **Checksum Self-Reference Erratum**:
+> $R = S = A$ applies to canonical asset-name sets. `SHA256SUMS.txt` is included in $S$ for name-set equality but cannot self-list its own checksum. Its byte digest is therefore validated against the attested subject digest, while payload assets require three-way local / manifest / attestation digest equality.
 
 ### 5.2 Strict Multi-Axis Verification Policy
 `gh attestation verify` must never be run with repository scope alone. Verification mandates strict multi-axis identity binding:
