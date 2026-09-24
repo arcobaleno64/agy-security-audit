@@ -46,6 +46,7 @@ jobs:
       - run: npm run test:stability
       - run: npm run test:stability-recorded
       - run: npm run test:provenance
+      - run: npm run test:doctor
       - run: npm run check-version
       - run: npm run check:docs
       - run: npm run check:release
@@ -156,6 +157,7 @@ jobs:
           fi
           npm test
           npm run test:provenance
+          npm run test:doctor
           npm run check:release
       - name: Download all published release assets
         env:
