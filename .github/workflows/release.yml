@@ -47,6 +47,7 @@ jobs:
       - run: npm run test:stability-recorded
       - run: npm run test:provenance
       - run: npm run check-version
+      - run: npm run check:docs
       - run: npm run check:release
       - name: Bundle release evidence
         run: node scripts/bundle-release-evidence.mjs --out-dir release-evidence

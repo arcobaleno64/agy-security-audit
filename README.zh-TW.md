@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.8.0
+# agy-security-audit (plugin ID: `security-audit`) v1.8.1
 
 agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
@@ -11,6 +11,44 @@ agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證�
 [`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) 是獨立的 Claude Code 協作外掛，可透過 Gemini CLI 或 Antigravity CLI（`agy`）進行跨模型任務委派與程式碼審查。它從 Claude Code 委派工作；`agy-security-audit` 則原生執行於 Antigravity CLI 內。兩個專案都不會隨另一個一併提供，也不是使用另一個的必要條件。
 
 > **獨立專案。** `agy-security-audit` 由社群維護，**與 Google LLC、Anthropic 及 OpenAI 均無隸屬、背書或贊助關係**。第三方名稱僅用於指稱本專案互通或討論的工具、標準或研究；使用相關系統時，適用其各自條款。
+
+## 快速上手 (Getting Started)
+
+### 先決條件與支援矩陣 (Prerequisites & Support Matrix)
+- **Node.js**: `>= 20.0.0`（純 Node.js 內建模組；0 外部 npm 依賴）。
+- **Antigravity CLI (`agy`)**: `>= 1.2.0`。
+- **作業系統**: Windows (PowerShell)、Linux (Bash)、macOS (Zsh/Bash)。
+- **Git**: `>= 2.30.0`（用於差異審查與安全儲存庫隔離）。
+- **GitHub CLI (`gh`)**: `>= 2.50.0`（選用；僅嚴格 SLSA 來源認證與發行證明核驗所需）。
+
+### 安裝方式 (Installation)
+將外掛複製或安裝至 Antigravity 外掛目錄：
+```bash
+git clone https://github.com/arcobaleno64/agy-security-audit.git ~/.gemini/config/plugins/security-audit
+```
+
+### 執行第一次安全審查 (Running Your First Security Audit)
+切換至任何您擁有權限進行審查的目標儲存庫：
+```bash
+cd /path/to/target-repo
+agy
+```
+在 Antigravity 對話提示中，調用此技能：
+```text
+/security-audit:security-audit
+```
+或使用非互動式範圍旗標執行：
+- **全代碼庫掃描**：`/security-audit:security-audit --scope codebase`
+- **指定路徑審查**：`/security-audit:security-audit --scope path --path src/`
+- **Git 變更審查**：`/security-audit:security-audit --scope changes`
+
+### 預期產出 (Expected Outputs)
+4 階段管線執行完成後，發現與證據會生成於：
+- `reports/scan.md`（或 `reports/review.md`）：結構化、綁定客觀證據之決策 Markdown 報告。
+- `reports/scan.sarif`：OASIS SARIF 2.1.0 標準日誌，供 IDE、GitHub Advanced Security 或 CI 系統讀取。
+- `scratch/context/`：去敏、已遮蔽機密之陰影檢查工件。
+
+---
 
 ## 核心公理：權威聲明以不通過為前提 (Default-Deny on Authority Claims)
 
@@ -78,7 +116,7 @@ agy --sandbox "audit this repository for security vulnerabilities"
 
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.1)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.8.1)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
 ├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
 ├── hooks/                                # 生命週期勾點實作
@@ -139,7 +177,7 @@ security-audit/
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
             ├── finalize-scan.mjs         # 權威確定性終審器與標準整合
             ├── standards-mapping.mjs     # 業界標準映射與依賴邊界檢測器
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 115 項不變量測試
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown 渲染與 121 項不變量測試
             ├── build-inventory.mjs       # 地面真值目錄會計清單生成器
             ├── build-threat-model.mjs    # 確定性威脅模型生成器
             ├── validate-attack-path.mjs  # 攻擊路徑 Schema 2.0 校驗與證明缺口偵測
@@ -149,7 +187,7 @@ security-audit/
             ├── run-discovery-eval.mjs    # 代理發現評測套件 (Simulated CI / Recorded Agent Run)
             ├── run-stability-eval.mjs    # 發現穩定度與多輪實證基準評測引擎
             ├── record-benchmark-run.mjs  # 真實模型實證基準封套記錄工具
-            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (55 項檔案，38 項安全不變量)
+            └── check-release-invariants.mjs # Section 24 發行不變量閘門 (62 項規格，40 項安全不變量)
 ```
 
 ---
@@ -178,6 +216,12 @@ npm run test:stability-recorded
 
 # 執行 Section 24 發行閘門檢驗 (檢查必要規格、安全不變量與零外部依賴)：
 npm run check:release
+
+# 驗證文件完整性與防止文件漂移：
+npm run check:docs
+
+# 驗證發行來源與 SLSA 認證政策：
+npm run test:provenance
 ```
 
 ---

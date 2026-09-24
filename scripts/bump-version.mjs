@@ -40,9 +40,19 @@ const DOC_TARGETS = [
     replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
   },
   {
+    file: "README.md",
+    pattern: /^├── package\.json\s+# npm test, test:evals, test:semantic, test:discovery, test:stability, check:release \([^)]*\)/m,
+    replacement: (v) => `├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (${v})`
+  },
+  {
     file: "README.zh-TW.md",
     pattern: /^# agy-security-audit \(plugin ID: `security-audit`\) v[^\s]+/m,
     replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
+  },
+  {
+    file: "README.zh-TW.md",
+    pattern: /^├── package\.json\s+# npm test, test:evals, test:semantic, test:discovery, test:stability, check:release \([^)]*\)/m,
+    replacement: (v) => `├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (${v})`
   },
   {
     file: "SECURITY.md",

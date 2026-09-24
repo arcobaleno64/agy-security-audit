@@ -1,6 +1,6 @@
 {
   "name": "@arcobaleno64/agy-security-audit",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).",
   "type": "module",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "test:stability-recorded": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/recorded-runs",
     "test:stability-live": "node skills/security-audit/scripts/run-stability-eval.mjs --runs-dir evals/live-runs",
     "check:release": "node skills/security-audit/scripts/check-release-invariants.mjs",
+    "check:docs": "node scripts/check-docs-integrity.mjs",
     "test:e2e:coordinator": "node scripts/run-e2e-coordinator-evidence.mjs --dry-run",
     "test:e2e:coordinator:harness": "node scripts/run-e2e-coordinator-evidence.mjs --dry-run",
     "test:e2e:coordinator:live": "node scripts/run-e2e-coordinator-evidence.mjs --claim=orchestration",

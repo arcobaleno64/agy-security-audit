@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.8.0
+# agy-security-audit (plugin ID: `security-audit`) v1.8.1
 
 agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
 
@@ -11,6 +11,44 @@ Its defensive architecture aligns with **NIST SSDF (SP 800-218)**, **OWASP ASVS 
 [`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) is a separate Claude Code companion for running Gemini CLI or Antigravity CLI (`agy`) as a cross-model task delegate and code reviewer. It delegates work from Claude Code; `agy-security-audit` runs natively inside Antigravity CLI. Neither project is bundled with or required by the other.
 
 > **Independent project.** `agy-security-audit` is community-maintained and is **not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic, or OpenAI**. Third-party names identify tools, standards, or research this project interoperates with or discusses; their respective terms govern those systems.
+
+## Getting Started
+
+### Prerequisites & Support Matrix
+- **Node.js**: `>= 20.0.0` (pure Node.js built-ins; 0 external npm dependencies).
+- **Antigravity CLI (`agy`)**: `>= 1.2.0`.
+- **Operating Systems**: Windows (PowerShell), Linux (Bash), macOS (Zsh/Bash).
+- **Git**: `>= 2.30.0` (required for diff reviews and safe repository isolation).
+- **GitHub CLI (`gh`)**: `>= 2.50.0` (optional; required only for strict SLSA provenance and release attestation verification).
+
+### Installation
+Clone or install the plugin into your Antigravity plugin directory:
+```bash
+git clone https://github.com/arcobaleno64/agy-security-audit.git ~/.gemini/config/plugins/security-audit
+```
+
+### Running Your First Security Audit
+Navigate to any target repository you have permission to review:
+```bash
+cd /path/to/target-repo
+agy
+```
+In the Antigravity prompt, invoke the skill:
+```text
+/security-audit:security-audit
+```
+Or run with non-interactive scope flags:
+- **Full repository scan**: `/security-audit:security-audit --scope codebase`
+- **Scoped path review**: `/security-audit:security-audit --scope path --path src/`
+- **Git diff review**: `/security-audit:security-audit --scope changes`
+
+### Expected Outputs
+Upon completion of the 4-stage pipeline, findings and evidence are generated under:
+- `reports/scan.md` (or `reports/review.md`): Structured, evidence-bound executive Markdown report.
+- `reports/scan.sarif`: OASIS SARIF 2.1.0 standard log for IDE, GitHub Advanced Security, or CI ingestion.
+- `scratch/context/`: Sanitized, secret-redacted shadow inspection artifacts.
+
+---
 
 ## Foundational Axiom: Presumption of Non-Pass (Default-Deny on Authority Claims)
 
@@ -78,7 +116,7 @@ The role permissions defined in `recommended-security-audit-permissions.json` en
 
 ```text
 security-audit/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.0.1)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.8.1)
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
 ├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
 ├── hooks/                                # Lifecycle hook implementations
@@ -139,7 +177,7 @@ security-audit/
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
             ├── finalize-scan.mjs         # Authoritative deterministic finalizer and standards integration
             ├── standards-mapping.mjs     # Industry-standards mapping and dependency-boundary detector
-            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 115 invariant tests
+            ├── render-sarif.mjs          # SARIF 2.1.0 / Markdown rendering plus 121 invariant tests
             ├── build-inventory.mjs       # Ground-truth directory-accounting manifest generator
             ├── build-threat-model.mjs    # Deterministic threat-model generator
             ├── validate-attack-path.mjs  # Attack-path Schema 2.0 validation and proof-gap detection
@@ -149,7 +187,7 @@ security-audit/
             ├── run-discovery-eval.mjs    # Agent discovery-evaluation suite (Simulated CI / Recorded Agent Run)
             ├── run-stability-eval.mjs    # Discovery-stability and multi-pass empirical benchmark
             ├── record-benchmark-run.mjs  # Recorded empirical benchmark protocol envelope recorder
-            └── check-release-invariants.mjs # Section 24 release-invariant gate (55 files, 38 invariants)
+            └── check-release-invariants.mjs # Section 24 release-invariant gate (62 specifications, 40 invariants)
 ```
 
 ---
@@ -178,6 +216,12 @@ npm run test:stability-recorded
 
 # Run the Section 24 release gate (verifies required specs, security invariants, and zero external dependencies):
 npm run check:release
+
+# Verify documentation integrity and drift prevention:
+npm run check:docs
+
+# Verify release provenance and SLSA attestation policy:
+npm run test:provenance
 ```
 
 ---
