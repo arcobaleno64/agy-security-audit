@@ -92,7 +92,7 @@ export function verifyIntegrity(dir) {
 
 function normalizeVerifiedSubject(subject) {
   if (!subject || typeof subject !== 'object') fail('Verified attestation subject is not an object');
-  const name = assertSafeBasename(path.basename(String(subject.name ?? '')), 'attestation subject');
+  const name = assertSafeBasename(String(subject.name ?? ''), 'attestation subject');
   const digest = subject.digest?.sha256;
   if (typeof digest !== 'string' || !/^[0-9a-fA-F]{64}$/.test(digest)) {
     fail(`Attestation subject ${name} lacks a valid sha256 digest`);
