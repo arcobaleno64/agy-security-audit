@@ -1,7 +1,7 @@
 # External Reproduction Kit (Track D Skeleton)
 
 > **Governing Specification**: [RFC 0002: Track D - External Reproducibility, Real-World Transfer & Adoption Readiness](../rfcs/0002-external-reproducibility-and-adoption-readiness.md)  
-> **Status**: SKELETON / PROPOSED (v1.9.0 Target)  
+> **Status**: ACTIVE / IMPLEMENTATION (v1.9.0 Target)  
 > **Frozen Baseline**: `agy-security-audit v1.8.1` (`8af4bca5cdfef89c93649c03a70d43767875ffb7`)
 
 ---
