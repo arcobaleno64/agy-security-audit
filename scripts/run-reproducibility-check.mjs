@@ -301,9 +301,12 @@ export function buildReproductionRecord(tier1Results, options = {}) {
     sourceCommit = gitHead.status === 0 ? gitHead.stdout.trim() : '8af4bca5cdfef89c93649c03a70d43767875ffb7';
   }
 
-  // Canonical baseline anchor for v1.8.1
+  // Canonical baseline anchor for v1.9.0 (with fallback for v1.8.1)
   const releaseTag = options.releaseTag || `v${pkg.version}`;
-  const releaseAssetDigest = options.releaseAssetDigest || '2a0ece157b0264fc2cfd2efc8d87de78696ffe3a3d79fd01bfa8f83153ee04da';
+  const defaultDigest = pkg.version === '1.9.0'
+    ? 'c0505e883b6a1ee463420fe0290931f0dcdb8c5ea6333b622445df34dcbd0a0a'
+    : '2a0ece157b0264fc2cfd2efc8d87de78696ffe3a3d79fd01bfa8f83153ee04da';
+  const releaseAssetDigest = options.releaseAssetDigest || defaultDigest;
 
   const isCi = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);
   const maintainerAssistance = Boolean(options.maintainerAssistance);

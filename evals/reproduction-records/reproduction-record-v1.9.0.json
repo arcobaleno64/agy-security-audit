@@ -1,0 +1,90 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/reproduction-record.schema.json",
+  "schemaVersion": "1.0.0",
+  "projectVersion": "1.9.0",
+  "sourceCommit": "a891852646f7632c39a486c1ae7166f032a468b1",
+  "releaseTag": "v1.9.0",
+  "releaseAssetDigest": "c0505e883b6a1ee463420fe0290931f0dcdb8c5ea6333b622445df34dcbd0a0a",
+  "operatorClass": "MAINTAINER",
+  "reproductionClassification": "SELF_REPLAY",
+  "maintainerAssistance": false,
+  "executionMode": "SOURCE_CHECKOUT",
+  "environment": {
+    "os": "win32",
+    "arch": "x64",
+    "nodeVersion": "24.14.1",
+    "gitVersion": null,
+    "agyVersion": null,
+    "ghVersion": null
+  },
+  "tier1Results": {
+    "status": "PASS",
+    "section24Invariants": "121/121",
+    "provenancePolicy": "19/19",
+    "docsIntegrity": "PASS",
+    "releaseInvariants": "62_SPECS_40_INVARIANTS_0_DEPS",
+    "doctorStatus": "READY",
+    "steps": [
+      {
+        "id": "doctor-preflight",
+        "name": "Deterministic Environment Doctor Preflight",
+        "status": "PASS",
+        "durationMs": 488,
+        "details": "Tier 1: READY, Tier 2: UNVERIFIABLE"
+      },
+      {
+        "id": "evidence-bundle-completeness",
+        "name": "Mandatory Release Evidence & Archive Packaging",
+        "status": "PASS",
+        "durationMs": 140,
+        "details": "All release evidence files and packaging verified"
+      },
+      {
+        "id": "docs-integrity-gate",
+        "name": "Deterministic Documentation Drift Gate",
+        "status": "PASS",
+        "durationMs": 76,
+        "details": "Documentation in lockstep with invariants"
+      },
+      {
+        "id": "provenance-policy-tests",
+        "name": "SLSA Provenance & Attestation Policy Suite",
+        "status": "PASS",
+        "durationMs": 65,
+        "details": "19/19 provenance policy tests pass"
+      },
+      {
+        "id": "doctor-policy-tests",
+        "name": "Doctor Preflight & Schema Policy Suite",
+        "status": "PASS",
+        "durationMs": 100,
+        "details": "13/13 doctor policy tests pass"
+      },
+      {
+        "id": "section-24-release-gate",
+        "name": "Section 24 Release Invariants Gate",
+        "status": "PASS",
+        "durationMs": 149792,
+        "details": "62 specifications, 40 security invariants, 0 dependencies"
+      },
+      {
+        "id": "section-24-invariant-suite",
+        "name": "Section 24 Global Security Invariant Suite",
+        "status": "PASS",
+        "durationMs": 70,
+        "details": "121/121 automated security invariant tests pass"
+      }
+    ]
+  },
+  "tier2Results": {
+    "status": "PASS",
+    "vulnerableControl": "TRUE_POSITIVE_CONFIRMED",
+    "safeControl": "FALSE_POSITIVE_SUPPRESSED",
+    "disputeControl": "ORACLE_DISPUTE_RECONCILED",
+    "streamDigest": "41aa9d858abb4f36938ee1fac6db9927c54bfd506c7084fcbc9cded2ce944db6"
+  },
+  "startedAt": "2026-09-24T13:01:18.415Z",
+  "completedAt": "2026-09-24T13:03:49.148Z",
+  "overallVerdict": "PASS",
+  "notes": []
+}

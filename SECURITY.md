@@ -23,7 +23,7 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 
 ---
 
-## 2. Hardening & Guardrails (v1.8.1 / Production)
+## 2. Hardening & Guardrails (v1.9.0 / Production)
 
 ### 2.1 Presumption of Non-Pass (Default-Deny on Authority Claims)
 - Under Default-Deny, all authority claims (candidate findings, remediation patches, and coverage claims) begin in an unverified state.
@@ -109,7 +109,8 @@ Only the current MINOR line is supported. Update this table with every MINOR bum
 
 | Version | Supported |
 |---|---|
-| 1.8.x | :white_check_mark: |
+| 1.9.x | :white_check_mark: |
+| 1.8.x | :x: |
 | 1.7.x | :x: |
 | 1.6.x | :x: |
 | < 1.6.0 | :x: |
