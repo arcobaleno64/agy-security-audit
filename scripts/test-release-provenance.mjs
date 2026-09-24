@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { parseSha256Sums, verifyIntegrity, collectVerifiedSubjects, verifyAttestations, runCli } from './verify-release-provenance.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const REPO_ROOT = path.resolve(path.dirname(__filename), '..');
 
 function assert(condition, message) {
   if (!condition) throw new Error(`ASSERTION_FAILED: ${message}`);
@@ -18,6 +22,26 @@ function expectThrow(fn, expected) {
 }
 
 let testsRun = 0;
+
+const workflowPath = process.env.PROVENANCE_WORKFLOW_PATH ?? path.join(REPO_ROOT, '.github', 'workflows', 'release.yml');
+const workflow = fs.readFileSync(workflowPath, 'utf8');
+const workflowChecks = [
+  ['four-stage jobs', /\n  verify:\n[\s\S]*\n  attest:\n[\s\S]*\n  publish:\n[\s\S]*\n  verify-published:\n/],
+  ['attest depends on verify', /  attest:\n    needs: verify/],
+  ['publish depends on attest', /  publish:\n    needs: attest/],
+  ['verify-published depends on publish', /  verify-published:\n    needs: publish/],
+  ['attest OIDC permission', /  attest:[\s\S]*?id-token: write[\s\S]*?attestations: write[\s\S]*?artifact-metadata: write/],
+  ['pinned actions attest v4.2.2', /actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/],
+  ['publish lacks OIDC and attestation write', /  publish:[\s\S]*?permissions:\n      contents: write\n    steps:/],
+  ['verify-published attestation read', /  verify-published:[\s\S]*?permissions:\n      contents: read\n      attestations: read/],
+  ['immutable release pre-gate', /immutable-releases/],
+  ['strict source identity flags', /--signer-workflow[\s\S]*--source-ref[\s\S]*--source-digest/]
+];
+for (const [name, pattern] of workflowChecks) {
+  assert(pattern.test(workflow), `release workflow policy missing: ${name}`);
+  testsRun++;
+}
+
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-policy-test-'));
 try {
   fs.writeFileSync(path.join(temp, 'a.txt'), 'alpha');
