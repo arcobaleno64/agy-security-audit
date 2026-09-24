@@ -1,4 +1,4 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.7.1
+# agy-security-audit (plugin ID: `security-audit`) v1.7.2
 
 agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
