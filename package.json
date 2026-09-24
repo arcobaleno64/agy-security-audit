@@ -57,7 +57,9 @@
     "test:evidence-matrix": "node scripts/test-evidence-matrix-gate.mjs",
     "test:provenance": "node scripts/test-release-provenance.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "test:doctor": "node scripts/test-doctor.mjs"
+    "test:doctor": "node scripts/test-doctor.mjs",
+    "check:reproducibility": "node scripts/run-reproducibility-check.mjs",
+    "test:reproducibility": "node scripts/test-reproducibility.mjs"
   },
   "keywords": [
     "antigravity",

@@ -133,4 +133,22 @@ assert(reproductionReadme.includes('npm run doctor'), 'reproduction README must 
 assert(reproductionReadme.includes('npm run doctor -- --json'), 'reproduction README must document Doctor JSON mode');
 assert(reproductionReadme.includes('UNVERIFIABLE'), 'reproduction README must preserve honest UNVERIFIABLE semantics');
 
+// 6. Track D Tier 1 Reproduction contract
+assert(pkg.scripts?.['check:reproducibility'] === 'node scripts/run-reproducibility-check.mjs', 'package.json must expose npm run check:reproducibility');
+assert(pkg.scripts?.['test:reproducibility'] === 'node scripts/test-reproducibility.mjs', 'package.json must expose npm run test:reproducibility');
+const reproScriptPath = path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs');
+const reproTestPath = path.join(REPO_ROOT, 'scripts', 'test-reproducibility.mjs');
+const reproSchemaPath = path.join(REPO_ROOT, 'schemas', 'reproduction-record.schema.json');
+assert(fs.existsSync(reproScriptPath), 'scripts/run-reproducibility-check.mjs must exist');
+assert(fs.existsSync(reproTestPath), 'scripts/test-reproducibility.mjs must exist');
+assert(fs.existsSync(reproSchemaPath), 'schemas/reproduction-record.schema.json must exist');
+const reproSchema = JSON.parse(fs.readFileSync(reproSchemaPath, 'utf8'));
+assert(
+  reproSchema.$id === 'https://antigravity.google/schemas/security-audit/reproduction-record.schema.json',
+  'reproduction record schema $id must remain canonical'
+);
+assert(reproductionReadme.includes('npm run check:reproducibility'), 'reproduction README must document npm run check:reproducibility');
+assert(reproductionReadme.includes('npm run test:reproducibility'), 'reproduction README must document npm run test:reproducibility');
+assert(reproductionReadme.includes('Maintainer Intervention Degradation Rule'), 'reproduction README must document maintainer intervention degradation');
+
 console.log(`✔ Documentation integrity gate PASSED! All documentation matches v${currentVersion} and baseline invariants.`);
