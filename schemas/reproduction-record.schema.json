@@ -152,6 +152,10 @@
     "notes": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "operatorMetrics": {
+      "type": ["object", "null"],
+      "description": "Optional operator usability metrics conforming to RFC 0002 §7."
     }
   }
 }

@@ -365,4 +365,68 @@ test('run-reproducibility-check.mjs --dry-run --tier2 --json produces valid reco
   assertEqual(parsed.overallVerdict, 'PASS', 'overall verdict with tier2');
 });
 
+// Test 16: Operator metrics integration in reproduction record
+test('validateReproductionRecordShape accepts valid operatorMetrics attached', () => {
+  const record = makeValidBaselineRecord();
+  record.operatorMetrics = {
+    $schema: 'https://antigravity.google/schemas/security-audit/operator-metrics.schema.json',
+    timeToInstallSeconds: 45,
+    timeToFirstSuccessfulAuditSeconds: 180,
+    timeToFirstUnderstoodFindingSeconds: 120,
+    manualFilesOpenedCount: 4,
+    rerunsRequiredCount: 0,
+    commandsRetriedCount: 0,
+    helpRequestsCount: 0,
+    misinterpretedStatusesCount: 0,
+    findingAdjudicationSeconds: 150,
+    evidenceFilesManuallyInspectedCount: 3,
+    operatorFrictionNotes: ['Smooth execution.']
+  };
+  assert(validateReproductionRecordShape(record), 'record with valid operatorMetrics must pass');
+
+  // Invalid metrics in record rejected
+  record.operatorMetrics.manualFilesOpenedCount = -1;
+  assert(!validateReproductionRecordShape(record), 'record with invalid operatorMetrics must fail');
+});
+
+// Test 17: CLI integration with --metrics flag
+test('run-reproducibility-check.mjs --dry-run --json --metrics attaches valid operatorMetrics', () => {
+  const tempDir = fs.mkdtempSync(path.join(REPO_ROOT, 'scratch', 'repro-metrics-test-'));
+  const metricsFile = path.join(tempDir, 'metrics.json');
+  try {
+    fs.writeFileSync(metricsFile, JSON.stringify({
+      $schema: 'https://antigravity.google/schemas/security-audit/operator-metrics.schema.json',
+      timeToInstallSeconds: 30,
+      timeToFirstSuccessfulAuditSeconds: 120,
+      timeToFirstUnderstoodFindingSeconds: 90,
+      manualFilesOpenedCount: 2,
+      rerunsRequiredCount: 0,
+      commandsRetriedCount: 0,
+      helpRequestsCount: 0,
+      misinterpretedStatusesCount: 0,
+      findingAdjudicationSeconds: 60,
+      evidenceFilesManuallyInspectedCount: 1,
+      operatorFrictionNotes: ['CLI execution verified.']
+    }, null, 2));
+
+    const res = spawnSync(process.execPath, [
+      path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs'),
+      '--dry-run',
+      '--json',
+      '--metrics', metricsFile
+    ], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8'
+    });
+    assertEqual(res.status, 0, 'CLI exit code must be 0');
+    const parsed = JSON.parse(res.stdout);
+    assert(validateReproductionRecordShape(parsed), 'CLI emitted JSON must satisfy shape validation');
+    assert(parsed.operatorMetrics !== null, 'operatorMetrics must be present');
+    assertEqual(parsed.operatorMetrics.timeToInstallSeconds, 30, 'timeToInstallSeconds must match');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 console.log(`\nAll Reproduction policy tests passed (${passed}/${passed}).`);
+

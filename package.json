@@ -61,7 +61,8 @@
     "check:reproducibility": "node scripts/run-reproducibility-check.mjs",
     "test:reproducibility": "node scripts/test-reproducibility.mjs",
     "check:micro-corpus": "node scripts/run-micro-corpus.mjs",
-    "test:micro-corpus": "node scripts/test-micro-corpus.mjs"
+    "test:micro-corpus": "node scripts/test-micro-corpus.mjs",
+    "test:operator-metrics": "node scripts/test-operator-metrics.mjs"
   },
   "keywords": [
     "antigravity",

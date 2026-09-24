@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/operator-metrics.schema.json",
+  "title": "OperatorUsabilityMetrics",
+  "description": "Schema for machine-readable quantitative operator friction and adoption readiness metrics conforming to RFC 0002 §7 (Track D).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "timeToInstallSeconds",
+    "timeToFirstSuccessfulAuditSeconds",
+    "timeToFirstUnderstoodFindingSeconds",
+    "manualFilesOpenedCount",
+    "rerunsRequiredCount",
+    "commandsRetriedCount",
+    "helpRequestsCount",
+    "misinterpretedStatusesCount",
+    "findingAdjudicationSeconds",
+    "evidenceFilesManuallyInspectedCount",
+    "operatorFrictionNotes"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://antigravity.google/schemas/security-audit/operator-metrics.schema.json"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operatorClass": {
+      "type": "string",
+      "enum": [
+        "MAINTAINER",
+        "CONTRIBUTOR",
+        "INDEPENDENT_OPERATOR",
+        "AUTOMATED_CI"
+      ]
+    },
+    "targetRepository": {
+      "type": "string"
+    },
+    "timeToInstallSeconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock seconds from deciding to install to successful verification via doctor or smoke run."
+    },
+    "timeToFirstSuccessfulAuditSeconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock seconds until the first audit run finishes with valid SARIF/report output."
+    },
+    "timeToFirstUnderstoodFindingSeconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock seconds until the operator comprehends the first vulnerability finding or clean assurance verdict."
+    },
+    "manualFilesOpenedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of raw files, manifests, or traces the operator had to open manually to understand the result."
+    },
+    "rerunsRequiredCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of times the audit had to be rerun due to configuration ambiguity, syntax failure, or timeout."
+    },
+    "commandsRetriedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of times CLI commands were retried due to misleading error messages or missing arguments."
+    },
+    "helpRequestsCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of times the operator needed to look at --help, README, or RFC docs to unblock execution."
+    },
+    "misinterpretedStatusesCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of times status vocabulary (READY, DEGRADED, UNVERIFIABLE, DISPUTED) was misunderstood."
+    },
+    "findingAdjudicationSeconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock seconds spent adjudicating and verifying evidence for candidate findings."
+    },
+    "evidenceFilesManuallyInspectedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of distinct evidence envelopes, raw streams, or ground truth files manually reviewed."
+    },
+    "operatorFrictionNotes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Concrete operational observations and friction points recorded during the session."
+    },
+    "evaluatedInterfaceRecommendation": {
+      "type": "string",
+      "enum": [
+        "CLI_SUFFICIENT",
+        "CLI_WORKFLOW_IMPROVEMENT_RECOMMENDED",
+        "TUI_RECOMMENDED",
+        "STATUS_VOCABULARY_CLARIFICATION_RECOMMENDED",
+        "GUI_REJECTED_BY_OCCAMS_RAZOR"
+      ],
+      "description": "Empirical interface decision recommendation derived conforming to RFC 0002 §7.2."
+    }
+  }
+}
