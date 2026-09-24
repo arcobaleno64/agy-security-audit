@@ -127,88 +127,110 @@ function runGh(args, options = {}) {
     stdio: ['ignore', 'pipe', 'pipe']
   });
   if (result.error) fail(`Unable to execute gh: ${result.error.message}`);
-  if (result.status !== 0) fail(`gh ${args.slice(0, 3).join(' ')} failed (${resultİ]\ßJNˆ	Ê™\İ[œİ\œˆ™\İ[œİİ]	ÉÊKš[J
-_X
-NÂˆ™]\›ˆ™\İ[œİİ]ÂŸB‚™^Ü[˜İ[Ûˆ™\šYP]\İ][ÛœÊ[YÜš]KÛXŞKÚ[›™\ˆH[‘Ú
-HÂˆÛÛœİ™\]Z\™YHÉÜ™\ÉË	ÜÚYÛ™\•ÛÜšÙ›İÉË	ÜÛİ\˜ÙT™Y‰Ë	ÜÛİ\˜ÙQYÙ\İ	×NÂˆ›Üˆ
-ÛÛœİÙ^HÙˆ™\]Z\™Y
-HÂˆYˆ
-\ÛXŞVÚÙ^WH\[ÙˆÛXŞVÚÙ^WHOOH	Üİš[™ÉÊH˜Z[
-İšXİ›İ™[˜[˜ÙH™\šYšXØ][Ûˆ™\]Z\™\ÈÛXŞK‰ÚÙ^_X
-NÂˆBˆYˆ
-K×–ÌNXKYKQ—^ÍIË\İ
-ÛXŞKœÛİ\˜ÙQYÙ\İ
-JH˜Z[
-	ÜÛİ\˜ÙQYÙ\İ]\İ™HHXÚ\˜Xİ\ˆÚ]ÛÛ[Z]ÒIÊNÂ‚ˆÛÛœİ]\İYİXš™XİÈH™]ÈX\
+  if (result.status !== 0) fail(`gh ${args.slice(0, 3).join(' ')} failed (${result.status}): ${(result.stderr || result.stdout || '').trim()}`);
+  return result.stdout;
+}
 
-NÂˆ›Üˆ
-ÛÛœİ˜[YHÙˆ[YÜš]Kœ™[X\ÙQš[\ÊHÂˆÛÛœİ\ÜÙ]]H]š›Ú[Š[YÜš]Kœ›Ûİ˜[YJNÂˆÛÛœİİİ]HÚ[›™\ŠÂˆ	Ø]\İ][Û‰Ë	İ™\šYIË\ÜÙ]]ˆ	ËK\™\ÉËÛXŞKœ™\Ëˆ	ËK\ÚYÛ™\‹]ÛÜšÙ›İÉËÛXŞKœÚYÛ™\•ÛÜšÙ›İËˆ	ËK\Ûİ\˜ÙK\™Y‰ËÛXŞKœÛİ\˜ÙT™Y‹ˆ	ËK\Ûİ\˜ÙKYYÙ\İ	ËÛXŞKœÛİ\˜ÙQYÙ\İˆ	ËK\™YXØ]K]\IË‘QPĞUWÕTKˆ	ËKY[K\Ù[‹ZÜİY\[›™\œÉËˆ	ËKY›Ü›X]	Ë	ÚœÛÛ‰ÂˆKÈ[ˆÛXŞK™[ˆJNÂ‚ˆ]\œÙYÂˆHÈ\œÙYH”ÓÓ‹œ\œÙJİİ]
-NÈHØ]Ú
-\œŠHÈ˜Z[
-[˜[Y”ÓÓˆœ›ÛHÚ]\İ][Ûˆ™\šYH›Üˆ	Û˜[Y_Nˆ	Ù\œ‹›Y\ÜØYÙ_X
-NÈBˆÛÛœİİXš™XİÈHÛÛXİ™\šYšYYİXš™XİÊ\œÙY
-NÂˆÛÛœİØØ[YÙ\İHÚLM‘š[J\ÜÙ]]
-NÂˆYˆ
-İXš™XİË™Ù]
-˜[YJHOOHØØ[YÙ\İ
-HÂˆ˜Z[
-™\šYšYY]\İ][ÛˆÙ\È›İÛÛZ[ˆX]Ú[™ÈİXš™XİYÙ\İ›Üˆ	Û˜[Y_X
-NÂˆBˆ›Üˆ
-ÛÛœİÜİXš™Xİ˜[YKYÙ\İHÙˆİXš™XİÊHÂˆÛÛœİ^\İ[™ÈH]\İYİXš™XİË™Ù]
-İXš™Xİ˜[YJNÂˆYˆ
-^\İ[™È	‰ˆ^\İ[™ÈOOHYÙ\İ
-H˜Z[
-ÛÛ™›Xİ[™È™\šYšYYYÙ\İÈ›Üˆ]\İYİXš™Xİ	ÜİXš™Xİ˜[Y_X
-NÂˆ]\İYİXš™XİËœÙ]
-İXš™Xİ˜[YKYÙ\İ
-NÂˆBˆB‚ˆÛÛœİ]\İYÙ]H™]ÈÙ]
-]\İYİXš™XİËšÙ^\Ê
-JNÂˆ\ÜÙ\Ù]\]X[
-[YÜš]K›X[šY™\İÙ]]\İYÙ]	ÔÉË	ĞIÊNÂˆ›Üˆ
-ÛÛœİ˜[YHÙˆ[YÜš]Kœ™[X\ÙQš[\ÊHÂˆÛÛœİ^XİYHÚLM‘š[J]š›Ú[Š[YÜš]Kœ›Ûİ˜[YJJNÂˆYˆ
-]\İYİXš™XİË™Ù]
-˜[YJHOOH^XİY
-H˜Z[
-YÙ\İ[™\]X[]H›Üˆ	Û˜[Y_NˆØØ[OH]\İ][Û˜
-NÂˆYˆ
-˜[YHOOH	ÔÒLM”ÕSTË	È	‰ˆ[YÜš]K˜ÚXÚÜİ[\Ë™Ù]
-˜[YJHOOH^XİY
-H˜Z[
-YÙ\İ[™\]X[]H›Üˆ	Û˜[Y_NˆX[šY™\İOHØØ[
-NÂˆB‚ˆ™]\›ˆÈ]\İYİXš™XİÈNÂŸB‚™[˜İ[Ûˆ\ØYÙJ
-HÂˆÛÛœÛÛK›ÙÊ	Õ\ØYÙNˆ›ÙHØÜš\Ëİ™\šYK\™[X\ÙK\›İ™[˜[˜ÙK›ZœÈÛÜ[Ûœ×IÊNÂˆÛÛœÛÛK›ÙÊ	ÈKY\ˆ]ˆ\™XİÜHÛÛZ[š[™ÈHN™[X\ÙH\ÜÙ]ÉÊNÂˆÛÛœÛÛK›ÙÊ	ÈK\™\ÈİÛ™\‹Ü™\Ïˆ^XİYÚ]Xˆ™\ÜÚ]ÜIÊNÂˆÛÛœÛÛK›ÙÊ	ÈK\ÚYÛ™\‹]ÛÜšÙ›İÈ]ˆ^XİYÚYÛ™\ˆÛÜšÙ›İÈY[]IÊNÂˆÛÛœÛÛK›ÙÊ	ÈK\Ûİ\˜ÙK\™Yˆ™Yˆ^XİYÛİ\˜ÙH™Y‹K™Ëˆ™YœËİYÜËİŒKŒ	ÊNÂˆÛÛœÛÛK›ÙÊ	ÈK\Ûİ\˜ÙKYYÙ\İÚOˆ^XİYXÚ\ˆÛİ\˜ÙHÛÛ[Z]ÒIÊNÂˆÛÛœÛÛK›ÙÊ	ÈKY^XİYX\ÜÙ]Èˆ™\]Z\™H^Xİİ[\ÜÙ]Ûİ[	ÊNÂˆÛÛœÛÛK›ÙÊ	ÈKZ[YÜš]K[Û›H™\šYHØØ[ÒKLMˆ[YÜš]HÛ›H
-SUTÕQ
-IÊNÂˆÛÛœÛÛK›ÙÊ	ÈZKZ[ÚİÈ[	ÊNÂŸB‚™[˜İ[Ûˆ\œÙP\™ÜÊ\™ÜÊHÂˆÛÛœİİ]HÈ\ˆ	Ë‰Ë[YÜš]SÛ›Nˆ˜[ÙHNÂˆ›Üˆ
-]HHÈH\™ÜË›[™İÈJÊÊHÂˆÛÛœİ\™ÈH\™ÜÖÚWNÂˆYˆ
-\™ÈOOH	ËKZ[YÜš]K[Û›IÊHİ]š[YÜš]SÛ›HHYNÂˆ[ÙHYˆ
-\™ÈOOH	ËKZ[	È\™ÈOOH	ËZ	ÊHİ]š[HYNÂˆ[ÙHYˆ
-ÉËKY\‰Ë	ËK\™\ÉË	ËK\ÚYÛ™\‹]ÛÜšÙ›İÉË	ËK\Ûİ\˜ÙK\™Y‰Ë	ËK\Ûİ\˜ÙKYYÙ\İ	Ë	ËKY^XİYX\ÜÙ]É×Kš[˜ÛY\Ê\™ÊJHÂˆYˆ
-H
-ÈHH\™ÜË›[™İ
-H˜Z[
-	Ø\™ßH™\]Z\™\ÈH˜[YX
-NÂˆÛÛœİÙ^HHÈ	ËKY\‰Î‰Ù\‰Ë	ËK\™\ÉÎ‰Ü™\ÉË	ËK\ÚYÛ™\‹]ÛÜšÙ›İÉÎ‰ÜÚYÛ™\•ÛÜšÙ›İÉË	ËK\Ûİ\˜ÙK\™Y‰Î‰ÜÛİ\˜ÙT™Y‰Ë	ËK\Ûİ\˜ÙKYYÙ\İ	Î‰ÜÛİ\˜ÙQYÙ\İ	Ë	ËKY^XİYX\ÜÙ]ÉÎ‰Ù^XİY\ÜÙ]ÉÈVØ\™×NÂˆİ]ÚÙ^WHH\™ÜÖÊÊÚWNÂˆH[ÙH˜Z[
-[šÛ›İÛˆ\™İ[Y[ˆ	Ø\™ßX
-NÂˆBˆ™]\›ˆİ]ÂŸB‚™^Ü[˜İ[Ûˆ[ÛJ\™ÜÈH›ØÙ\ÜË˜\™İ‹œÛXÙJŠK[ˆH›ØÙ\ÜË™[ŠHÂˆÛÛœİÜÈH\œÙP\™ÜÊ\™ÜÊNÂˆYˆ
-ÜËš[
-HÈ\ØYÙJ
-NÈ™]\›ˆÈBˆÛÛœİ[YÜš]HH™\šYR[YÜš]JÜË™\ŠNÂˆYˆ
-ÜË™^XİY\ÜÙ]ÈOOH[™Yš[™Y
-HÂˆÛÛœİ^XİY\ÜÙ]ÈH[X™\ŠÜË™^XİY\ÜÙ]ÊNÂˆYˆ
-S[X™\‹š\Ò[YÙ\Š^XİY\ÜÙ]ÊH^XİY\ÜÙ]ÈJH˜Z[
-	ËKY^XİYX\ÜÙ]È]\İ™HHÜÚ]]™H[YÙ\‰ÊNÂˆYˆ
-[YÜš]Kœ™[X\ÙQš[\Ë›[™İOOH^XİY\ÜÙ]ÊH˜Z[
-^XİY^XİH	Ù^XİY\ÜÙ]ßH™[X\ÙH\ÜÙ]Ë›İ[™	Ú[YÜš]Kœ™[X\ÙQš[\Ë›[™İX
-NÂˆBˆYˆ
-ÜËš[YÜš]SÛ›JHÂˆÛÛœÛÛK›ÙÊS•QÔ’UWÓÓ“H
-SUTÕQ
-Nˆ	Ú[YÜš]Kœ™[X\ÙQš[\Ë›[™İH\ÜÙ]ÎÈ	Ú[YÜš]K˜ÚXÚÜİ[\ËœÚ^™_KÉÚ[YÜš]K˜ÚXÚÜİ[\ËœÚ^™_HÚXÚÜİ[\È™\šYšYY˜
-NÂˆ™]\›ˆÂˆB‚ˆÛÛœİÛXŞHHÂˆ™\ÎˆÜËœ™\ÈÏÈ[‹‘ÒUP—Ô‘TÔÒUÔ–KˆÚYÛ™\•ÛÜšÙ›İÎˆÜËœÚYÛ™\•ÛÜšÙ›İÈÏÈ
-[‹‘ÒUP—Ô‘TÔÒUÔ–HÈ	Ù[‹‘ÒUP—Ô‘TÔÒUÔ–_KË™Ú]X‹İÛÜšÙ›İÜËÜ™[X\ÙK[[ˆ[™Yš[™Y
-KˆÛİ\˜ÙT™YˆÜËœÛİ\˜ÙT™YˆÏÈ[‹‘ÒUP—Ô‘Q‹ˆÛİ\˜ÙQYÙ\İˆÜËœÛİ\˜ÙQYÙ\İÏÈ[‹‘ÒUP—ÔÒKˆ[‚ˆNÂˆ™\šYP]\İ][ÛœÊ[YÜš]KÛXŞJNÂˆÛÛœÛÛK›ÙÊ“Õ‘SSÑWÕ‘T’Q’QQ
-ÓĞHZ[ŠNˆTÏPOIÚ[YÜš]Kœ™[X\ÙQš[\Ë›[™İNÈİšXİÚ]Xˆ]\İ][ÛˆÛXŞHØ]\ÙšYY˜
-NÂˆ™]\›ˆÂŸB‚šYˆ
-›ØÙ\ÜË˜\™İ–ÌWH	‰ˆ]œ™\ÛÛ™J›ØÙ\ÜË˜\™İ–ÌWJHOOH]œ™\ÛÛ™J×Ùš[[˜[YJJHÂˆHÈ›ØÙ\ÜË™^]ÛÙHH[ÛJ
-NÈBˆØ]Ú
-\œŠHÈÛÛœÛÛK™\œ›ÜŠ“Õ‘SSÑWÕ‘T’Q’PĞUSÓ—ÑRSQˆ	Ù\œ‹›Y\ÜØYÙ_X
-NÈ›ØÙ\ÜË™^]ÛÙHHNÈBŸB
+export function verifyAttestations(integrity, policy, ghRunner = runGh) {
+  const required = ['repo', 'signerWorkflow', 'sourceRef', 'sourceDigest'];
+  for (const key of required) {
+    if (!policy[key] || typeof policy[key] !== 'string') fail(`Strict provenance verification requires policy.${key}`);
+  }
+  if (!/^[0-9a-fA-F]{40}$/.test(policy.sourceDigest)) fail('sourceDigest must be a 40-character Git commit SHA');
+
+  const attestedSubjects = new Map();
+  for (const name of integrity.releaseFiles) {
+    const assetPath = path.join(integrity.root, name);
+    const stdout = ghRunner([
+      'attestation', 'verify', assetPath,
+      '--repo', policy.repo,
+      '--signer-workflow', policy.signerWorkflow,
+      '--source-ref', policy.sourceRef,
+      '--source-digest', policy.sourceDigest,
+      '--predicate-type', PREDICATE_TYPE,
+      '--deny-self-hosted-runners',
+      '--format', 'json'
+    ], { env: policy.env });
+
+    let parsed;
+    try { parsed = JSON.parse(stdout); } catch (err) { fail(`Invalid JSON from gh attestation verify for ${name}: ${err.message}`); }
+    const subjects = collectVerifiedSubjects(parsed);
+    const localDigest = sha256File(assetPath);
+    if (subjects.get(name) !== localDigest) {
+      fail(`Verified attestation does not contain matching subject digest for ${name}`);
+    }
+    for (const [subjectName, digest] of subjects) {
+      const existing = attestedSubjects.get(subjectName);
+      if (existing && existing !== digest) fail(`Conflicting verified digests for attested subject ${subjectName}`);
+      attestedSubjects.set(subjectName, digest);
+    }
+  }
+
+  const attestedSet = new Set(attestedSubjects.keys());
+  assertSetEqual(integrity.manifestSet, attestedSet, 'S', 'A');
+  for (const name of integrity.releaseFiles) {
+    const expected = sha256File(path.join(integrity.root, name));
+    if (attestedSubjects.get(name) !== expected) fail(`Digest inequality for ${name}: local != attestation`);
+    if (name !== 'SHA256SUMS.txt' && integrity.checksums.get(name) !== expected) fail(`Digest inequality for ${name}: manifest != local`);
+  }
+
+  return { attestedSubjects };
+}
+
+function usage() {
+  console.log('Usage: node scripts/verify-release-provenance.mjs [options]');
+  console.log('  --dir <path>              Directory containing the 18 release assets');
+  console.log('  --repo <owner/repo>       Expected GitHub repository');
+  console.log('  --signer-workflow <path>  Expected signer workflow identity');
+  console.log('  --source-ref <ref>        Expected source ref, e.g. refs/tags/v1.8.0');
+  console.log('  --source-digest <sha>     Expected 40-char source commit SHA');
+  console.log('  --expected-assets <n>     Require exact total asset count');
+  console.log('  --integrity-only          Verify local SHA-256 integrity only (UNATTESTED)');
+  console.log('  -h, --help                Show help');
+}
+
+function parseArgs(args) {
+  const out = { dir: '.', integrityOnly: false };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--integrity-only') out.integrityOnly = true;
+    else if (arg === '--help' || arg === '-h') out.help = true;
+    else if (['--dir','--repo','--signer-workflow','--source-ref','--source-digest','--expected-assets'].includes(arg)) {
+      if (i + 1 >= args.length) fail(`${arg} requires a value`);
+      const key = { '--dir':'dir','--repo':'repo','--signer-workflow':'signerWorkflow','--source-ref':'sourceRef','--source-digest':'sourceDigest','--expected-assets':'expectedAssets' }[arg];
+      out[key] = args[++i];
+    } else fail(`Unknown argument: ${arg}`);
+  }
+  return out;
+}
+
+export function runCli(args = process.argv.slice(2), env = process.env) {
+  const opts = parseArgs(args);
+  if (opts.help) { usage(); return 0; }
+  const integrity = verifyIntegrity(opts.dir);
+  if (opts.expectedAssets !== undefined) {
+    const expectedAssets = Number(opts.expectedAssets);
+    if (!Number.isInteger(expectedAssets) || expectedAssets < 1) fail('--expected-assets must be a positive integer');
+    if (integrity.releaseFiles.length !== expectedAssets) fail(`Expected exactly ${expectedAssets} release assets, found ${integrity.releaseFiles.length}`);
+  }
+  if (opts.integrityOnly) {
+    console.log(`INTEGRITY_ONLY (UNATTESTED): ${integrity.releaseFiles.length} assets; ${integrity.checksums.size}/${integrity.checksums.size} checksums verified.`);
+    return 0;
+  }
+
+  const policy = {
+    repo: opts.repo ?? env.GITHUB_REPOSITORY,
+    signerWorkflow: opts.signerWorkflow ?? (env.GITHUB_REPOSITORY ? `${env.GITHUB_REPOSITORY}/.github/workflows/release.yml` : undefined),
+    sourceRef: opts.sourceRef ?? env.GITHUB_REF,
+    sourceDigest: opts.sourceDigest ?? env.GITHUB_SHA,
+    env
+  };
+  verifyAttestations(integrity, policy);
+  console.log(`PROVENANCE_VERIFIED (SLSA Build L2): R=S=A=${integrity.releaseFiles.length}; strict GitHub attestation policy satisfied.`);
+  return 0;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+  try { process.exitCode = runCli(); }
+  catch (err) { console.error(`PROVENANCE_VERIFICATION_FAILED: ${err.message}`); process.exitCode = 1; }
+}
