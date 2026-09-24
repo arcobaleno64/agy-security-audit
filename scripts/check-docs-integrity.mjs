@@ -151,4 +151,20 @@ assert(reproductionReadme.includes('npm run check:reproducibility'), 'reproducti
 assert(reproductionReadme.includes('npm run test:reproducibility'), 'reproduction README must document npm run test:reproducibility');
 assert(reproductionReadme.includes('Maintainer Intervention Degradation Rule'), 'reproduction README must document maintainer intervention degradation');
 
+// 7. Track D Tier 2 Micro-Corpus contract
+assert(pkg.scripts?.['check:micro-corpus'] === 'node scripts/run-micro-corpus.mjs', 'package.json must expose npm run check:micro-corpus');
+assert(pkg.scripts?.['test:micro-corpus'] === 'node scripts/test-micro-corpus.mjs', 'package.json must expose npm run test:micro-corpus');
+const microScriptPath = path.join(REPO_ROOT, 'scripts', 'run-micro-corpus.mjs');
+const microTestPath = path.join(REPO_ROOT, 'scripts', 'test-micro-corpus.mjs');
+const microGtPath = path.join(REPO_ROOT, 'evals', 'micro-corpus', 'ground-truth.json');
+assert(fs.existsSync(microScriptPath), 'scripts/run-micro-corpus.mjs must exist');
+assert(fs.existsSync(microTestPath), 'scripts/test-micro-corpus.mjs must exist');
+assert(fs.existsSync(microGtPath), 'evals/micro-corpus/ground-truth.json must exist');
+assert(fs.existsSync(path.join(REPO_ROOT, 'evals', 'micro-corpus', 'quickstart-vulnerable', 'index.js')), 'quickstart-vulnerable fixture must exist');
+assert(fs.existsSync(path.join(REPO_ROOT, 'evals', 'micro-corpus', 'quickstart-safe', 'index.js')), 'quickstart-safe fixture must exist');
+assert(fs.existsSync(path.join(REPO_ROOT, 'evals', 'micro-corpus', 'quickstart-disputed', 'index.js')), 'quickstart-disputed fixture must exist');
+assert(reproductionReadme.includes('npm run check:micro-corpus'), 'reproduction README must document npm run check:micro-corpus');
+assert(reproductionReadme.includes('npm run test:micro-corpus'), 'reproduction README must document npm run test:micro-corpus');
+assert(reproductionReadme.includes('--tier2'), 'reproduction README must document --tier2 flag');
+
 console.log(`✔ Documentation integrity gate PASSED! All documentation matches v${currentVersion} and baseline invariants.`);

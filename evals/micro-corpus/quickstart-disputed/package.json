@@ -1,0 +1,8 @@
+{
+  "name": "quickstart-disputed",
+  "version": "1.0.0",
+  "description": "Track D Tier 2 Micro-Corpus: Architectural Dispute Control (Local Loopback Sidecar Proxy / CWE-918 Boundary)",
+  "type": "module",
+  "main": "index.js",
+  "private": true
+}

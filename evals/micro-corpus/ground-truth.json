@@ -1,0 +1,41 @@
+[
+  {
+    "id": "MC-VULN",
+    "name": "quickstart-vulnerable",
+    "category": "path-traversal",
+    "cwe": "CWE-22",
+    "targetDir": "evals/micro-corpus/quickstart-vulnerable",
+    "targetFile": "evals/micro-corpus/quickstart-vulnerable/index.js",
+    "targetLine": 18,
+    "expectedVerdict": "VULNERABLE",
+    "controlType": "CLEAR_VULNERABLE_CONTROL",
+    "expectedResultState": "TRUE_POSITIVE_CONFIRMED",
+    "description": "User-supplied path concatenated into file read sink without directory confinement verification."
+  },
+  {
+    "id": "MC-SAFE",
+    "name": "quickstart-safe",
+    "category": "path-traversal",
+    "cwe": "CWE-22",
+    "targetDir": "evals/micro-corpus/quickstart-safe",
+    "targetFile": "evals/micro-corpus/quickstart-safe/index.js",
+    "targetLine": 18,
+    "expectedVerdict": "SAFE",
+    "controlType": "CLEAR_SAFE_CONTROL",
+    "expectedResultState": "FALSE_POSITIVE_SUPPRESSED",
+    "description": "Path traversal defense barrier enforces path.relative() confinement within publicDir, neutralizing traversal."
+  },
+  {
+    "id": "MC-DISPUTE",
+    "name": "quickstart-disputed",
+    "category": "ssrf-boundary",
+    "cwe": "CWE-918",
+    "targetDir": "evals/micro-corpus/quickstart-disputed",
+    "targetFile": "evals/micro-corpus/quickstart-disputed/index.js",
+    "targetLine": 18,
+    "expectedVerdict": "DISPUTED",
+    "controlType": "ARCHITECTURAL_DISPUTE_CONTROL",
+    "expectedResultState": "ORACLE_DISPUTE_RECONCILED",
+    "description": "Local loopback sidecar proxy flagged by automated pattern heuristic as potential SSRF, reconciled via defense policy as intentional IPC."
+  }
+]

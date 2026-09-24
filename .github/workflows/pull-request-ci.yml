@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:provenance
       - run: npm run test:doctor
       - run: npm run test:reproducibility
+      - run: npm run test:micro-corpus
       - run: npm run check:docs
       - run: node scripts/bundle-release-evidence.mjs --check
       - run: npm run check:release

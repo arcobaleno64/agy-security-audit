@@ -84,21 +84,36 @@ Under RFC 0002 §6.3 and §8:
 
 ### Tier 2: Live Assurance Reproduction (Authentic LLM Execution)
 - **Prerequisites**: Antigravity CLI (`agy`) `>= 1.2.0`, supported LLM credentials.
-- **Frozen Micro-Corpus**:
-  1. `quickstart-vulnerable`: Known true-positive security flaw.
-  2. `quickstart-safe`: Known false-positive defense control.
-  3. `quickstart-disputed`: Non-trivial architectural tradeoff.
-- **Verification Steps**:
-  1. Execute controlled live scan under Default-Deny.
-  2. Retain raw stream NDJSON and runtime attestation.
-  3. Emit structured `reproduction-record.json`.
+- **Commands**:
+  ```bash
+  # Execute Tier 2 live micro-corpus evaluation via AGY
+  npm run check:micro-corpus
+
+  # Execute Tier 2 in deterministic synthetic/mock mode (for offline / CI environments)
+  npm run check:micro-corpus -- --mock
+
+  # Run the micro-corpus policy & regression test suite (10 tests)
+  npm run test:micro-corpus
+
+  # Run unified Tier 1 + Tier 2 reproduction check
+  npm run check:reproducibility -- --tier2
+  npm run check:reproducibility -- --tier2 --mock
+  ```
+- **Frozen Micro-Corpus (`evals/micro-corpus/`)**:
+  1. `quickstart-vulnerable`: Known true-positive flaw (CWE-22 path traversal direct concatenation sink).
+  2. `quickstart-safe`: Known false-positive defense control (path enclosure boundary verification).
+  3. `quickstart-disputed`: Architectural tradeoff / boundary condition (intentional local loopback sidecar proxy / CWE-918).
+- **Verification Protocol**:
+  1. Execute controlled discovery scan under Default-Deny.
+  2. Retain raw stream NDJSON trace and cryptographic SHA-256 digest (`streamDigest`).
+  3. Emit structured `tier2Results` block in `reproduction-record.json`.
 
 ---
 
 ## 4. Submitting an Independent Reproduction
 
 Once Track D implementation is complete in `v1.9.0`:
-1. Execute the reproduction protocol autonomously (`npm run check:reproducibility -- --out reproduction-record.json`).
+1. Execute the reproduction protocol autonomously (`npm run check:reproducibility -- --tier2 --out reproduction-record.json`).
 2. Record execution environment, commands, and resulting artifact hashes.
 3. Submit the resulting `reproduction-record.json` via a GitHub issue or discussion for maintainer adjudication.
 

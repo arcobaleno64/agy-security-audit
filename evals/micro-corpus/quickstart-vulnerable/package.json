@@ -1,0 +1,8 @@
+{
+  "name": "quickstart-vulnerable",
+  "version": "1.0.0",
+  "description": "Track D Tier 2 Micro-Corpus: Clear Vulnerable Control (Known True Positive Path Traversal)",
+  "type": "module",
+  "main": "index.js",
+  "private": true
+}
