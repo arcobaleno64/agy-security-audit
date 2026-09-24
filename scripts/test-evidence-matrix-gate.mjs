@@ -152,14 +152,24 @@ export function runEvidenceMatrixGateTests(repoRoot = REPO_ROOT) {
 
 // CLI Dispatch
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+  const pkgPath = path.resolve(REPO_ROOT, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const matrixPath = path.resolve(REPO_ROOT, 'evals/evidence-matrix.json');
+  const matrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
+  const uniqueArtifactsCount = new Set(
+    Object.values(matrix.dimensions)
+      .flatMap(d => d.artifacts ?? [])
+      .map(a => a.path)
+  ).size;
+
   console.log('================================================================');
-  console.log('v1.6.2 Evidence Matrix Gate Regression Test Suite');
+  console.log(`v${pkg.version} Evidence Matrix Gate Regression Test Suite`);
   console.log('================================================================\n');
 
   try {
     const result = runEvidenceMatrixGateTests(REPO_ROOT);
     console.log(`  ✔ 1. Baseline evidence matrix passes Draft-07 schema validation.`);
-    console.log(`  ✔ 2. Baseline release evidence completes all 26 artifact verifications.`);
+    console.log(`  ✔ 2. Baseline release evidence completes all ${uniqueArtifactsCount} artifact verifications.`);
     console.log(`  ✔ 3. Malformed artifact SHA-256 pattern fails schema validation fail-closed.`);
     console.log(`  ✔ 4. Missing required dimension fails schema validation fail-closed.`);
     console.log(`  ✔ 5. Invalid dimension status enum fails schema validation fail-closed.`);
