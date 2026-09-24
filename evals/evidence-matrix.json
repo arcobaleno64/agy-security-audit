@@ -1,14 +1,14 @@
 {
   "$schema": "https://antigravity.google/schemas/security-audit/evidence-matrix.schema.json",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-24T15:15:49.625Z",
+  "generatedAt": "2026-09-24T15:36:38.661Z",
   "targetSystem": "@arcobaleno64/agy-security-audit",
   "version": "1.9.0",
   "governance": {
     "standard": "NIST SSDF (SP 800-218) / Default-Deny Authority Invariant",
     "covenant": "Section 21 Holdout Covenant & v1.6.1 Evidence Integrity Correction",
     "provenancePolicy": "Strict Fail-Closed: synthetic fixtures must never be represented as live model observations.",
-    "lastEvaluatedAt": "2026-09-24T15:15:49.625Z"
+    "lastEvaluatedAt": "2026-09-24T15:36:38.661Z"
   },
   "summary": {
     "totalDimensions": 5,
@@ -28,7 +28,7 @@
       "artifacts": [
         {
           "path": "skills/security-audit/scripts/render-sarif.mjs",
-          "sha256": "f26db6b2b1af888903f13b4cb3bcf2b745e8752d7f394479fb6aee7fdf1c49b4",
+          "sha256": "87e1c2ba695c6566c4199d4e162e08c1f9dba588fbcfe9374bb40d8ae65e87ee",
           "description": "Canonical SARIF renderer and 121 automated release invariants test suite"
         },
         {
@@ -38,7 +38,7 @@
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "edc8f21fe47e468305c10789093ef2a66105eef14567437ea74eac801d6af910",
+          "sha256": "230dd5c11eae5a19d7e321f27410a4ac545908befe0aed287a891fd6bf73e24b",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {

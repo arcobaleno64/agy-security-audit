@@ -3108,6 +3108,35 @@ export function runTests() {
     fs.rmSync(nativeSymlinkRoot71, { recursive: true, force: true });
   }
 
+  // 71.9 Repository-root aliases must not corrupt canonical relative manifest paths.
+  // This reproduces macOS /var -> /private/var behavior using a synthetic symlink root.
+  const nativeRootAliasBase71 = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-native-root-alias-'));
+  try {
+    const realRepo71 = path.join(nativeRootAliasBase71, 'real-repo');
+    const aliasRepo71 = path.join(nativeRootAliasBase71, 'repo-alias');
+    const nativeDir71 = path.join(realRepo71, 'src', 'native');
+    fs.mkdirSync(nativeDir71, { recursive: true });
+    fs.writeFileSync(path.join(nativeDir71, 'player.vcxproj'), '<Project />', 'utf8');
+    fs.writeFileSync(path.join(nativeDir71, 'player.cpp'), 'int main() { return 0; }\n', 'utf8');
+
+    let rootAliasCreated71 = true;
+    try {
+      fs.symlinkSync(realRepo71, aliasRepo71, 'dir');
+    } catch {
+      rootAliasCreated71 = false;
+    }
+
+    if (rootAliasCreated71) {
+      const aliasInv71 = detectRepositoryInventory(aliasRepo71);
+      if (!aliasInv71.manifests.some(m => m.path === 'src/native/player.vcxproj' && m.type === 'visual-cpp-project') ||
+          aliasInv71.manifests.some(m => m.path.startsWith('../') || path.isAbsolute(m.path))) {
+        throw new Error(`PATH-B VIOLATION: canonical root alias corrupted relative manifest paths: ${JSON.stringify(aliasInv71.manifests)}`);
+      }
+    }
+  } finally {
+    fs.rmSync(nativeRootAliasBase71, { recursive: true, force: true });
+  }
+
   console.log('✔ 71. R2-P0-09 / 10 Invariant: Multi-Profile Threat Model, native Path B classification, and Granular Coverage Classification.');
 
   // 72. R2-P0-11 / R2-P0-12 Invariant: Finding Type & Safe Proof Policy

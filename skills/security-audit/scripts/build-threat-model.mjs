@@ -33,7 +33,12 @@ export function detectRepositoryInventory(repoRoot = process.cwd()) {
   const entrypoints = [];
 
   const exists = (rel) => fs.existsSync(path.join(rootResolved, rel));
-  const toRel = (absPath) => path.relative(rootResolved, absPath).replace(/\\/g, '/');
+  const canonicalPath = (value) => {
+    try { return fs.realpathSync(value); }
+    catch { return path.resolve(value); }
+  };
+  const rootCanonical = canonicalPath(rootResolved);
+  const toRel = (absPath) => path.relative(rootCanonical, canonicalPath(absPath)).replace(/\\/g, '/');
   const rootEntries = (() => {
     try { return fs.readdirSync(rootResolved, { withFileTypes: true }); }
     catch { return []; }
