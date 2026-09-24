@@ -34,7 +34,7 @@
         {
           "path": "skills/security-audit/scripts/check-release-invariants.mjs",
           "sha256": "d9880ab1e3f51b87d2ae0859c40f32e06dfa9285466967196ac1e946ce57df7d",
-          "description": "Release Invariants Gate specification checker (60 specs, 40 security invariants)"
+          "description": "Release Invariants Gate specification checker (62 specs, 40 security invariants)"
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
