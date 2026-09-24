@@ -201,13 +201,23 @@ All actions in the release workflow must be pinned to full 40-character commit S
 uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2 reviewed SHA
 ```
 
-### 6.2 Pre-Publish Immutable Releases Gate
-In `publish`, before calling `gh release create`, the job must verify that repository release immutability is active:
+### 6.2 Pre-Publish Immutable Releases Probe
+In `publish`, before calling `gh release create`, the job performs a best-effort repository-setting probe:
+- **Explicit `enabled=false`**: Fail closed before publication.
+- **Explicit `enabled=true`**: Continue.
+- **Setting unavailable to least-privilege `GITHUB_TOKEN`**: Do not elevate credentials solely for this probe.
+
+The authoritative enforcement point is post-publication: `verify-published` MUST require `isImmutable == true` and successful GitHub release attestation verification (`gh release verify`). Otherwise the release workflow fails closed.
+
 ```bash
-status=$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" -q .enabled 2>/dev/null || echo "false")
-if [ "$status" != "true" ]; then
-  echo "::error::Immutable Releases is NOT enabled for ${GITHUB_REPOSITORY}. Aborting release publication under Default-Deny." >&2
+api_resp="$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" 2>&1 || true)"
+if echo "$api_resp" | grep -q '"enabled": *false'; then
+  echo "::error::Immutable Releases are explicitly disabled for ${GITHUB_REPOSITORY}." >&2
   exit 1
+elif echo "$api_resp" | grep -q '"enabled": *true'; then
+  echo "Immutable Releases are confirmed enabled via repository settings API."
+else
+  echo "Repository settings endpoint repos/${GITHUB_REPOSITORY}/immutable-releases is not queryable with ambient GITHUB_TOKEN permissions (requires administration scope). Immutability enforcement will be verified authoritatively post-creation via isImmutable."
 fi
 ```
 

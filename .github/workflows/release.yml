@@ -90,7 +90,7 @@ jobs:
         with:
           name: release-evidence
           path: release-evidence
-      - name: Assert Immutable Releases are enabled
+      - name: Probe Immutable Releases configuration
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
