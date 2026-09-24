@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { parseSha256Sums, verifyIntegrity, collectVerifiedSubjects, verifyAttestations } from './verify-release-provenance.mjs';
+import { parseSha256Sums, verifyIntegrity, collectVerifiedSubjects, verifyAttestations, runCli } from './verify-release-provenance.mjs';
 
 function assert(condition, message) {
   if (!condition) throw new Error(`ASSERTION_FAILED: ${message}`);
@@ -57,6 +57,17 @@ try {
   assert(subjects.size === 3, 'verified SLSA statement yields three canonical subjects');
   testsRun++;
 
+  const traversalSubject = [{
+    verificationResult: {
+      statement: {
+        predicateType: 'https://slsa.dev/provenance/v1',
+        subject: [{ name: '../a.txt', digest: { sha256: sha(Buffer.from('alpha')) } }]
+      }
+    }
+  }];
+  expectThrow(() => collectVerifiedSubjects(traversalSubject), 'basename');
+  testsRun++;
+
   let ghCalls = 0;
   const ghRunner = () => {
     ghCalls++;
@@ -85,6 +96,15 @@ try {
     sourceRef: 'refs/tags/v1.8.0',
     sourceDigest: '1'.repeat(40)
   }, () => JSON.stringify(incomplete)), 'matching subject digest');
+  testsRun++;
+
+  expectThrow(() => runCli([
+    '--dir', temp,
+    '--repo', 'arcobaleno64/agy-security-audit',
+    '--signer-workflow', 'arcobaleno64/agy-security-audit/.github/workflows/release.yml',
+    '--source-ref', 'refs/tags/v1.8.0',
+    '--source-digest', '1'.repeat(40)
+  ], { PATH: '' }), 'Unable to execute gh');
   testsRun++;
 
   console.log(`All provenance policy tests passed (${testsRun}/${testsRun}).`);
