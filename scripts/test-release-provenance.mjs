@@ -46,7 +46,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-policy-test-'));
 try {
   fs.writeFileSync(path.join(temp, 'a.txt'), 'alpha');
   fs.writeFileSync(path.join(temp, 'b.txt'), 'beta');
-  const sums = `${sha(Buffer.from('alpha'))}  a.txt\r?\n${sha(Buffer.from('beta'))}  b.txt\r?\n`;
+  const sums = `${sha(Buffer.from('alpha'))}  a.txt\n${sha(Buffer.from('beta'))}  b.txt\n`;
   fs.writeFileSync(path.join(temp, 'SHA256SUMS.txt'), sums);
 
   const integrity = verifyIntegrity(temp);
@@ -57,7 +57,7 @@ try {
   assert(parsed.size === 2 && parsed.get('a.txt') === sha(Buffer.from('alpha')), 'checksum manifest parses deterministically');
   testsRun++;
 
-  expectThrow(() => parseSha256Sums(`${'0'.repeat(64)}  ../evil\r?\n`), 'basename');
+  expectThrow(() => parseSha256Sums(`${'0'.repeat(64)}  ../evil\n`), 'basename');
   testsRun++;
 
   fs.writeFileSync(path.join(temp, 'extra.txt'), 'extra');
