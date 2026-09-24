@@ -112,4 +112,25 @@ assert(contrib.includes(`${EXPECTED_INVARIANTS}`), `CONTRIBUTING.md must mention
 assert(contrib.includes('Patch Jail'), 'CONTRIBUTING.md must mention Patch Jail');
 assert(contrib.includes('0 external npm dependencies') || contrib.includes('zero external npm dependencies'), 'CONTRIBUTING.md must mention 0 external npm dependencies');
 
+// 5. Track D Doctor contract
+assert(pkg.scripts?.doctor === 'node scripts/doctor.mjs', 'package.json must expose npm run doctor');
+assert(pkg.scripts?.['test:doctor'] === 'node scripts/test-doctor.mjs', 'package.json must expose npm run test:doctor');
+const doctorPath = path.join(REPO_ROOT, 'scripts', 'doctor.mjs');
+const doctorTestPath = path.join(REPO_ROOT, 'scripts', 'test-doctor.mjs');
+const doctorSchemaPath = path.join(REPO_ROOT, 'schemas', 'doctor-report.schema.json');
+const reproductionReadmePath = path.join(REPO_ROOT, 'docs', 'reproduction', 'README.md');
+assert(fs.existsSync(doctorPath), 'scripts/doctor.mjs must exist');
+assert(fs.existsSync(doctorTestPath), 'scripts/test-doctor.mjs must exist');
+assert(fs.existsSync(doctorSchemaPath), 'schemas/doctor-report.schema.json must exist');
+assert(fs.existsSync(reproductionReadmePath), 'docs/reproduction/README.md must exist');
+const doctorSchema = JSON.parse(fs.readFileSync(doctorSchemaPath, 'utf8'));
+assert(
+  doctorSchema.$id === 'https://antigravity.google/schemas/security-audit/doctor-report.schema.json',
+  'doctor report schema $id must remain canonical'
+);
+const reproductionReadme = fs.readFileSync(reproductionReadmePath, 'utf8');
+assert(reproductionReadme.includes('npm run doctor'), 'reproduction README must document npm run doctor');
+assert(reproductionReadme.includes('npm run doctor -- --json'), 'reproduction README must document Doctor JSON mode');
+assert(reproductionReadme.includes('UNVERIFIABLE'), 'reproduction README must preserve honest UNVERIFIABLE semantics');
+
 console.log(`✔ Documentation integrity gate PASSED! All documentation matches v${currentVersion} and baseline invariants.`);

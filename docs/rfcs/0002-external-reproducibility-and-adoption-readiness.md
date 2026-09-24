@@ -2,7 +2,7 @@
 
 * **RFC Number**: 0002
 * **Title**: Track D - External Reproducibility, Real-World Transfer & Adoption Readiness
-* **Status**: Proposed
+* **Status**: Accepted
 * **Authors**: Maintainers & Antigravity Security Engine
 * **Created**: 2026-09-24
 * **Baseline**: `agy-security-audit v1.8.1`
@@ -364,9 +364,9 @@ until the root cause is resolved and independently reverified.
 
 ## 12. Decision & Implementation Plan
 
-### RFC Decision: PROPOSED
+### RFC Decision: ACCEPTED
 
-Upon acceptance:
+Acceptance record:
 - **Baseline Freeze**: `v1.8.1` (`8af4bca5cdfef89c93649c03a70d43767875ffb7`) remains frozen predecessor.
 - **Branching Discipline**:
   - RFC 0002 submitted via dedicated documentation-only branch `rfc/track-d-external-reproducibility`.

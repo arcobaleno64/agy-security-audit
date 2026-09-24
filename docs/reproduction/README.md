@@ -1,7 +1,7 @@
 # External Reproduction Kit (Track D Skeleton)
 
 > **Governing Specification**: [RFC 0002: Track D - External Reproducibility, Real-World Transfer & Adoption Readiness](../rfcs/0002-external-reproducibility-and-adoption-readiness.md)  
-> **Status**: SKELETON / PROPOSED (v1.9.0 Target)  
+> **Status**: ACTIVE / IMPLEMENTATION (v1.9.0 Target)  
 > **Frozen Baseline**: `agy-security-audit v1.8.1` (`8af4bca5cdfef89c93649c03a70d43767875ffb7`)
 
 ---
@@ -17,7 +17,35 @@ Under Track D's **Multi-Axis Independence Model**, an external reproduction must
 
 ---
 
-## 2. Reproduction Tiers (Roadmap)
+## 2. Phase D1 Environment Doctor
+
+The deterministic Doctor is the first preflight for Track D and performs **no network I/O**:
+
+```bash
+# Human-readable diagnostics
+npm run doctor
+
+# Machine-readable report
+npm run doctor -- --json
+
+# Deterministic policy/regression suite
+npm run test:doctor
+```
+
+The JSON report conforms to `schemas/doctor-report.schema.json` and distinguishes four evidence states:
+
+- `READY`: the checked prerequisite is affirmatively satisfied.
+- `DEGRADED`: an optional capability is missing or below the recommended threshold, such as `gh` for strict provenance verification.
+- `UNSUPPORTED`: a critical prerequisite is absent or incompatible.
+- `UNVERIFIABLE`: static configuration exists but live enforcement has not been observed.
+
+The Doctor deliberately keeps **Tier 2 sandbox enforcement `UNVERIFIABLE`** when only configuration files are present. A live AGY canary is required before runtime enforcement may be claimed as observed.
+
+The machine-readable report includes local executable and plugin paths because RFC 0002 requires explicit environment provenance. Review those fields before publishing a reproduction bundle if local path disclosure is undesirable.
+
+---
+
+## 3. Reproduction Tiers (Roadmap)
 
 ### Tier 1: Deterministic Reproduction (Offline & Fast)
 - **Prerequisites**: Node.js `>= 20.0.0`, Git `>= 2.30.0`.
@@ -43,7 +71,7 @@ Under Track D's **Multi-Axis Independence Model**, an external reproduction must
 
 ---
 
-## 3. Submitting an Independent Reproduction
+## 4. Submitting an Independent Reproduction
 
 Once Track D implementation is complete in `v1.9.0`:
 1. Execute the reproduction protocol autonomously.

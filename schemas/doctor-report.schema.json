@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/doctor-report.schema.json",
+  "title": "agy-security-audit Doctor Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "generatedAt", "toolVersion", "overallStatus", "profiles", "environment", "capabilities", "checks"],
+  "properties": {
+    "$schema": { "const": "https://antigravity.google/schemas/security-audit/doctor-report.schema.json" },
+    "schemaVersion": { "const": "1.0.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "toolVersion": { "type": "string", "minLength": 1 },
+    "overallStatus": { "$ref": "#/definitions/status" },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier1", "tier2"],
+      "properties": {
+        "tier1": { "$ref": "#/definitions/status" },
+        "tier2": { "$ref": "#/definitions/status" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "arch", "shell", "pluginRoot"],
+      "properties": {
+        "platform": { "type": "string" },
+        "arch": { "type": "string" },
+        "shell": { "type": ["string", "null"] },
+        "pluginRoot": { "type": "string" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministicTier1", "liveTier2Executable", "strictReleaseProvenance", "liveSandboxEnforcementObserved"],
+      "properties": {
+        "deterministicTier1": { "type": "boolean" },
+        "liveTier2Executable": { "type": "boolean" },
+        "strictReleaseProvenance": { "type": "boolean" },
+        "liveSandboxEnforcementObserved": { "const": false }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "requiredFor", "requirement", "summary", "observed"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "$ref": "#/definitions/status" },
+          "requiredFor": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "enum": ["TIER1", "TIER2"] }
+          },
+          "requirement": { "type": "string" },
+          "summary": { "type": "string" },
+          "observed": { "type": "object" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "status": { "enum": ["READY", "DEGRADED", "UNSUPPORTED", "UNVERIFIABLE"] }
+  }
+}
