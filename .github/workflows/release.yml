@@ -110,12 +110,22 @@ jobs:
             printf 'Released: %s (UTC+8 台北)\n\n' "$released_at"
             printf '%s\n' "$notes"
           } > release-notes.md
+          prerelease_flag=""
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease_flag="--prerelease" ;;
+          esac
+          prerelease_flag=""
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease_flag="--prerelease" ;;
+          esac
           gh release create "$GITHUB_REF_NAME" \
             release-evidence/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-notes.md \
-            --verify-tag
+            --verify-tag \
+            $prerelease_flag \
+            $prerelease_flag
 
   verify-published:
     needs: publish
