@@ -146,15 +146,17 @@ test('missing GitHub CLI degrades Tier 1 without making it unsupported', () => {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('missing AGY is explicit degradation for live reproduction', () => {
+test('missing AGY makes live Tier 2 unsupported while leaving Tier 1 independently evaluable', () => {
   const root = makeRepo();
   try {
     const report = runDoctor({
       repoRoot: root,
       platform: 'linux', arch: 'x64', env: { SHELL: '/bin/bash' }, nodeVersion: '20.0.0', now: FIXED_NOW, tcbVerifier: TCB_OK,
-      commandProbe: commandProbeFrom({ git: { status: 'READY' }, agy: { status: 'DEGRADED' }, gh: { status: 'READY' } })
+      commandProbe: commandProbeFrom({ git: { status: 'READY' }, agy: { status: 'UNSUPPORTED' }, gh: { status: 'READY' } })
     });
-    assertEqual(report.checks.find(c => c.id === 'agy').status, 'DEGRADED', 'agy missing status');
+    assertEqual(report.checks.find(c => c.id === 'agy').status, 'UNSUPPORTED', 'agy missing status');
+    assertEqual(report.profiles.tier1, 'READY', 'tier1 remains independently ready');
+    assertEqual(report.profiles.tier2, 'UNSUPPORTED', 'tier2 requires AGY');
     assertEqual(report.capabilities.liveTier2Executable, false, 'live execution capability');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -182,6 +184,36 @@ test('TCB integrity mismatch fails closed', () => {
     });
     assertEqual(report.checks.find(c => c.id === 'tcb-integrity').status, 'UNSUPPORTED', 'TCB mismatch');
     assertEqual(report.overallStatus, 'UNSUPPORTED', 'overall TCB failure');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('unverifiable Tier 1 requirement does not overclaim deterministic capability', () => {
+  const root = makeRepo();
+  try {
+    const report = runDoctor({
+      repoRoot: root,
+      platform: 'linux', arch: 'x64', env: { SHELL: '/bin/bash' }, nodeVersion: '20.0.0', now: FIXED_NOW,
+      tcbVerifier: () => { throw new Error('manifest unavailable'); },
+      commandProbe: commandProbeFrom({ git: { status: 'READY' }, agy: { status: 'READY' }, gh: { status: 'READY' } })
+    });
+    assertEqual(report.profiles.tier1, 'UNVERIFIABLE', 'tier1 evidence state');
+    assertEqual(report.capabilities.deterministicTier1, false, 'unverifiable tier1 must not become a positive capability claim');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('runtime report validator enforces the published schema contract shape', () => {
+  const root = makeRepo();
+  try {
+    const report = runDoctor({
+      repoRoot: root,
+      platform: 'linux', arch: 'x64', env: { SHELL: '/bin/bash' }, nodeVersion: '20.0.0', now: FIXED_NOW,
+      tcbVerifier: TCB_OK,
+      commandProbe: commandProbeFrom({ git: { status: 'READY' }, agy: { status: 'READY' }, gh: { status: 'READY' } })
+    });
+    assert(validateDoctorReportShape(report), 'baseline report must validate');
+    assert(!validateDoctorReportShape({ ...report, unexpected: true }), 'additional top-level properties must fail');
+    assert(!validateDoctorReportShape({ ...report, capabilities: { ...report.capabilities, liveSandboxEnforcementObserved: true } }), 'unobserved sandbox cannot be promoted');
+    assert(!validateDoctorReportShape({ ...report, checks: [...report.checks, { ...report.checks[0] }] }), 'duplicate check ids must fail');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
