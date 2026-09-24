@@ -309,7 +309,7 @@ export function buildReproductionRecord(tier1Results, options = {}) {
 
   let reproductionClassification = options.reproductionClassification;
   if (!reproductionClassification) {
-    if (isCi) {
+    if (operatorClass === 'AUTOMATED_CI') {
       reproductionClassification = 'INDEPENDENT_ENVIRONMENT_REPLAY';
     } else if (operatorClass === 'INDEPENDENT_OPERATOR') {
       reproductionClassification = maintainerAssistance
