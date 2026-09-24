@@ -53,7 +53,8 @@
     "benchmark:canary": "node scripts/run-runtime-canary.mjs",
     "benchmark:oss": "node scripts/run-oss-transfer-eval.mjs",
     "compare:cross-provider": "node scripts/compare-model-benchmarks.mjs --runs-a evals/live-runs/cross-provider/gemini --runs-b evals/live-runs/cross-provider/claude --protocol evals/protocols/v1.6-g8r-cross-provider-protocol.json --report reports/cross-provider-replication-report-2026-09-23.md --evidence-grade L3_CROSS_PROVIDER_OBSERVED --timestamp 2026-09-23T03:38:45.948Z",
-    "test:evidence-matrix": "node scripts/test-evidence-matrix-gate.mjs"
+    "test:evidence-matrix": "node scripts/test-evidence-matrix-gate.mjs",
+    "test:provenance": "node scripts/test-release-provenance.mjs"
   },
   "keywords": [
     "antigravity",

@@ -138,7 +138,7 @@ sequenceDiagram
 | Job | Checkout? | Executed Code | Token Permissions | Output / Role |
 | :--- | :--- | :--- | :--- | :--- |
 | **`verify`** | Yes (Tag) | Full repository test suite & build scripts | `contents: read` | Passes all 121 invariants; produces immutable `release-evidence` artifact. |
-| **`attest`** | **NO** | First-party `actions/attest@<SHA>` only | `contents: read`<br/>`id-token: write`<br/>`attestations: write`<br/>`artifact-metadata: write` | Signs all 18 release assets with in-toto SLSA L2 provenance predicate. |
+| **`attest`** | **NO** | First-party `download-artifact@<SHA>` + `actions/attest@<SHA>` only | `contents: read`<br/>`id-token: write`<br/>`attestations: write`<br/>`artifact-metadata: write` | Signs all 18 release assets with in-toto SLSA L2 provenance predicate. |
 | **`publish`** | **NO** | First-party `download-artifact` & `gh` CLI | `contents: write` | Validates immutable release enablement; publishes immutable GitHub Release. |
 | **`verify-published`** | Yes (Bare clone) | Tag gates + `gh` CLI verification | `contents: read`<br/>`attestations: read` | Independent verification closure: bare clone gates, immutability, and 18-subject provenance. |
 
@@ -190,7 +190,7 @@ $$\text{Sigstore Cryptographic Certificate} > \text{Signer Workflow} > \text{Sou
 ### 6.1 Action Pinning
 All actions in the release workflow must be pinned to full 40-character commit SHAs. In particular, `actions/attest` must reference a reviewed, immutable release revision:
 ```yaml
-uses: actions/attest@c074443f1a5fb4aee83904b7112375973fb06763 # v4.x.y reviewed SHA
+uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2 reviewed SHA
 ```
 
 ### 6.2 Pre-Publish Immutable Releases Gate
