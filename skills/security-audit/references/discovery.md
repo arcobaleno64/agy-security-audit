@@ -28,8 +28,21 @@ Instead, discovery systematically maps **Identified Components** against **Vulne
 6. **`secrets/crypto`**: Hardcoded credentials, insecure PRNG, weak hashing (MD5/SHA1 for passwords), CBC padding oracles.
 7. **`state/business-logic`**: Race conditions (TOCTOU), integer overflow/underflow, double-spend, idempotency failures.
 8. **`dangerous-defaults/config`**: Permissive CORS (`*`), exposed debug flags, insecure TLS options, default credentials.
-9. **`native-memory-safety`**: Buffer over-reads, use-after-free, unsafe C/C++ bindings (FFI / N-API).
+9. **`native-memory-safety`**: Native C/C++ memory and loader safety, including NULL dereference (CWE-476), classic buffer overflow (CWE-120), out-of-bounds read/write (CWE-125 / CWE-787), uncontrolled DLL/search-path resolution (CWE-427), parser resource exhaustion (CWE-400), and exceptional-condition/state-machine handling failures (CWE-703).
 10. **`ai/agent-trust-boundaries`**: Instruction-integrity risk affecting tool invocation, untrusted workspace execution, unauthorized file modifications.
+
+### Native Parser, State Machine & Loader Inspection
+When the target profile is `native`, discovery MUST derive its threat model from physical input boundaries rather than Web/OWASP assumptions:
+
+1. **CWE-476 NULL pointer dereference**: inspect unchecked returns from string/search APIs (`strchr`, `strstr`, parser delimiter lookups), allocation failures, optional object lookups, and pointer-producing helper functions before dereference.
+2. **CWE-120 / CWE-125 / CWE-787 memory bounds**: trace source buffer length, destination capacity, pointer arithmetic, integer conversions, sliding-window offsets, `memcpy`/`memmove`/string copies, and terminator assumptions end-to-end.
+3. **CWE-427 DLL hijacking/search path**: inspect `LoadLibrary*`, plugin/codec loading, CWD-relative module names, PATH-dependent resolution, and whether safe absolute/system search semantics are enforced.
+4. **CWE-400 / CWE-703 protocol state handling**: inspect incremental socket-buffer growth, delimiter splits across receives, parser retries, state transitions, exceptional inputs, and bounded progress/resource consumption.
+
+#### Full-Module Context Rule for Protocol Parsers
+For custom protocol parsers or state machines (including HTTP, RTSP, FTP, WebSocket, media/container parsers, and equivalent native protocol code), load the **entire parser implementation module** and its directly coupled declarations before drawing conclusions. Do not review these modules as arbitrary 100-150 line windows. The objective is to preserve buffer lifetime, sliding-window offsets, delimiter splits, and state transitions across the complete implementation.
+
+Dangerous-API searches (`CreateProcess`, `LoadLibrary`, `memcpy`, etc.) are discovery aids only. They MUST NOT substitute for end-to-end parser and trust-boundary analysis.
 
 ### Outbound Dispatch & Confused Deputy Pattern (CWE-441 / CWE-918)
 - **Vulnerable Pattern**: A proxy or relay forwards client requests to arbitrary caller-controlled destinations while attaching ambient credentials (e.g., internal service mesh token, mutual TLS cert, internal bearer tokens) without allowlisting:

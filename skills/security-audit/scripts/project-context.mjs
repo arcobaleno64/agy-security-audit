@@ -264,14 +264,19 @@ export function initProjectContext(repoRoot = process.cwd(), options = {}) {
   let detectedRuntime = options.runtime;
   if (!detectedRuntime || detectedRuntime.length === 0) {
     detectedRuntime = [];
+    const addRuntime = (value) => {
+      if (!detectedRuntime.includes(value)) detectedRuntime.push(value);
+    };
     try {
       const topFiles = fs.readdirSync(resolvedRoot);
-      if (topFiles.includes('package.json')) detectedRuntime.push('Node.js');
-      if (topFiles.includes('requirements.txt') || topFiles.includes('pyproject.toml')) detectedRuntime.push('Python');
-      if (topFiles.includes('go.mod')) detectedRuntime.push('Go');
-      if (topFiles.includes('pom.xml') || topFiles.includes('build.gradle')) detectedRuntime.push('JVM');
-      if (topFiles.some(f => f.endsWith('.sln') || f.endsWith('.csproj') || f.endsWith('.vbproj') || f.endsWith('.aspx') || f.toLowerCase() === 'web.config')) {
-        detectedRuntime.push('.NET Framework / IIS');
+      if (topFiles.includes('package.json')) addRuntime('Node.js');
+      if (topFiles.includes('requirements.txt') || topFiles.includes('pyproject.toml')) addRuntime('Python');
+      if (topFiles.includes('go.mod')) addRuntime('Go');
+      if (topFiles.includes('pom.xml') || topFiles.includes('build.gradle') || topFiles.includes('build.gradle.kts')) addRuntime('JVM');
+      if (inventory.languages?.includes('Rust')) addRuntime('Rust (native)');
+      if (inventory.languages?.includes('C/C++')) addRuntime('Native / C++ (MSVC/Clang/GCC)');
+      if (inventory.languages?.includes('C#')) {
+        addRuntime(inventory.profiles?.includes('web-app') ? '.NET Framework / IIS' : '.NET / C#');
       }
     } catch {}
     if (detectedRuntime.length === 0) detectedRuntime.push('UNKNOWN');
@@ -281,7 +286,11 @@ export function initProjectContext(repoRoot = process.cwd(), options = {}) {
   if (!detectedFramework) {
     try {
       const topFiles = fs.readdirSync(resolvedRoot);
-      if (topFiles.some(f => f.endsWith('.aspx') || f.endsWith('.asax'))) {
+      if (inventory.languages?.includes('C/C++') && inventory.profiles?.includes('native')) {
+        detectedFramework = 'Native C/C++ Application / Library';
+      } else if (inventory.languages?.includes('Rust') && inventory.profiles?.includes('native')) {
+        detectedFramework = 'Native Rust Application / Library';
+      } else if (topFiles.some(f => f.endsWith('.aspx') || f.endsWith('.asax'))) {
         detectedFramework = 'ASP.NET WebForms';
       } else if (inventory.profiles?.includes('agent-plugin')) {
         detectedFramework = 'Antigravity Plugin';
@@ -289,6 +298,8 @@ export function initProjectContext(repoRoot = process.cwd(), options = {}) {
         detectedFramework = 'Web Application';
       } else if (inventory.profiles?.includes('cli')) {
         detectedFramework = 'Command-Line Interface';
+      } else if (inventory.profiles?.includes('native')) {
+        detectedFramework = 'Native Application / Library';
       } else {
         detectedFramework = 'UNKNOWN';
       }
