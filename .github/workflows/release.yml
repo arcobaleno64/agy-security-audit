@@ -48,6 +48,7 @@ jobs:
       - run: npm run test:provenance
       - run: npm run test:doctor
       - run: npm run test:reproducibility
+      - run: npm run test:micro-corpus
       - run: npm run check-version
       - run: npm run check:docs
       - run: npm run check:release
@@ -160,6 +161,7 @@ jobs:
           npm run test:provenance
           npm run test:doctor
           npm run test:reproducibility
+          npm run test:micro-corpus
           npm run check:release
       - name: Download all published release assets
         env:

@@ -342,4 +342,27 @@ test('run-reproducibility-check.mjs --dry-run --json --assisted degrades classif
   assertEqual(parsed.reproductionClassification, 'INDEPENDENT_ENVIRONMENT_REPLAY', 'reproductionClassification must be degraded');
 });
 
+// Test 15: Tier 2 integration via --tier2 and --mock
+test('run-reproducibility-check.mjs --dry-run --tier2 --json produces valid record with tier2Results', () => {
+  const res = spawnSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs'),
+    '--dry-run',
+    '--tier2',
+    '--json'
+  ], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8'
+  });
+  assertEqual(res.status, 0, 'CLI exit code must be 0');
+  const parsed = JSON.parse(res.stdout);
+  assert(validateReproductionRecordShape(parsed), 'CLI emitted JSON must satisfy shape validation');
+  assert(parsed.tier2Results !== null, 'tier2Results must not be null');
+  assertEqual(parsed.tier2Results.status, 'PASS', 'tier2 status must be PASS');
+  assertEqual(parsed.tier2Results.vulnerableControl, 'TRUE_POSITIVE_CONFIRMED', 'tier2 vulnerableControl');
+  assertEqual(parsed.tier2Results.safeControl, 'FALSE_POSITIVE_SUPPRESSED', 'tier2 safeControl');
+  assertEqual(parsed.tier2Results.disputeControl, 'ORACLE_DISPUTE_RECONCILED', 'tier2 disputeControl');
+  assert(/^[0-9a-f]{64}$/.test(parsed.tier2Results.streamDigest), 'valid streamDigest');
+  assertEqual(parsed.overallVerdict, 'PASS', 'overall verdict with tier2');
+});
+
 console.log(`\nAll Reproduction policy tests passed (${passed}/${passed}).`);

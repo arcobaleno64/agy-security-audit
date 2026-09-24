@@ -17,6 +17,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runDoctor } from './doctor.mjs';
+import { executeTier2Reproduction } from './run-micro-corpus.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -329,7 +330,23 @@ export function buildReproductionRecord(tier1Results, options = {}) {
     notes.push('Maintainer assistance occurred during reproduction; classification degraded to INDEPENDENT_ENVIRONMENT_REPLAY.');
   }
 
-  const overallVerdict = cleanTier1.status === 'PASS' ? 'PASS' : 'FAIL';
+  const tier2Results = options.tier2Results || null;
+  let overallVerdict = 'FAIL';
+  if (cleanTier1.status === 'PASS') {
+    if (tier2Results) {
+      if (tier2Results.status === 'PASS') {
+        overallVerdict = 'PASS';
+      } else if (tier2Results.status === 'FAIL') {
+        overallVerdict = 'FAIL';
+      } else {
+        overallVerdict = 'PARTIAL';
+      }
+    } else {
+      overallVerdict = 'PASS';
+    }
+  } else {
+    overallVerdict = 'FAIL';
+  }
 
   const record = {
     $schema: REPRODUCTION_SCHEMA_ID,
@@ -351,7 +368,7 @@ export function buildReproductionRecord(tier1Results, options = {}) {
       ghVersion: options.ghVersion || null
     },
     tier1Results: cleanTier1,
-    tier2Results: null,
+    tier2Results,
     startedAt: options.startedAt || new Date(Date.now() - 60000).toISOString(),
     completedAt: options.completedAt || new Date().toISOString(),
     overallVerdict,
@@ -367,7 +384,9 @@ function parseArgs(argv) {
     out: null,
     operatorClass: null,
     assisted: false,
-    dryRun: false
+    dryRun: false,
+    tier2: false,
+    mock: false
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -377,6 +396,8 @@ function parseArgs(argv) {
     else if (a === '--operator' && i + 1 < argv.length) opts.operatorClass = argv[++i];
     else if (a === '--assisted') opts.assisted = true;
     else if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--tier2') opts.tier2 = true;
+    else if (a === '--mock') opts.mock = true;
     else if (a === '-h' || a === '--help') {
       console.log(`Usage: node scripts/run-reproducibility-check.mjs [options]
   --json               Output reproduction-record JSON to stdout
@@ -384,6 +405,8 @@ function parseArgs(argv) {
   --operator <class>   Set operatorClass (MAINTAINER, CONTRIBUTOR, INDEPENDENT_OPERATOR, AUTOMATED_CI)
   --assisted           Mark that maintainer assistance was provided (downgrades classification)
   --dry-run            Dry run shape generation without re-running long tests
+  --tier2              Execute Tier 2 micro-corpus live assurance verification
+  --mock               Use deterministic synthetic execution for Tier 2 (offline/CI mode)
   -h, --help           Show help`);
       process.exit(0);
     }
@@ -419,10 +442,16 @@ function main() {
     tier1Results = executeTier1Reproduction();
   }
 
+  let tier2Results = null;
+  if (opts.tier2) {
+    tier2Results = executeTier2Reproduction({ mock: opts.mock || opts.dryRun });
+  }
+
   const completedAt = new Date().toISOString();
   const record = buildReproductionRecord(tier1Results, {
     operatorClass: opts.operatorClass,
     maintainerAssistance: opts.assisted,
+    tier2Results,
     startedAt,
     completedAt
   });
@@ -450,7 +479,15 @@ function main() {
     console.log(`Reproduction Classification: ${record.reproductionClassification}`);
     console.log(`Operator Class:             ${record.operatorClass}`);
     console.log(`Maintainer Assistance:      ${record.maintainerAssistance}`);
-    console.log(`Overall Tier 1 Verdict:     ${record.overallVerdict}`);
+    if (record.tier2Results) {
+      console.log('--- Tier 2 Micro-Corpus ---');
+      console.log(`Tier 2 Status:              ${record.tier2Results.status}`);
+      console.log(`  Vulnerable Control:       ${record.tier2Results.vulnerableControl || 'N/A'}`);
+      console.log(`  Safe Control:             ${record.tier2Results.safeControl || 'N/A'}`);
+      console.log(`  Dispute Control:          ${record.tier2Results.disputeControl || 'N/A'}`);
+      console.log(`  Stream Digest:            ${record.tier2Results.streamDigest || 'N/A'}`);
+    }
+    console.log(`Overall Verdict:            ${record.overallVerdict}`);
     console.log('----------------------------------------------------------------');
 
     if (opts.out) {

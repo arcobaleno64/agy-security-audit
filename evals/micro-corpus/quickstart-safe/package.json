@@ -1,0 +1,8 @@
+{
+  "name": "quickstart-safe",
+  "version": "1.0.0",
+  "description": "Track D Tier 2 Micro-Corpus: Clear Safe Control (Path Traversal Sanitizer Defense Barrier)",
+  "type": "module",
+  "main": "index.js",
+  "private": true
+}
