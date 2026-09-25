@@ -541,8 +541,8 @@ test('run-reproducibility-check.mjs --dry-run --json --release-asset-digest bind
   assertEqual(parsed.releaseAssetDigestSource, 'USER_VERIFIED', 'source must be USER_VERIFIED');
 });
 
-// Test 23: Dynamic release asset binding for v1.9.1 matches GitHub immutable release
-test('run-reproducibility-check.mjs --dry-run --json dynamically binds v1.9.1 canonical asset', () => {
+// Test 23: Dynamic release asset binding matches canonical naming and resolves published v1.9.1 asset
+test('run-reproducibility-check.mjs --dry-run --json dynamically binds canonical asset', () => {
   const res = spawnSync(process.execPath, [
     path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs'),
     '--dry-run',
@@ -554,16 +554,17 @@ test('run-reproducibility-check.mjs --dry-run --json dynamically binds v1.9.1 ca
   assertEqual(res.status, 0, 'CLI exit code must be 0');
   const parsed = JSON.parse(res.stdout);
   assert(validateReproductionRecordShape(parsed), 'CLI emitted JSON must satisfy shape validation');
-  assertEqual(parsed.releaseAssetName, 'agy-security-audit-v1.9.1.zip', 'canonical release asset name');
-  if (parsed.releaseAssetDigestSource === 'GITHUB_RELEASE_API') {
+  assertEqual(parsed.releaseAssetName, `agy-security-audit-v${parsed.projectVersion}.zip`, 'canonical release asset name');
+
+  // Verify published v1.9.1 immutable release resolution
+  const publishedBinding = resolveReleaseAssetBinding({ releaseTag: 'v1.9.1' });
+  assertEqual(publishedBinding.releaseAssetName, 'agy-security-audit-v1.9.1.zip', 'published asset name');
+  if (publishedBinding.releaseAssetDigestSource === 'GITHUB_RELEASE_API') {
     assertEqual(
-      parsed.releaseAssetDigest,
+      publishedBinding.releaseAssetDigest,
       'aa3cf9cc353b286f0533c2b05cdc5962c831760bbacd4ae5c1527acdb132fa64',
       'v1.9.1 digest matches immutable GitHub release'
     );
-  } else {
-    assertEqual(parsed.releaseAssetDigest, 'UNVERIFIABLE', 'offline fallback digest');
-    assertEqual(parsed.releaseAssetDigestSource, 'UNVERIFIABLE', 'offline fallback source');
   }
 });
 

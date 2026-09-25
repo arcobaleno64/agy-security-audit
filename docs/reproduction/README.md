@@ -146,9 +146,36 @@ The metrics conform to `schemas/operator-metrics.schema.json`. Under RFC 0002 §
 
 ## 6. Submitting an Independent Reproduction
 
-Once Track D implementation is complete in `v1.9.0`:
+Once Track D implementation is complete:
 1. Execute the reproduction protocol autonomously (`npm run check:reproducibility -- --tier2 --out reproduction-record.json`).
 2. Optionally record and attach operator friction metrics (`--metrics <path>`).
 3. Record execution environment, commands, and resulting artifact hashes.
 4. Submit the resulting `reproduction-record.json` via a GitHub issue or discussion for maintainer adjudication.
+
+---
+
+## 7. Authority-Side Revalidation Protocol (D-AC-10 Adjudication)
+
+Under RFC 0002 §10 and §11, incoming external reproduction submissions must undergo strict authority-side revalidation rather than blind acceptance:
+
+```text
+external reproduction-record.json
+        ↓
+1. Schema & Semantic Validation (`validateReproductionRecordShape`)
+        ↓
+2. Independent GitHub Release Asset Re-resolution (`gh release view <tag> --json assets`)
+        ↓
+3. Cross-Field Cryptographic Comparison:
+     - releaseTag matches immutable target release
+     - releaseAssetName matches canonical package archive
+     - releaseAssetDigest matches canonical immutable digest recorded by GitHub Release API
+     - sourceCommit matches immutable release commit
+        ↓
+4. Attestation & Provenance Verification (`gh attestation verify <archive> --deny-self-hosted-runners`)
+        ↓
+5. Independence Confirmation: `maintainerAssistance === false`
+        ↓
+Accept as D-AC-10 Evidence (Transitions Track D to COMPLETE / VERIFIED)
+```
+
 
