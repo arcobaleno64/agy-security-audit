@@ -11,7 +11,9 @@
     "projectVersion",
     "sourceCommit",
     "releaseTag",
+    "releaseAssetName",
     "releaseAssetDigest",
+    "releaseAssetDigestSource",
     "operatorClass",
     "reproductionClassification",
     "maintainerAssistance",
@@ -43,9 +45,22 @@
       "type": "string",
       "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
     },
+    "releaseAssetName": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._-]+$"
+    },
     "releaseAssetDigest": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^([0-9a-f]{64}|UNVERIFIABLE)$"
+    },
+    "releaseAssetDigestSource": {
+      "type": "string",
+      "enum": [
+        "USER_VERIFIED",
+        "LOCAL_MANIFEST",
+        "GITHUB_RELEASE_API",
+        "UNVERIFIABLE"
+      ]
     },
     "operatorClass": {
       "type": "string",

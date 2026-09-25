@@ -48,6 +48,13 @@ export const VERDICTS = Object.freeze([
   'UNVERIFIABLE'
 ]);
 
+export const RELEASE_ASSET_DIGEST_SOURCES = Object.freeze([
+  'USER_VERIFIED',
+  'LOCAL_MANIFEST',
+  'GITHUB_RELEASE_API',
+  'UNVERIFIABLE'
+]);
+
 /**
  * Validates reproduction record structure against schemas/reproduction-record.schema.json
  * without requiring external JSON Schema validator dependencies.
@@ -73,7 +80,9 @@ export function validateReproductionRecordShape(record) {
     'projectVersion',
     'sourceCommit',
     'releaseTag',
+    'releaseAssetName',
     'releaseAssetDigest',
+    'releaseAssetDigestSource',
     'operatorClass',
     'reproductionClassification',
     'maintainerAssistance',
@@ -97,7 +106,11 @@ export function validateReproductionRecordShape(record) {
   if (typeof record.projectVersion !== 'string' || record.projectVersion.length === 0) return false;
   if (!/^[0-9a-f]{40}$/.test(String(record.sourceCommit))) return false;
   if (!/^v[0-9]+\.[0-9]+\.[0-9]+.*$/.test(String(record.releaseTag))) return false;
-  if (!/^[0-9a-f]{64}$/.test(String(record.releaseAssetDigest))) return false;
+  if (typeof record.releaseAssetName !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(record.releaseAssetName)) return false;
+  if (!/^([0-9a-f]{64}|UNVERIFIABLE)$/.test(String(record.releaseAssetDigest))) return false;
+  if (!RELEASE_ASSET_DIGEST_SOURCES.includes(record.releaseAssetDigestSource)) return false;
+  if (record.releaseAssetDigest === 'UNVERIFIABLE' && record.releaseAssetDigestSource !== 'UNVERIFIABLE') return false;
+  if (record.releaseAssetDigestSource === 'UNVERIFIABLE' && record.releaseAssetDigest !== 'UNVERIFIABLE') return false;
   if (!OPERATOR_CLASSES.includes(record.operatorClass)) return false;
   if (!REPRODUCTION_CLASSIFICATIONS.includes(record.reproductionClassification)) return false;
   if (typeof record.maintainerAssistance !== 'boolean') return false;
@@ -289,6 +302,127 @@ export function executeTier1Reproduction(options = {}) {
 }
 
 /**
+ * Resolves canonical release asset binding conforming to RFC 0002 §8 and §10.
+ * Priority order:
+ *   1. USER_VERIFIED: Explicit user-supplied valid digest (CLI / options)
+ *   2. LOCAL_MANIFEST: Local SHA256SUMS.txt / release manifest
+ *   3. GITHUB_RELEASE_API: GitHub Release asset metadata via gh CLI
+ *   4. UNVERIFIABLE: Missing or unresolved metadata
+ */
+export function resolveReleaseAssetBinding(options = {}) {
+  const repoRoot = path.resolve(options.repoRoot || DEFAULT_REPO_ROOT);
+  const releaseTag = options.releaseTag || 'v1.9.1';
+  const releaseAssetName = options.releaseAssetName || `agy-security-audit-${releaseTag}.zip`;
+
+  // Priority 1: User-supplied verified release asset digest
+  if (options.releaseAssetDigest) {
+    const rawUserDigest = String(options.releaseAssetDigest).trim();
+    if (/^[0-9a-fA-F]{64}$/.test(rawUserDigest)) {
+      return {
+        releaseAssetName,
+        releaseAssetDigest: rawUserDigest.toLowerCase(),
+        releaseAssetDigestSource: options.releaseAssetDigestSource || 'USER_VERIFIED'
+      };
+    }
+    if (rawUserDigest === 'UNVERIFIABLE') {
+      return {
+        releaseAssetName,
+        releaseAssetDigest: 'UNVERIFIABLE',
+        releaseAssetDigestSource: 'UNVERIFIABLE'
+      };
+    }
+  }
+
+  // Priority 2: Local SHA256SUMS / release manifest
+  const manifestCandidates = [];
+  if (options.manifestPath) {
+    manifestCandidates.push(path.resolve(options.manifestPath));
+  }
+  manifestCandidates.push(
+    path.join(repoRoot, 'release-evidence', 'SHA256SUMS.txt'),
+    path.join(repoRoot, 'SHA256SUMS.txt'),
+    path.join(process.cwd(), 'release-evidence', 'SHA256SUMS.txt'),
+    path.join(process.cwd(), 'SHA256SUMS.txt')
+  );
+
+  for (const candidate of manifestCandidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        const content = fs.readFileSync(candidate, 'utf8');
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        for (const line of lines) {
+          const match = /^([0-9a-fA-F]{64})\s+(.+)$/.exec(line.trim());
+          if (match) {
+            const entryDigest = match[1].toLowerCase();
+            const entryName = match[2].trim().replace(/^\.\//, '');
+            if (entryName === releaseAssetName) {
+              return {
+                releaseAssetName,
+                releaseAssetDigest: entryDigest,
+                releaseAssetDigestSource: 'LOCAL_MANIFEST'
+              };
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore read errors and proceed to next candidate
+    }
+  }
+
+  // Priority 3: GitHub Release API / gh release asset metadata
+  try {
+    let repoSlug = options.repo || null;
+    if (!repoSlug) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+        const repoUrl = pkg.repository?.url || '';
+        const match = /github\.com[/:]([^/]+\/[^/.]+)(?:\.git)?/i.exec(repoUrl);
+        if (match) repoSlug = match[1];
+      } catch {}
+    }
+
+    const ghArgs = ['release', 'view', releaseTag, '--json', 'assets'];
+    if (repoSlug) {
+      ghArgs.push('--repo', repoSlug);
+    }
+
+    const res = spawnSync('gh', ghArgs, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: options.networkTimeoutMs || 8000,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    if (!res.error && res.status === 0 && res.stdout) {
+      const data = JSON.parse(res.stdout);
+      if (Array.isArray(data?.assets)) {
+        const asset = data.assets.find(a => a?.name === releaseAssetName);
+        if (asset && asset.digest) {
+          const cleanDigest = String(asset.digest).replace(/^sha256:/i, '').trim().toLowerCase();
+          if (/^[0-9a-f]{64}$/.test(cleanDigest)) {
+            return {
+              releaseAssetName,
+              releaseAssetDigest: cleanDigest,
+              releaseAssetDigestSource: 'GITHUB_RELEASE_API'
+            };
+          }
+        }
+      }
+    }
+  } catch {
+    // gh CLI unavailable or network failure; fall through to UNVERIFIABLE
+  }
+
+  // Priority 4: UNVERIFIABLE
+  return {
+    releaseAssetName,
+    releaseAssetDigest: 'UNVERIFIABLE',
+    releaseAssetDigestSource: 'UNVERIFIABLE'
+  };
+}
+
+/**
  * Builds a validated ReproductionRecord object conforming to RFC 0002.
  */
 export function buildReproductionRecord(tier1Results, options = {}) {
@@ -301,14 +435,20 @@ export function buildReproductionRecord(tier1Results, options = {}) {
     sourceCommit = gitHead.status === 0 ? gitHead.stdout.trim() : '8af4bca5cdfef89c93649c03a70d43767875ffb7';
   }
 
-  // Canonical baseline anchor for v1.9.1 (with fallback for v1.9.0 and v1.8.1)
   const releaseTag = options.releaseTag || `v${pkg.version}`;
-  const defaultDigest = pkg.version === '1.9.1'
-    ? '0e9f146447ca502aceb41dd63aedbee2d548607a61d7a35a80386cf85e65704a'
-    : (pkg.version === '1.9.0'
-      ? 'c0505e883b6a1ee463420fe0290931f0dcdb8c5ea6333b622445df34dcbd0a0a'
-      : '2a0ece157b0264fc2cfd2efc8d87de78696ffe3a3d79fd01bfa8f83153ee04da');
-  const releaseAssetDigest = options.releaseAssetDigest || defaultDigest;
+  const assetBinding = resolveReleaseAssetBinding({
+    repoRoot,
+    releaseTag,
+    releaseAssetName: options.releaseAssetName,
+    releaseAssetDigest: options.releaseAssetDigest,
+    releaseAssetDigestSource: options.releaseAssetDigestSource,
+    manifestPath: options.manifestPath,
+    repo: options.repo,
+    networkTimeoutMs: options.networkTimeoutMs
+  });
+  const releaseAssetName = assetBinding.releaseAssetName;
+  const releaseAssetDigest = assetBinding.releaseAssetDigest;
+  const releaseAssetDigestSource = assetBinding.releaseAssetDigestSource;
 
   const isCi = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);
   const maintainerAssistance = Boolean(options.maintainerAssistance);
@@ -364,7 +504,9 @@ export function buildReproductionRecord(tier1Results, options = {}) {
     projectVersion: pkg.version,
     sourceCommit,
     releaseTag,
+    releaseAssetName,
     releaseAssetDigest,
+    releaseAssetDigestSource,
     operatorClass,
     reproductionClassification,
     maintainerAssistance,
@@ -401,7 +543,10 @@ function parseArgs(argv) {
     dryRun: false,
     tier2: false,
     mock: false,
-    metrics: null
+    metrics: null,
+    releaseAssetDigest: null,
+    releaseAssetName: null,
+    manifestPath: null
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -414,17 +559,23 @@ function parseArgs(argv) {
     else if (a === '--tier2') opts.tier2 = true;
     else if (a === '--mock') opts.mock = true;
     else if (a === '--metrics' && i + 1 < argv.length) opts.metrics = argv[++i];
+    else if (a === '--release-asset-digest' && i + 1 < argv.length) opts.releaseAssetDigest = argv[++i];
+    else if (a === '--release-asset-name' && i + 1 < argv.length) opts.releaseAssetName = argv[++i];
+    else if (a === '--release-manifest' && i + 1 < argv.length) opts.manifestPath = argv[++i];
     else if (a === '-h' || a === '--help') {
       console.log(`Usage: node scripts/run-reproducibility-check.mjs [options]
-  --json               Output reproduction-record JSON to stdout
-  --out <path>         Write reproduction-record JSON to file
-  --operator <class>   Set operatorClass (MAINTAINER, CONTRIBUTOR, INDEPENDENT_OPERATOR, AUTOMATED_CI)
-  --assisted           Mark that maintainer assistance was provided (downgrades classification)
-  --dry-run            Dry run shape generation without re-running long tests
-  --tier2              Execute Tier 2 micro-corpus live assurance verification
-  --mock               Use deterministic synthetic execution for Tier 2 (offline/CI mode)
-  --metrics <path>     Attach and validate operator metrics JSON conforming to RFC 0002 §7
-  -h, --help           Show help`);
+  --json                        Output reproduction-record JSON to stdout
+  --out <path>                  Write reproduction-record JSON to file
+  --operator <class>            Set operatorClass (MAINTAINER, CONTRIBUTOR, INDEPENDENT_OPERATOR, AUTOMATED_CI)
+  --assisted                    Mark that maintainer assistance was provided (downgrades classification)
+  --dry-run                     Dry run shape generation without re-running long tests
+  --tier2                       Execute Tier 2 micro-corpus live assurance verification
+  --mock                        Use deterministic synthetic execution for Tier 2 (offline/CI mode)
+  --metrics <path>              Attach and validate operator metrics JSON conforming to RFC 0002 §7
+  --release-asset-digest <sha>  Set user-verified release asset digest (Priority 1)
+  --release-asset-name <name>   Set canonical release asset name (default: agy-security-audit-<tag>.zip)
+  --release-manifest <path>     Path to local SHA256SUMS.txt manifest (Priority 2)
+  -h, --help                    Show help`);
       process.exit(0);
     }
   }
@@ -478,6 +629,9 @@ function main() {
   const record = buildReproductionRecord(tier1Results, {
     operatorClass: opts.operatorClass,
     maintainerAssistance: opts.assisted,
+    releaseAssetName: opts.releaseAssetName,
+    releaseAssetDigest: opts.releaseAssetDigest,
+    manifestPath: opts.manifestPath,
     tier2Results,
     operatorMetrics,
     startedAt,
@@ -504,6 +658,9 @@ function main() {
       if (s.details) console.log(`      ${s.details}`);
     }
     console.log('\n----------------------------------------------------------------');
+    console.log(`Release Asset Name:         ${record.releaseAssetName}`);
+    console.log(`Release Asset Digest:       ${record.releaseAssetDigest}`);
+    console.log(`Release Digest Source:      ${record.releaseAssetDigestSource}`);
     console.log(`Reproduction Classification: ${record.reproductionClassification}`);
     console.log(`Operator Class:             ${record.operatorClass}`);
     console.log(`Maintainer Assistance:      ${record.maintainerAssistance}`);

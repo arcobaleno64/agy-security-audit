@@ -21,7 +21,9 @@ import {
   DEFAULT_REPO_ROOT,
   REPRODUCTION_SCHEMA_ID,
   REPRODUCTION_SCHEMA_VERSION,
+  RELEASE_ASSET_DIGEST_SOURCES,
   buildReproductionRecord,
+  resolveReleaseAssetBinding,
   validateReproductionRecordShape
 } from './run-reproducibility-check.mjs';
 
@@ -56,7 +58,9 @@ function makeValidBaselineRecord() {
     projectVersion: '1.8.1',
     sourceCommit: '8af4bca5cdfef89c93649c03a70d43767875ffb7',
     releaseTag: 'v1.8.1',
+    releaseAssetName: 'agy-security-audit-v1.8.1.zip',
     releaseAssetDigest: '2a0ece157b0264fc2cfd2efc8d87de78696ffe3a3d79fd01bfa8f83153ee04da',
+    releaseAssetDigestSource: 'LOCAL_MANIFEST',
     operatorClass: 'INDEPENDENT_OPERATOR',
     reproductionClassification: 'INDEPENDENT_OPERATOR_REPRODUCTION',
     maintainerAssistance: false,
@@ -99,7 +103,8 @@ test('validateReproductionRecordShape accepts a valid baseline record', () => {
 test('validateReproductionRecordShape rejects missing required top-level keys', () => {
   const requiredKeys = [
     '$schema', 'schemaVersion', 'projectVersion', 'sourceCommit', 'releaseTag',
-    'releaseAssetDigest', 'operatorClass', 'reproductionClassification',
+    'releaseAssetName', 'releaseAssetDigest', 'releaseAssetDigestSource',
+    'operatorClass', 'reproductionClassification',
     'maintainerAssistance', 'executionMode', 'environment', 'tier1Results',
     'startedAt', 'completedAt', 'overallVerdict'
   ];
@@ -150,10 +155,19 @@ test('validateReproductionRecordShape validates schema, commit, and digest synta
   const rec5 = makeValidBaselineRecord();
   rec5.releaseAssetDigest = 'shortdigest';
   assert(!validateReproductionRecordShape(rec5), 'non-64-char releaseAssetDigest must fail');
+
+  const rec6 = makeValidBaselineRecord();
+  rec6.releaseAssetName = 'bad asset name with spaces.zip';
+  assert(!validateReproductionRecordShape(rec6), 'invalid releaseAssetName must fail');
+
+  const rec7 = makeValidBaselineRecord();
+  rec7.releaseAssetDigest = 'UNVERIFIABLE';
+  rec7.releaseAssetDigestSource = 'UNVERIFIABLE';
+  assert(validateReproductionRecordShape(rec7), 'UNVERIFIABLE digest and source must be accepted');
 });
 
 // Test 5: Enum constraints
-test('validateReproductionRecordShape rejects unsupported enums', () => {
+test('validateReproductionRecordShape rejects unsupported enums and mismatching digest sources', () => {
   const rec1 = makeValidBaselineRecord();
   rec1.operatorClass = 'UNKNOWN_OPERATOR';
   assert(!validateReproductionRecordShape(rec1), 'invalid operatorClass must fail');
@@ -177,6 +191,20 @@ test('validateReproductionRecordShape rejects unsupported enums', () => {
   const rec6 = makeValidBaselineRecord();
   rec6.tier1Results.steps[0].status = 'UNVERIFIABLE'; // step status must be PASS/FAIL/SKIPPED
   assert(!validateReproductionRecordShape(rec6), 'invalid step status must fail');
+
+  const rec7 = makeValidBaselineRecord();
+  rec7.releaseAssetDigestSource = 'UNKNOWN_SOURCE';
+  assert(!validateReproductionRecordShape(rec7), 'invalid releaseAssetDigestSource must fail');
+
+  const rec8 = makeValidBaselineRecord();
+  rec8.releaseAssetDigest = 'UNVERIFIABLE';
+  rec8.releaseAssetDigestSource = 'USER_VERIFIED';
+  assert(!validateReproductionRecordShape(rec8), 'UNVERIFIABLE digest with non-UNVERIFIABLE source must fail');
+
+  const rec9 = makeValidBaselineRecord();
+  rec9.releaseAssetDigest = '2a0ece157b0264fc2cfd2efc8d87de78696ffe3a3d79fd01bfa8f83153ee04da';
+  rec9.releaseAssetDigestSource = 'UNVERIFIABLE';
+  assert(!validateReproductionRecordShape(rec9), 'hex digest with UNVERIFIABLE source must fail');
 });
 
 // Test 6: Maintainer Intervention Invariant (Validator Level)
@@ -425,6 +453,117 @@ test('run-reproducibility-check.mjs --dry-run --json --metrics attaches valid op
     assertEqual(parsed.operatorMetrics.timeToInstallSeconds, 30, 'timeToInstallSeconds must match');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// Test 18: resolveReleaseAssetBinding Priority 1 (USER_VERIFIED)
+test('resolveReleaseAssetBinding favors user-supplied digest as USER_VERIFIED', () => {
+  const binding = resolveReleaseAssetBinding({
+    releaseTag: 'v1.9.1',
+    releaseAssetDigest: 'aa3cf9cc353b286f0533c2b05cdc5962c831760bbacd4ae5c1527acdb132fa64'
+  });
+  assertEqual(binding.releaseAssetName, 'agy-security-audit-v1.9.1.zip', 'asset name');
+  assertEqual(binding.releaseAssetDigest, 'aa3cf9cc353b286f0533c2b05cdc5962c831760bbacd4ae5c1527acdb132fa64', 'digest');
+  assertEqual(binding.releaseAssetDigestSource, 'USER_VERIFIED', 'source');
+
+  const unverifiableBinding = resolveReleaseAssetBinding({
+    releaseTag: 'v1.9.1',
+    releaseAssetDigest: 'UNVERIFIABLE'
+  });
+  assertEqual(unverifiableBinding.releaseAssetDigest, 'UNVERIFIABLE', 'unverifiable digest');
+  assertEqual(unverifiableBinding.releaseAssetDigestSource, 'UNVERIFIABLE', 'unverifiable source');
+});
+
+// Test 19: resolveReleaseAssetBinding Priority 2 (LOCAL_MANIFEST) and priority order
+test('resolveReleaseAssetBinding resolves from local manifest and respects Priority 1 > Priority 2', () => {
+  const tempDir = fs.mkdtempSync(path.join(REPO_ROOT, 'scratch', 'repro-manifest-test-'));
+  const manifestFile = path.join(tempDir, 'SHA256SUMS.txt');
+  try {
+    fs.writeFileSync(manifestFile, '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef  agy-security-audit-v1.9.99.zip\n');
+
+    // Priority 2 resolution
+    const bindingFromManifest = resolveReleaseAssetBinding({
+      releaseTag: 'v1.9.99',
+      manifestPath: manifestFile
+    });
+    assertEqual(bindingFromManifest.releaseAssetDigest, '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef', 'manifest digest');
+    assertEqual(bindingFromManifest.releaseAssetDigestSource, 'LOCAL_MANIFEST', 'manifest source');
+
+    // Priority 1 overrides Priority 2
+    const bindingUserOverride = resolveReleaseAssetBinding({
+      releaseTag: 'v1.9.99',
+      releaseAssetDigest: 'fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321',
+      manifestPath: manifestFile
+    });
+    assertEqual(bindingUserOverride.releaseAssetDigest, 'fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321', 'user override digest');
+    assertEqual(bindingUserOverride.releaseAssetDigestSource, 'USER_VERIFIED', 'user override source');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// Test 20: resolveReleaseAssetBinding Priority 4 (UNVERIFIABLE fallback)
+test('resolveReleaseAssetBinding falls back honestly to UNVERIFIABLE when missing metadata', () => {
+  const binding = resolveReleaseAssetBinding({
+    releaseTag: 'v0.0.0-nonexistent-unverifiable',
+    repoRoot: path.join(REPO_ROOT, 'scratch', 'empty-repo-for-test')
+  });
+  assertEqual(binding.releaseAssetDigest, 'UNVERIFIABLE', 'unverifiable fallback digest');
+  assertEqual(binding.releaseAssetDigestSource, 'UNVERIFIABLE', 'unverifiable fallback source');
+});
+
+// Test 21: Historical reproduction record v1.9.0 conformance
+test('historical evals/reproduction-records/reproduction-record-v1.9.0.json conforms to schema', () => {
+  const recPath = path.join(REPO_ROOT, 'evals', 'reproduction-records', 'reproduction-record-v1.9.0.json');
+  assert(fs.existsSync(recPath), 'reproduction-record-v1.9.0.json must exist');
+  const record = JSON.parse(fs.readFileSync(recPath, 'utf8'));
+  assert(validateReproductionRecordShape(record), 'reproduction-record-v1.9.0.json must pass shape validation');
+  assertEqual(record.releaseAssetName, 'agy-security-audit-v1.9.0.zip', 'v1.9.0 asset name');
+  assertEqual(record.releaseAssetDigestSource, 'USER_VERIFIED', 'v1.9.0 digest source');
+});
+
+// Test 22: CLI flag --release-asset-digest integration
+test('run-reproducibility-check.mjs --dry-run --json --release-asset-digest binds user digest', () => {
+  const customDigest = '1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff';
+  const res = spawnSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs'),
+    '--dry-run',
+    '--json',
+    '--release-asset-digest', customDigest
+  ], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8'
+  });
+  assertEqual(res.status, 0, 'CLI exit code must be 0');
+  const parsed = JSON.parse(res.stdout);
+  assert(validateReproductionRecordShape(parsed), 'CLI emitted JSON must satisfy shape validation');
+  assertEqual(parsed.releaseAssetDigest, customDigest, 'custom digest bound');
+  assertEqual(parsed.releaseAssetDigestSource, 'USER_VERIFIED', 'source must be USER_VERIFIED');
+});
+
+// Test 23: Dynamic release asset binding for v1.9.1 matches GitHub immutable release
+test('run-reproducibility-check.mjs --dry-run --json dynamically binds v1.9.1 canonical asset', () => {
+  const res = spawnSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'run-reproducibility-check.mjs'),
+    '--dry-run',
+    '--json'
+  ], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8'
+  });
+  assertEqual(res.status, 0, 'CLI exit code must be 0');
+  const parsed = JSON.parse(res.stdout);
+  assert(validateReproductionRecordShape(parsed), 'CLI emitted JSON must satisfy shape validation');
+  assertEqual(parsed.releaseAssetName, 'agy-security-audit-v1.9.1.zip', 'canonical release asset name');
+  if (parsed.releaseAssetDigestSource === 'GITHUB_RELEASE_API') {
+    assertEqual(
+      parsed.releaseAssetDigest,
+      'aa3cf9cc353b286f0533c2b05cdc5962c831760bbacd4ae5c1527acdb132fa64',
+      'v1.9.1 digest matches immutable GitHub release'
+    );
+  } else {
+    assertEqual(parsed.releaseAssetDigest, 'UNVERIFIABLE', 'offline fallback digest');
+    assertEqual(parsed.releaseAssetDigestSource, 'UNVERIFIABLE', 'offline fallback source');
   }
 });
 
