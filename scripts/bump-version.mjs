@@ -58,6 +58,11 @@ const DOC_TARGETS = [
     file: "SECURITY.md",
     pattern: /^## 2\. Hardening & Guardrails \(v[^\s]+ \/ Production\)/m,
     replacement: (v) => `## 2. Hardening & Guardrails (v${v} / Production)`
+  },
+  {
+    file: "docs/reproduction/README.md",
+    pattern: /^> \*\*Frozen Baseline\*\*: `agy-security-audit v[^`]+`/m,
+    replacement: (v) => `> **Frozen Baseline**: \`agy-security-audit v${v}\``
   }
 ];
 

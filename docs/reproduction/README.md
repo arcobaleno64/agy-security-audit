@@ -1,8 +1,8 @@
 # External Reproduction Kit (Track D Skeleton)
 
 > **Governing Specification**: [RFC 0002: Track D - External Reproducibility, Real-World Transfer & Adoption Readiness](../rfcs/0002-external-reproducibility-and-adoption-readiness.md)  
-> **Status**: ACTIVE / IMPLEMENTATION (v1.9.0 Target)  
-> **Frozen Baseline**: `agy-security-audit v1.8.1` (`8af4bca5cdfef89c93649c03a70d43767875ffb7`)
+> **Status**: REPRODUCIBILITY_READY / D-AC-10 OPEN  
+> **Frozen Baseline**: `agy-security-audit v1.9.2`
 
 ---
 
@@ -61,7 +61,7 @@ The machine-readable report includes local executable and plugin paths because R
   # Write reproduction record JSON to target path
   npm run check:reproducibility -- --out reproduction-record.json
 
-  # Run the deterministic reproduction policy & regression suite (14 tests)
+  # Run the deterministic reproduction policy & regression suite
   npm run test:reproducibility
   ```
 - **Automated Verification Gates**:

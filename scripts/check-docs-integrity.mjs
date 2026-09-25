@@ -150,6 +150,18 @@ assert(
 assert(reproductionReadme.includes('npm run check:reproducibility'), 'reproduction README must document npm run check:reproducibility');
 assert(reproductionReadme.includes('npm run test:reproducibility'), 'reproduction README must document npm run test:reproducibility');
 assert(reproductionReadme.includes('Maintainer Intervention Degradation Rule'), 'reproduction README must document maintainer intervention degradation');
+assert(
+  reproductionReadme.includes('> **Status**: REPRODUCIBILITY_READY / D-AC-10 OPEN'),
+  'reproduction README status must be REPRODUCIBILITY_READY / D-AC-10 OPEN'
+);
+assert(
+  new RegExp(`> \\*\\*Frozen Baseline\\*\\*: \`agy-security-audit v${currentVersion.replace(/\\./g, '\\\\.')}\``).test(reproductionReadme),
+  `reproduction README frozen baseline must match current version v${currentVersion}`
+);
+assert(
+  !reproductionReadme.includes('(14 tests)'),
+  'reproduction README must not retain stale hardcoded (14 tests) count'
+);
 
 // 7. Track D Tier 2 Micro-Corpus contract
 assert(pkg.scripts?.['check:micro-corpus'] === 'node scripts/run-micro-corpus.mjs', 'package.json must expose npm run check:micro-corpus');
