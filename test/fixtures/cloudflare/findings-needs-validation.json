@@ -1,0 +1,42 @@
+[
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "cf-ssrf-02",
+    "title": "Potential SSRF in Webhook Dispatcher",
+    "description": "User-supplied webhook URL passed to fetch without explicit loopback filter verification.",
+    "claimed_root_cause": "Missing IP validation before HTTP request dispatch.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/webhooks.js",
+        "line": 15,
+        "scope": "dispatchWebhook",
+        "description": "Webhook URL received from configuration"
+      },
+      {
+        "kind": "sink",
+        "file": "src/webhooks.js",
+        "line": 28,
+        "scope": "dispatchWebhook",
+        "description": "fetch(targetUrl) called without loopback check"
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/webhooks.js",
+        "line": 28,
+        "description": "await fetch(url)"
+      }
+    ],
+    "blockers": [
+      "Internal DNS resolution behavior in production container cannot be confirmed statically."
+    ],
+    "validation_plan": {
+      "local": "Test with local HTTP listener on 127.0.0.1",
+      "deployment": "Check egress proxy configuration in production"
+    },
+    "attack_class": "ssrf",
+    "phase": "Phase-2-Hunting",
+    "raw_tokens": ["fetch", "url"]
+  }
+]

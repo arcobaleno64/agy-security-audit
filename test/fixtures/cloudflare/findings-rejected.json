@@ -1,0 +1,35 @@
+[
+  {
+    "verdict": "rejected",
+    "fingerprint": "cf-xss-03",
+    "title": "Reflected XSS in Error Handler",
+    "description": "Candidate suspected error message was rendered without HTML escaping.",
+    "claimed_root_cause": "Direct rendering of error message in response.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/errorHandler.js",
+        "line": 5,
+        "scope": "handleError",
+        "description": "Error caught"
+      },
+      {
+        "kind": "sink",
+        "file": "src/errorHandler.js",
+        "line": 18,
+        "scope": "handleError",
+        "description": "Response sent"
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/errorHandler.js",
+        "line": 18,
+        "description": "res.json({ error: msg })"
+      }
+    ],
+    "reason": "Verifier determined that Content-Type is application/json and response is never parsed as HTML; XSS cannot execute.",
+    "attack_class": "xss",
+    "phase": "Phase-3-Validation"
+  }
+]

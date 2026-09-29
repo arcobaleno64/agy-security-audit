@@ -1,0 +1,83 @@
+[
+  {
+    "verdict": "confirmed",
+    "fingerprint": "cf-sqli-01",
+    "title": "SQL Injection in User Search API",
+    "description": "Unsanitized parameter concatenated directly into SQL statement.",
+    "root_cause": "Concatenation of untrusted req.query.q into SQL query without parameterization.",
+    "intended_behavior": "User queries should use parameterized prepared statements.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/api/users.js",
+        "line": 12,
+        "scope": "searchUsers",
+        "description": "Receives search query parameter"
+      },
+      {
+        "kind": "propagation",
+        "file": "src/services/db.js",
+        "line": 45,
+        "scope": "executeQuery",
+        "description": "Passes query to database executor"
+      },
+      {
+        "kind": "sink",
+        "file": "src/services/db.js",
+        "line": 52,
+        "scope": "executeQuery",
+        "description": "Database query executed with raw string concatenation"
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/services/db.js",
+        "line": 52,
+        "description": "db.query('SELECT * FROM users WHERE name = ' + query)"
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "Any authenticated or unauthenticated user with access to search API"
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Remote anonymous caller",
+      "payloads": [
+        "' OR '1'='1"
+      ],
+      "instructions": [
+        "Send GET /api/users?q=' OR '1'='1 to extract all records."
+      ],
+      "observed_result": "Entire user table returned without authentication barrier."
+    },
+    "remediation": {
+      "strategy": "Replace direct SQL string concatenation with prepared parameterized queries.",
+      "code_changes": [
+        {
+          "file_name": "src/services/db.js",
+          "fixed_code": "db.query('SELECT * FROM users WHERE name = ?', [query])"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Endpoint is exposed to public HTTP interface."
+      },
+      "impact": {
+        "score": "critical",
+        "reason": "Arbitrary read access to tenant data."
+      },
+      "overall_severity": "critical"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "Observed execution payload confirmed vulnerability."
+    },
+    "attack_class": "sql_injection",
+    "phase": "Phase-3-Validation",
+    "raw_tokens": ["SELECT", "FROM", "users"]
+  }
+]

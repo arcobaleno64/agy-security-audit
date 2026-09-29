@@ -38,7 +38,7 @@
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "9ad4753ab29713a973639a1ad312742c9132e1a65adb8e96b72cea14ee98c862",
+          "sha256": "2f064eb1158e96c8d4fef3669cd3d473d14457241669ba65ed9c66c8ff623681",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {

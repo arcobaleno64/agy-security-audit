@@ -2736,7 +2736,8 @@ export function finalizeScan({
   shadowRoot = null,
   contextPrep = null,
   scanRunId = null,
-  nonce = null
+  nonce = null,
+  cloudflareCoverage = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -2756,13 +2757,46 @@ export function finalizeScan({
     promptContractVersion: '1.0.0',
     systemPromptIntegrity: modelProvenance?.systemPromptIntegrity || 'UNKNOWN'
   };
-  const safeMatrix = Array.isArray(discoveryMatrix) ? discoveryMatrix : [];
+  const safeMatrixInput = Array.isArray(discoveryMatrix) ? discoveryMatrix : [];
+  let safeMatrix = safeMatrixInput;
+  if (safeMatrix.length === 0 && Array.isArray(cloudflareCoverage?.discoveryMatrix) && cloudflareCoverage.discoveryMatrix.length > 0) {
+    const testVal = validateDiscoveryMatrix(cloudflareCoverage.discoveryMatrix, safeRepoRoot);
+    if (testVal.valid) {
+      safeMatrix = cloudflareCoverage.discoveryMatrix;
+    }
+  }
   const matrixValidation = safeMatrix.length > 0 ? validateDiscoveryMatrix(safeMatrix, safeRepoRoot) : { valid: true };
 
   // 1. Coverage Reconciliation against real repoRoot
-  const coverageReconciliation = reconcileCoverage(manifest, safeRepoRoot);
-  let coverageStatus = coverageReconciliation.status;
-  const coverageMode = coverageReconciliation.mode;
+  let coverageReconciliation;
+  let coverageStatus;
+  let coverageMode;
+
+  if (cloudflareCoverage && !manifest) {
+    const isComplete = cloudflareCoverage.coverageStatus === 'COMPLETE';
+    coverageStatus = isComplete ? 'COMPLETE' : 'COVERAGE_PARTIAL';
+    coverageMode = 'cloudflare';
+    coverageReconciliation = {
+      valid: isComplete,
+      status: coverageStatus,
+      mode: 'cloudflare',
+      error: isComplete ? null : (cloudflareCoverage.summary?.reason || 'Cloudflare coverage is partial under Presumption of Non-Pass.'),
+      partialUnits: cloudflareCoverage.partialUnits || []
+    };
+  } else {
+    coverageReconciliation = reconcileCoverage(manifest, safeRepoRoot);
+    coverageStatus = coverageReconciliation.status;
+    coverageMode = coverageReconciliation.mode;
+
+    if (cloudflareCoverage) {
+      if (cloudflareCoverage.coverageStatus !== 'COMPLETE' || cloudflareCoverage.canDeclareClean === false) {
+        coverageStatus = 'COVERAGE_PARTIAL';
+        coverageReconciliation.valid = false;
+        coverageReconciliation.status = 'COVERAGE_PARTIAL';
+        coverageReconciliation.error = cloudflareCoverage.summary?.reason || 'Cloudflare coverage ledger contains partial or deferred units.';
+      }
+    }
+  }
 
   if (expectedMode && coverageMode !== expectedMode) {
     coverageStatus = 'PARTIAL';
@@ -3049,12 +3083,26 @@ export function finalizeScan({
     ? (matrixValidation.valid && !hasUnresolvedCells && !hasUnconfirmedCriticalZeros)
     : (safeAuditIntent === 'REGRESSION');
 
+  let effectiveManifest = manifest;
+  if (!effectiveManifest && cloudflareCoverage) {
+    effectiveManifest = {
+      schemaVersion: '1.0.0',
+      mode: 'cloudflare',
+      generatedAt: new Date().toISOString(),
+      complete: cloudflareCoverage.coverageStatus === 'COMPLETE',
+      coverageStatus: cloudflareCoverage.coverageStatus,
+      canDeclareClean: cloudflareCoverage.canDeclareClean,
+      units: cloudflareCoverage.summary?.totalUnits || 0,
+      entries: []
+    };
+  }
+
   // R10-P0-01 & R11-P0-01: Execution stages accounting under Default-Deny.
   // Spoofed stages are strictly rejected: every claimed stage must be verified by physical artifacts.
   const claimedStages = Array.isArray(executedStages) ? new Set(executedStages) : null;
   const safeExecutedStages = ['FINALIZATION'];
 
-  if ((!claimedStages || claimedStages.has('INVENTORY')) && manifest) {
+  if ((!claimedStages || claimedStages.has('INVENTORY')) && effectiveManifest) {
     safeExecutedStages.push('INVENTORY');
   }
   if ((!claimedStages || claimedStages.has('THREAT_MODELING')) && threatModel && validateThreatModel(threatModel, safeRepoRoot || process.cwd()).valid) {
@@ -3229,15 +3277,15 @@ export function finalizeScan({
   }
 
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
-  let updatedManifest = manifest;
-  const effectiveScanRunId = scanRunId || manifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  const effectiveNonce = nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null;
+  let updatedManifest = effectiveManifest;
+  const effectiveScanRunId = scanRunId || effectiveManifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
+  const effectiveNonce = nonce || effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null;
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
     projectId = projectContextRes.context.project.projectId;
-  } else if (manifest?.projectId) {
-    projectId = manifest.projectId;
+  } else if (effectiveManifest?.projectId) {
+    projectId = effectiveManifest.projectId;
   } else {
     try {
       const pkgPath = path.join(path.resolve(safeRepoRoot || process.cwd()), 'package.json');
@@ -3251,20 +3299,20 @@ export function finalizeScan({
     projectId = path.basename(path.resolve(safeRepoRoot || process.cwd()));
   }
 
-  if (manifest && typeof manifest === 'object') {
-    manifest.complete = true;
-    manifest.completedAt = new Date().toISOString();
-    manifest.finalVerdict = assuranceLabel;
-    manifest.canDeclareClean = canDeclareClean;
-    manifest.auditIntent = safeAuditIntent;
-    manifest.coverageStatus = coverageStatus;
-    manifest.scanRunId = effectiveScanRunId;
+  if (effectiveManifest && typeof effectiveManifest === 'object') {
+    effectiveManifest.complete = true;
+    effectiveManifest.completedAt = new Date().toISOString();
+    effectiveManifest.finalVerdict = assuranceLabel;
+    effectiveManifest.canDeclareClean = canDeclareClean;
+    effectiveManifest.auditIntent = safeAuditIntent;
+    effectiveManifest.coverageStatus = coverageStatus;
+    effectiveManifest.scanRunId = effectiveScanRunId;
     if (effectiveNonce) {
-      manifest.nonce = effectiveNonce;
-      manifest.taskCorrelationNonce = effectiveNonce;
+      effectiveManifest.nonce = effectiveNonce;
+      effectiveManifest.taskCorrelationNonce = effectiveNonce;
     }
-    manifest.projectId = projectId;
-    manifest.findingCounts = {
+    effectiveManifest.projectId = projectId;
+    effectiveManifest.findingCounts = {
       reportable: confirmedCount,
       deferred: deferredCount,
       acceptedRisk: acceptedRiskCount,
@@ -3272,7 +3320,7 @@ export function finalizeScan({
       informational: informationalCount,
       suppressed: suppressedCount
     };
-    updatedManifest = manifest;
+    updatedManifest = effectiveManifest;
   }
 
   const dependencyBoundary = detectDependencyBoundary(safeRepoRoot || process.cwd());
@@ -3282,7 +3330,7 @@ export function finalizeScan({
     targetRevision: provenance?.commitSha || 'HEAD',
     canonicalFindings,
     threatModel,
-    manifest,
+    manifest: effectiveManifest,
     provenance,
     modelProvider: safeModelProvenance.modelProvider,
     modelIdentifier: safeModelProvenance.modelIdentifier,
@@ -4676,6 +4724,27 @@ export function loadVotes(votesPath, options = {}) {
 
 
 // -----------------------------------------------------------------------------
+// Cloudflare Producer Adapter Loader
+// -----------------------------------------------------------------------------
+/**
+ * Loads the Cloudflare adapter dynamically for producer ingestion.
+ */
+export async function loadCloudflareAdapter(repoRoot = process.cwd()) {
+  const candidatePaths = [
+    fileURLToPath(new URL('../../../scripts/adapters/cloudflare-adapter.mjs', import.meta.url)),
+    path.resolve(repoRoot, 'scripts/adapters/cloudflare-adapter.mjs'),
+    fileURLToPath(new URL('./cloudflare-adapter.mjs', import.meta.url))
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      const url = new URL(`file://${path.resolve(p).replace(/\\/g, '/')}`).href;
+      return await import(url);
+    }
+  }
+  throw new Error(`Cloudflare adapter not found in candidate paths: ${candidatePaths.join(', ')}`);
+}
+
+// -----------------------------------------------------------------------------
 // CLI Dispatch
 // -----------------------------------------------------------------------------
 const isDirectExecution = process.argv[1] && process.argv[1].endsWith('finalize-scan.mjs');
@@ -4691,6 +4760,8 @@ if (isDirectExecution) {
   }
 
   const inputPath = getArg('--candidates') || getArg('--input');
+  const importCloudflareFindingsArg = getArg('--import-cloudflare-findings');
+  const importCloudflareCoverageArg = getArg('--import-cloudflare-coverage');
   const votesPath = getArg('--votes');
   const manifestPath = getArg('--manifest');
   const matrixPath = getArg('--matrix') || getArg('--discovery-matrix');
@@ -4715,6 +4786,8 @@ if (isDirectExecution) {
     console.log('');
     console.log('Options:');
     console.log('  --candidates <path>           Candidate findings JSON file');
+    console.log('  --import-cloudflare-findings <path> Ingest Cloudflare findings JSON via producer adapter');
+    console.log('  --import-cloudflare-coverage <path> Ingest Cloudflare coverage ledger JSON via producer adapter');
     console.log('  --votes <path>                Directory or JSON file with verifier votes');
     console.log('  --manifest <path>             Directory manifest JSON');
     console.log('  --matrix <path>               Discovery matrix JSON');
@@ -4736,7 +4809,7 @@ if (isDirectExecution) {
     process.exit(0);
   }
 
-  if (externalSarifPath && !inputPath) {
+  if (externalSarifPath && !inputPath && !importCloudflareFindingsArg && !importCloudflareCoverageArg) {
     try {
       const repoRoot = path.resolve(repoRootArg);
       const ingested = ingestExternalEvidence(externalSarifPath, repoRoot);
@@ -4766,11 +4839,31 @@ if (isDirectExecution) {
       console.error('Error ingesting external SARIF:', err.message);
       process.exit(1);
     }
-  } else if (inputPath) {
+  } else if (inputPath || importCloudflareFindingsArg || importCloudflareCoverageArg) {
     try {
       const repoRoot = path.resolve(repoRootArg);
-      const rawData = fs.readFileSync(inputPath, 'utf8');
-      const candidates = JSON.parse(rawData);
+      let candidates = [];
+      if (inputPath && fs.existsSync(inputPath)) {
+        const rawData = fs.readFileSync(inputPath, 'utf8');
+        const parsed = JSON.parse(rawData);
+        candidates = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.candidates) ? parsed.candidates : []);
+      }
+
+      let cloudflareCoverage = null;
+      if (importCloudflareCoverageArg && fs.existsSync(importCloudflareCoverageArg)) {
+        const adapter = await loadCloudflareAdapter(repoRoot);
+        cloudflareCoverage = adapter.ingestCoverageLedger(importCloudflareCoverageArg);
+        console.log(`✔ Ingested Cloudflare coverage ledger: ${importCloudflareCoverageArg} (Status: ${cloudflareCoverage.coverageStatus})`);
+      }
+
+      if (importCloudflareFindingsArg && fs.existsSync(importCloudflareFindingsArg)) {
+        const adapter = await loadCloudflareAdapter(repoRoot);
+        const cfCandidateSet = adapter.toCandidateSet(importCloudflareFindingsArg, {
+          coverageLedgerResult: cloudflareCoverage
+        });
+        candidates = [...candidates, ...(cfCandidateSet.candidates || [])];
+        console.log(`✔ Ingested ${cfCandidateSet.candidates?.length || 0} Cloudflare candidate findings from ${importCloudflareFindingsArg}`);
+      }
 
       let manifest = null;
       if (manifestPath && fs.existsSync(manifestPath)) {
@@ -4850,7 +4943,8 @@ if (isDirectExecution) {
         allowSelfAudit,
         executionAttestation,
         scanRunId: scanRunIdArg,
-        nonce: nonceArg
+        nonce: nonceArg,
+        cloudflareCoverage
       });
 
       if (outputJsonPath) {
@@ -4918,7 +5012,7 @@ if (isDirectExecution) {
           schemaVersion: '1',
           coverageStatus: finalization.coverageStatus,
           canDeclareClean: finalization.summary.canDeclareClean,
-          coverageMode: manifest?.mode || (manifest?.reviewInventory ? 'review' : 'scan'),
+          coverageMode: manifest?.mode || (manifest?.reviewInventory ? 'review' : (cloudflareCoverage ? 'cloudflare' : 'scan')),
           manifest: finalization.manifest,
           provenance: finalization.provenance
         };
@@ -4967,7 +5061,7 @@ if (isDirectExecution) {
       process.exit(1);
     }
   } else {
-    console.log('finalize-scan: missing required --candidates or --external-sarif argument.');
+    console.log('finalize-scan: missing required --candidates, --import-cloudflare-findings, --import-cloudflare-coverage, or --external-sarif argument.');
     console.log('Run with --help for usage instructions.');
   }
 }

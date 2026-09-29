@@ -1,0 +1,43 @@
+[
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "cf-injected-sev-01",
+    "title": "Needs Validation Finding with Illegitimate Injected Severity",
+    "description": "An adversarial or flawed producer injected a severity into needs_validation.",
+    "claimed_root_cause": "Improper access check.",
+    "severity": {
+      "overall_severity": "critical",
+      "likelihood": { "score": "high", "reason": "Trivial" },
+      "impact": { "score": "critical", "reason": "Full takeover" }
+    },
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/auth.js",
+        "line": 10,
+        "scope": "checkAccess",
+        "description": "Access check entrypoint"
+      },
+      {
+        "kind": "sink",
+        "file": "src/auth.js",
+        "line": 20,
+        "scope": "checkAccess",
+        "description": "Access granted prematurely"
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/auth.js",
+        "line": 20,
+        "description": "return true;"
+      }
+    ],
+    "blockers": [
+      "Missing integration test confirmation."
+    ],
+    "validation_plan": {
+      "local": "Mock user token"
+    }
+  }
+]
