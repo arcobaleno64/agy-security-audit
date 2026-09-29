@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.9.2",
-  "generatedAt": "2026-09-29T00:35:25.079Z",
-  "manifestDigest": "e73cabe224fd92256757bbc7a536c458881bc1fb4e305a708b5e43036bfab7d1",
+  "generatedAt": "2026-09-29T00:57:22.259Z",
+  "manifestDigest": "d5733550f6187570209a28254d94cb093f15f1d99f94bfc7427790780f1cc61e",
   "criticalScripts": {
-    "scripts/adapters/cloudflare-adapter.mjs": "781d037373b1790329c0dea5eeabb0a6d11f495328faa189ced01caabe2b7005",
+    "scripts/adapters/cloudflare-adapter.mjs": "36c3eac48d828b2d582ac411db35c7bab4522d679d7d7a855de12fa6ef0ef2a0",
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
     "scripts/build-threat-model.mjs": "b71c553f1bd61da374753d9f05891c839ae684f80103716afce1e6fbc4bae9e2",
     "scripts/finalize-scan.mjs": "7c918407f3dda4eb5a4ec48b0963518d0edf99a686e0377405a51640c808c667",

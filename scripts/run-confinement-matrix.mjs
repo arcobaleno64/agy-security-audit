@@ -46,7 +46,7 @@ export function invokeGuardHook(toolCall, context = {}, hookPath = HOOK_SCRIPT_P
   const rawOutput = execFileSync(process.execPath, [hookPath], {
     input: inputJson,
     encoding: 'utf8',
-    timeout: 5000
+    timeout: 15000
   });
 
   if (rawOutput.includes('\r')) {

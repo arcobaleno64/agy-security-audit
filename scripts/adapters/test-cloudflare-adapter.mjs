@@ -285,47 +285,47 @@ test('Schema Validator rejects unexpected properties on candidate-set item', () 
 // Suite 2: R1 Lossless Canonical Finding Translation
 // -----------------------------------------------------------------------------
 
-test('Confirmed finding maps to REPORTABLE when authority is granted, and DEFERRED/UNVERIFIED_CLAIM by default under Default-Deny', () => {
-  // 1. Default-Deny authority boundary: unassessed producer claim defaults to DEFERRED / UNVERIFIED_CLAIM
+test('Confirmed finding strictly maps to DEFERRED, NEEDS_MANUAL_REVIEW, UNVERIFIED_CLAIM under Default-Deny without authority escape hatch', () => {
+  // 1. Default-Deny authority boundary: unassessed producer claim strictly maps to DEFERRED / UNVERIFIED_CLAIM
   const defaultCanonical = toCanonicalFinding(confirmedJson[0]);
   assertEqual(defaultCanonical.disposition, 'DEFERRED', 'Unassessed confirmed finding must default to DEFERRED');
   assertEqual(defaultCanonical.verdict, 'NEEDS_MANUAL_REVIEW', 'Verdict must be NEEDS_MANUAL_REVIEW');
   assertEqual(defaultCanonical.reasonCode, 'UNVERIFIED_CLAIM', 'Reason code must be UNVERIFIED_CLAIM');
+  assertEqual(defaultCanonical.severity, 'UNRATED', 'Canonical severity must be UNRATED without AGY verifier votes');
   assertEqual(defaultCanonical.extensions.producer.authorityStatus, 'UNASSESSED', 'Authority status must be UNASSESSED');
   assertEqual(defaultCanonical.extensions.producer.claimedVerification, 'VERIFIED_BY_PRODUCER', 'Producer verification claim preserved');
+  assertEqual(defaultCanonical.extensions.cloudflare.verification, 'independently_verified', 'Preserved in extensions.cloudflare');
+  assertEqual(defaultCanonical.consensus.supports, 0, 'Consensus supports must be 0 (no simulated votes)');
+  assertEqual(defaultCanonical.consensus.totalVotes, 0, 'Total votes must be 0');
+
+  // Verify bound proof
+  assert(defaultCanonical.proof && typeof defaultCanonical.proof === 'object', 'Proof must be bound object');
+  assertEqual(defaultCanonical.proof.trace.length, 3, 'Proof trace must contain all 3 trace steps');
+  assertEqual(defaultCanonical.proof.conditions.length, 1, 'Proof conditions must be preserved');
+  assertEqual(defaultCanonical.proof.execution.attacker_perspective, 'Remote anonymous caller', 'Execution perspective bound');
+
+  // Verify defectManagement
+  assert(defaultCanonical.defectManagement && typeof defaultCanonical.defectManagement === 'object', 'defectManagement must exist');
+  assert(defaultCanonical.defectManagement.rootCause.includes('Concatenation'), 'rootCause bound');
+  assert(defaultCanonical.defectManagement.preventiveAction.includes('parameterized queries'), 'remediation strategy bound to preventiveAction');
+
+  // Verify extensions.cloudflare preservation
+  assert(defaultCanonical.extensions && defaultCanonical.extensions.cloudflare, 'extensions.cloudflare must be present');
+  assertEqual(defaultCanonical.extensions.cloudflare.attack_class, 'sql_injection', 'attack_class preserved');
+  assertEqual(defaultCanonical.extensions.cloudflare.phase, 'Phase-3-Validation', 'phase preserved');
+  assertDeepEqual(defaultCanonical.extensions.cloudflare.raw_tokens, ['SELECT', 'FROM', 'users'], 'raw tokens preserved');
+
+  // Validate against canonical-finding.schema.json
   const defaultErrors = validateAgainstSchema(defaultCanonical, canonicalSchema);
   assertEqual(defaultErrors.length, 0, `Default canonical finding must validate against schema: ${defaultErrors.join('; ')}`);
 
-  // 2. Explicit authority grant (trusted override)
-  const canonical = toCanonicalFinding(confirmedJson[0], { trustProducerAsAuthority: true });
-
-  assertEqual(canonical.disposition, 'REPORTABLE', 'Confirmed finding with authority grant must have disposition REPORTABLE');
-  assertEqual(canonical.verdict, 'CONFIRMED', 'Confirmed finding must have verdict CONFIRMED');
-  assertEqual(canonical.reasonCode, 'AFFIRMATIVELY_VERIFIED', 'Confirmed finding must have reasonCode AFFIRMATIVELY_VERIFIED');
-  assertEqual(canonical.severity, 'CRITICAL', 'Severity must map to CRITICAL');
-  assertEqual(canonical.findingType, 'VULNERABILITY', 'Finding type must be VULNERABILITY');
-  assertEqual(canonical.proofKind, 'STATIC_TRACE', 'Proof kind must be STATIC_TRACE');
-
-  // Verify bound proof
-  assert(canonical.proof && typeof canonical.proof === 'object', 'Proof must be bound object');
-  assertEqual(canonical.proof.trace.length, 3, 'Proof trace must contain all 3 trace steps');
-  assertEqual(canonical.proof.conditions.length, 1, 'Proof conditions must be preserved');
-  assertEqual(canonical.proof.execution.attacker_perspective, 'Remote anonymous caller', 'Execution perspective bound');
-
-  // Verify defectManagement
-  assert(canonical.defectManagement && typeof canonical.defectManagement === 'object', 'defectManagement must exist');
-  assert(canonical.defectManagement.rootCause.includes('Concatenation'), 'rootCause bound');
-  assert(canonical.defectManagement.preventiveAction.includes('parameterized queries'), 'remediation strategy bound to preventiveAction');
-
-  // Verify extensions.cloudflare preservation
-  assert(canonical.extensions && canonical.extensions.cloudflare, 'extensions.cloudflare must be present');
-  assertEqual(canonical.extensions.cloudflare.attack_class, 'sql_injection', 'attack_class preserved');
-  assertEqual(canonical.extensions.cloudflare.phase, 'Phase-3-Validation', 'phase preserved');
-  assertDeepEqual(canonical.extensions.cloudflare.raw_tokens, ['SELECT', 'FROM', 'users'], 'raw tokens preserved');
-
-  // Validate against canonical-finding.schema.json
-  const errors = validateAgainstSchema(canonical, canonicalSchema);
-  assertEqual(errors.length, 0, `Canonical finding must validate against schema: ${errors.join('; ')}`);
+  // 2. Regression: trustProducerAsAuthority option is deleted; passing it MUST NOT bypass Default-Deny
+  const ignored = toCanonicalFinding(confirmedJson[0], { trustProducerAsAuthority: true });
+  assertEqual(ignored.disposition, 'DEFERRED', 'No boolean option can bypass Default-Deny');
+  assertEqual(ignored.verdict, 'NEEDS_MANUAL_REVIEW', 'Verdict remains NEEDS_MANUAL_REVIEW');
+  assertEqual(ignored.reasonCode, 'UNVERIFIED_CLAIM', 'Reason code remains UNVERIFIED_CLAIM');
+  assertEqual(ignored.consensus.supports, 0, 'No simulated consensus votes manufactured');
+  assertEqual(ignored.extensions.producer.authorityStatus, 'UNASSESSED', 'Authority status remains UNASSESSED');
 });
 
 test('Needs validation finding maps to DEFERRED, NEEDS_MANUAL_REVIEW, EVIDENCE_INCOMPLETE with severity UNRATED', () => {
@@ -497,17 +497,17 @@ test('Quarantine Boundary: Confirmed finding on budget-deferred path is quaranti
   assertEqual(sessionResult.canDeclareClean, false, 'canDeclareClean must be false');
 });
 
-test('Quarantine Boundary: Confirmed finding on complete path retains REPORTABLE on complete ledger when authority granted', () => {
+test('Quarantine Boundary: Confirmed finding on complete path is DEFERRED / UNVERIFIED_CLAIM and forbids clean claim until AGY votes', () => {
   const sessionResult = ingestAuditSession({
     findings: confirmedJson,
     coverageLedger: completeLedgerJson
-  }, { trustProducerAsAuthority: true });
+  });
 
   const finding = sessionResult.canonicalFindings[0];
-  assertEqual(finding.disposition, 'REPORTABLE', 'Confirmed finding on complete ledger is REPORTABLE');
-  assertEqual(finding.verdict, 'CONFIRMED', 'Confirmed finding verdict is CONFIRMED');
-  assertEqual(finding.reasonCode, 'AFFIRMATIVELY_VERIFIED', 'Reason code is AFFIRMATIVELY_VERIFIED');
-  assertEqual(sessionResult.canDeclareClean, false, 'canDeclareClean is false because reportable finding exists');
+  assertEqual(finding.disposition, 'DEFERRED', 'Confirmed finding from producer is DEFERRED under Default-Deny');
+  assertEqual(finding.verdict, 'NEEDS_MANUAL_REVIEW', 'Confirmed finding verdict is NEEDS_MANUAL_REVIEW');
+  assertEqual(finding.reasonCode, 'UNVERIFIED_CLAIM', 'Reason code is UNVERIFIED_CLAIM on complete ledger');
+  assertEqual(sessionResult.canDeclareClean, false, 'canDeclareClean is false because unassessed finding awaits AGY votes');
 });
 
 test('Clean Run Assurance: 0 reportable findings + complete ledger allows canDeclareClean: true', () => {
@@ -844,10 +844,11 @@ test('Edge Case: Unicode / non-ASCII path in trace and coverage ledger correctly
   const session = ingestAuditSession({
     findings: [unicodeFinding],
     coverageLedger: unicodeLedger
-  }, { trustProducerAsAuthority: true });
+  });
 
   const canonical = session.canonicalFindings[0];
-  assertEqual(canonical.disposition, 'REPORTABLE', 'Unicode path finding on complete ledger is REPORTABLE');
+  assertEqual(canonical.disposition, 'DEFERRED', 'Unicode path finding defaults to DEFERRED');
+  assertEqual(canonical.reasonCode, 'UNVERIFIED_CLAIM', 'Unicode path maps to UNVERIFIED_CLAIM on complete ledger');
   assertEqual(canonical.location.uri, 'src/用戶模組/查詢.js', 'Unicode path correctly normalized');
 
   const recovered = toCloudflareFinding(canonical);
@@ -878,11 +879,12 @@ test('Edge Case: Path normalization with .. traversal and leading slash correctl
   const session = ingestAuditSession({
     findings: [traversalFinding],
     coverageLedger: completeLedgerJson // has src/services/db.js
-  }, { trustProducerAsAuthority: true });
+  });
 
   const canonical = session.canonicalFindings[0];
   assertEqual(canonical.location.uri, 'src/services/db.js', 'Path normalized to canonical relative form');
-  assertEqual(canonical.disposition, 'REPORTABLE', 'Normalized path matched covered ledger path');
+  assertEqual(canonical.disposition, 'DEFERRED', 'Producer finding defaults to DEFERRED');
+  assertEqual(canonical.reasonCode, 'UNVERIFIED_CLAIM', 'Normalized path matched covered ledger path');
 });
 
 test('Edge Case: Deeply nested companion blocks in coverage ledger ingested without corruption', () => {
@@ -1073,8 +1075,8 @@ test('Roundtrip: Uppercase/mixed-case original verdict preserves all fields with
     confidence: { score: 'high' }
   };
 
-  const canonical = toCanonicalFinding(caseFinding, { trustProducerAsAuthority: true });
-  assertEqual(canonical.disposition, 'REPORTABLE', 'Confirmed finding must be REPORTABLE when authority granted');
+  const canonical = toCanonicalFinding(caseFinding);
+  assertEqual(canonical.disposition, 'DEFERRED', 'Confirmed finding defaults to DEFERRED');
 
   const recovered = toCloudflareFinding(canonical);
   assertEqual(recovered.verdict, 'confirmed', 'Recovered verdict must normalize to lowercase confirmed');
@@ -1303,8 +1305,8 @@ test('Schema Integrity: Finding with non-string attack_class and non-string subs
     confidence: { score: 'high' }
   };
 
-  const canonical = toCanonicalFinding(nonStringFinding, { trustProducerAsAuthority: true });
-  assertEqual(canonical.disposition, 'REPORTABLE', 'Must convert without error');
+  const canonical = toCanonicalFinding(nonStringFinding);
+  assertEqual(canonical.disposition, 'DEFERRED', 'Must convert without error to DEFERRED');
   const canErrors = validateAgainstSchema(canonical, canonicalSchema);
   assertEqual(canErrors.length, 0, `Canonical schema errors: ${canErrors.join('; ')}`);
 
@@ -1338,11 +1340,11 @@ test('CVSS Invariant: Numeric CVSS score correctly maps to CRITICAL or HIGH', ()
   assertEqual(mapCloudflareSeverity({ score: 7.5 }), 'HIGH', '7.5 maps to HIGH');
   assertEqual(mapCloudflareSeverity({ score: '5.2' }), 'MEDIUM', '5.2 string maps to MEDIUM');
   assertEqual(mapCloudflareSeverity(2.1), 'LOW', '2.1 maps to LOW');
-  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-1', severity: 9.8 }, { trustProducerAsAuthority: true }).severity, 'CRITICAL', '9.8 maps to CRITICAL under authority override');
-  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-2', severity: { score: 7.5 } }, { trustProducerAsAuthority: true }).severity, 'HIGH', '7.5 maps to HIGH under authority override');
-  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-3', severity: { score: '5.2' } }, { trustProducerAsAuthority: true }).severity, 'MEDIUM', '5.2 string maps to MEDIUM under authority override');
-  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-4', severity: 2.1 }, { trustProducerAsAuthority: true }).severity, 'LOW', '2.1 maps to LOW under authority override');
-  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-5', severity: 9.8 }).severity, 'UNRATED', 'Without authority override, canonical severity is UNRATED');
+  assertEqual(toCandidate({ ...confirmedJson[0], fingerprint: 'cf-cvss-1', severity: 9.8 }).severity, 'CRITICAL', '9.8 maps to CRITICAL in candidate set');
+  assertEqual(toCandidate({ ...confirmedJson[0], fingerprint: 'cf-cvss-2', severity: { score: 7.5 } }).severity, 'HIGH', '7.5 maps to HIGH in candidate set');
+  assertEqual(toCandidate({ ...confirmedJson[0], fingerprint: 'cf-cvss-3', severity: { score: '5.2' } }).severity, 'MEDIUM', '5.2 string maps to MEDIUM in candidate set');
+  assertEqual(toCandidate({ ...confirmedJson[0], fingerprint: 'cf-cvss-4', severity: 2.1 }).severity, 'LOW', '2.1 maps to LOW in candidate set');
+  assertEqual(toCanonicalFinding({ ...confirmedJson[0], fingerprint: 'cf-cvss-5', severity: 9.8 }).severity, 'UNRATED', 'Canonical severity is strictly UNRATED without AGY verifier votes');
 });
 
 test('Adversarial: Trace or evidence with non-positive line number is rejected from verifier proof', () => {

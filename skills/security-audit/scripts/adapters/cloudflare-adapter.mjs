@@ -478,34 +478,20 @@ export function toCanonicalFinding(raw, options = {}) {
   let findingType = 'VULNERABILITY';
 
   // R1 Requirement Mapping
-  // R1 Requirement Mapping
   // Default-Deny Authority Invariant:
   // An upstream producer's confirmed verdict is an unassessed producer claim until AGY independent verifiers vote.
-  // Unless options.trustProducerAsAuthority === true is explicitly requested, confirmed findings map to
-  // DEFERRED / NEEDS_MANUAL_REVIEW / UNVERIFIED_CLAIM, preserving the producer's claim in extensions.producer.
+  // Producer findings strictly map to DEFERRED / NEEDS_MANUAL_REVIEW / UNVERIFIED_CLAIM, preserving the producer's claim in extensions.
   const isAffirmativelyVerified = hasConclusiveVerifierProof(raw, loc);
-  const trustProducerAsAuthority = Boolean(options.trustProducerAsAuthority);
 
   if (verdictRaw === 'confirmed') {
-    if (trustProducerAsAuthority && isAffirmativelyVerified) {
-      disposition = 'REPORTABLE';
-      verdict = 'CONFIRMED';
-      reasonCode = 'AFFIRMATIVELY_VERIFIED';
-      dispositionReason = raw.dispositionReason || 'Affirmatively verified by independent verifier with reproducible execution trace (explicit authority grant).';
-      severity = mapCloudflareSeverity(raw.severity);
-      if (typeof raw.severity === 'object' && raw.severity?.overall_severity === 'informational') {
-        findingType = 'INFORMATIONAL';
-      }
-    } else {
-      // Ingested producer-confirmed finding awaiting AGY authority
-      disposition = 'DEFERRED';
-      verdict = 'NEEDS_MANUAL_REVIEW';
-      reasonCode = isAffirmativelyVerified ? 'UNVERIFIED_CLAIM' : 'EVIDENCE_INCOMPLETE';
-      severity = 'UNRATED';
-      dispositionReason = raw.dispositionReason || (isAffirmativelyVerified
-        ? `Producer-Claim: Finding '${fingerprint}' was confirmed by Cloudflare verifier, but AGY independent verification is pending; quarantined to DEFERRED under Default-Deny.`
-        : `Presumption of Non-Pass: Finding '${fingerprint}' claimed confirmed verdict but lacks conclusive affirmative verifier proof or physical code location; downgraded to DEFERRED under Default-Deny.`);
-    }
+    // Ingested producer-confirmed finding awaiting AGY authority
+    disposition = 'DEFERRED';
+    verdict = 'NEEDS_MANUAL_REVIEW';
+    reasonCode = isAffirmativelyVerified ? 'UNVERIFIED_CLAIM' : 'EVIDENCE_INCOMPLETE';
+    severity = 'UNRATED';
+    dispositionReason = raw.dispositionReason || (isAffirmativelyVerified
+      ? `Producer-Claim: Finding '${fingerprint}' was confirmed by Cloudflare verifier, but AGY independent verification is pending; quarantined to DEFERRED under Default-Deny.`
+      : `Presumption of Non-Pass: Finding '${fingerprint}' claimed confirmed verdict but lacks conclusive affirmative verifier proof or physical code location; downgraded to DEFERRED under Default-Deny.`);
   } else if (verdictRaw === 'needs_validation') {
     // Cloudflare severity-omission invariant: strictly UNRATED
     if (raw.severity !== undefined && raw.severity !== null) {
@@ -570,13 +556,11 @@ export function toCanonicalFinding(raw, options = {}) {
   }
 
   // Consensus modeling under Default-Deny:
-  // Adapter NEVER manufactures simulated AGY consensus unless explicitly in trusted override mode.
+  // Adapter NEVER manufactures simulated AGY consensus votes.
   const consensus = raw.consensus && typeof raw.consensus === 'object' ? raw.consensus : (
-    trustProducerAsAuthority && verdictRaw === 'confirmed' && disposition === 'REPORTABLE'
-      ? { supports: 3, refutes: 0, totalVotes: 3, unanimous: true, source: 'cloudflare-verifier' }
-      : verdictRaw === 'rejected'
-        ? { supports: 0, refutes: 1, totalVotes: 1, unanimous: false, source: 'cloudflare-verifier' }
-        : { supports: 0, refutes: 0, totalVotes: 0, unanimous: false, source: 'cloudflare-unassessed' }
+    verdictRaw === 'rejected'
+      ? { supports: 0, refutes: 1, totalVotes: 1, unanimous: false, source: 'cloudflare-verifier' }
+      : { supports: 0, refutes: 0, totalVotes: 0, unanimous: false, source: 'cloudflare-unassessed' }
   );
 
   // Security property inference
@@ -644,7 +628,7 @@ export function toCanonicalFinding(raw, options = {}) {
       claimedVerdict: raw.verdict,
       claimedSeverity: raw.severity ? (typeof raw.severity === 'string' ? raw.severity.toUpperCase() : (raw.severity.overall_severity || 'UNRATED').toUpperCase()) : 'UNRATED',
       claimedVerification: isAffirmativelyVerified ? 'VERIFIED_BY_PRODUCER' : 'UNVERIFIED_BY_PRODUCER',
-      authorityStatus: (trustProducerAsAuthority && disposition === 'REPORTABLE') ? 'AUTHORIZED_OVERRIDE' : 'UNASSESSED',
+      authorityStatus: 'UNASSESSED',
       verifierProofPresent: isAffirmativelyVerified,
       ruleId: raw.ruleId || raw.rule_id || null,
       attackClass: raw.attack_class || null
@@ -653,6 +637,8 @@ export function toCanonicalFinding(raw, options = {}) {
       ...raw,
       fingerprint,
       original_verdict: raw.verdict,
+      verdict: raw.verdict,
+      verification: isAffirmativelyVerified ? 'independently_verified' : 'unverified',
       attack_class: raw.attack_class || null,
       phase: raw.phase || null,
       raw_tokens: raw.raw_tokens || raw.tokens || null,
@@ -1252,8 +1238,9 @@ export function ingestAuditSession({ findings, coverageLedger }, options = {}) {
 
   // Overall clean declaration gate
   const reportableCount = findingsResult.summary.findingCounts.reportable;
+  const deferredCount = findingsResult.summary.findingCounts.deferred;
   const coverageAllowsClean = coverageResult ? coverageResult.canDeclareClean : false;
-  const canDeclareClean = Boolean(coverageAllowsClean && reportableCount === 0);
+  const canDeclareClean = Boolean(coverageAllowsClean && reportableCount === 0 && deferredCount === 0);
 
   return canonicalizeJson({
     schemaVersion: SCHEMA_VERSION,
@@ -1267,7 +1254,7 @@ export function ingestAuditSession({ findings, coverageLedger }, options = {}) {
       canDeclareClean,
       assuranceReason: canDeclareClean
         ? 'Bounded Clean Assurance: 0 reportable findings and complete ledger coverage.'
-        : `Default-Deny Active: canDeclareClean=false (reportableFindings=${reportableCount}, coverage=${coverageResult ? coverageResult.coverageStatus : 'UNCHECKABLE'}).`
+        : `Default-Deny Active: canDeclareClean=false (reportableFindings=${reportableCount}, deferredFindings=${deferredCount}, coverage=${coverageResult ? coverageResult.coverageStatus : 'UNCHECKABLE'}).`
     }
   });
 }
