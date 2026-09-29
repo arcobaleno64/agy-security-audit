@@ -38,8 +38,13 @@
         },
         {
           "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "2f064eb1158e96c8d4fef3669cd3d473d14457241669ba65ed9c66c8ff623681",
+          "sha256": "9fc2ece7896d61db53833505866413cd3a95314a3e934bcae3532aae720ed1a8",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
+        },
+        {
+          "path": "skills/security-audit/scripts/adapters/cloudflare-adapter.mjs",
+          "sha256": "781d037373b1790329c0dea5eeabb0a6d11f495328faa189ced01caabe2b7005",
+          "description": "Cloudflare Finding Producer Adapter (lossless canonical translation, quarantine boundary, zero external dependencies)"
         },
         {
           "path": "scripts/test-runtime-confinement.mjs",

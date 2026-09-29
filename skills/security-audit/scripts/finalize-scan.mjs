@@ -4345,6 +4345,7 @@ export function renderMarkdownFromCanonical({
  * Canonical required critical scripts set (R6-P1-01 / v1.1.0 P0/P1).
  */
 export const REQUIRED_CRITICAL_SCRIPTS = [
+  'scripts/adapters/cloudflare-adapter.mjs',
   'scripts/safe-git.mjs',
   'scripts/finalize-scan.mjs',
   'scripts/build-inventory.mjs',
@@ -4728,20 +4729,11 @@ export function loadVotes(votesPath, options = {}) {
 // -----------------------------------------------------------------------------
 /**
  * Loads the Cloudflare adapter dynamically for producer ingestion.
+ * Strictly bound to tool-controlled TCB path; never loads from audited repoRoot.
  */
-export async function loadCloudflareAdapter(repoRoot = process.cwd()) {
-  const candidatePaths = [
-    fileURLToPath(new URL('../../../scripts/adapters/cloudflare-adapter.mjs', import.meta.url)),
-    path.resolve(repoRoot, 'scripts/adapters/cloudflare-adapter.mjs'),
-    fileURLToPath(new URL('./cloudflare-adapter.mjs', import.meta.url))
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      const url = new URL(`file://${path.resolve(p).replace(/\\/g, '/')}`).href;
-      return await import(url);
-    }
-  }
-  throw new Error(`Cloudflare adapter not found in candidate paths: ${candidatePaths.join(', ')}`);
+export async function loadCloudflareAdapter(_repoRoot = null) {
+  const adapterUrl = new URL('./adapters/cloudflare-adapter.mjs', import.meta.url);
+  return await import(adapterUrl.href);
 }
 
 // -----------------------------------------------------------------------------
@@ -4851,13 +4843,13 @@ if (isDirectExecution) {
 
       let cloudflareCoverage = null;
       if (importCloudflareCoverageArg && fs.existsSync(importCloudflareCoverageArg)) {
-        const adapter = await loadCloudflareAdapter(repoRoot);
+        const adapter = await loadCloudflareAdapter();
         cloudflareCoverage = adapter.ingestCoverageLedger(importCloudflareCoverageArg);
         console.log(`✔ Ingested Cloudflare coverage ledger: ${importCloudflareCoverageArg} (Status: ${cloudflareCoverage.coverageStatus})`);
       }
 
       if (importCloudflareFindingsArg && fs.existsSync(importCloudflareFindingsArg)) {
-        const adapter = await loadCloudflareAdapter(repoRoot);
+        const adapter = await loadCloudflareAdapter();
         const cfCandidateSet = adapter.toCandidateSet(importCloudflareFindingsArg, {
           coverageLedgerResult: cloudflareCoverage
         });

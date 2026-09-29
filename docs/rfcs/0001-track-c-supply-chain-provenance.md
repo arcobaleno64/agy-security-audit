@@ -20,12 +20,12 @@ The `agy-security-audit` plugin provides automated security auditing under a str
 - **CROSS_PROVIDER_REPLICATION (Milestone G8-R)**: Contemporaneous cross-system replication (Gemini vs Claude Sonnet).
 - **EXTERNAL_OSS_TRANSFER (Milestone G7-R)**: Live full-repository transfer across isolated historical open-source CVE snapshots.
 
-In milestone v1.7.2, all five dimensions reached `SUPPORTED` status, supported by 50 physical artifact references and 10 tool integrity script hashes.
+In milestone v1.7.2, all five dimensions reached `SUPPORTED` status, supported by 50 physical artifact references and 10 tool integrity script hashes (expanded to 11 critical scripts in v1.9.2 with Cloudflare Producer Adapter inclusion).
 
 ### 1.2 The Supply-Chain Boundary in v1.7.2
 The integrity assurance in v1.7.2 is anchored by:
 1. `SHA256SUMS.txt`: Cryptographic digest listing of 17 staged payload assets.
-2. `skills/security-audit/tool-integrity-manifest.json`: SHA-256 hashes of 10 critical security scripts.
+2. `skills/security-audit/tool-integrity-manifest.json`: SHA-256 hashes of critical security scripts (11 scripts pinned in TCB).
 3. `evals/evidence-matrix.json`: Machine-readable matrix locking 50 physical artifact digests.
 
 **The Architectural Gap**:
@@ -46,7 +46,7 @@ Track C establishes three complementary, non-overlapping assurance layers:
 flowchart TD
     subgraph Layer_1 ["Layer 1: Content Integrity"]
         L1A["SHA256SUMS.txt (17 Staged Assets)"]
-        L1B["tool-integrity-manifest.json (10 Critical Scripts)"]
+        L1B["tool-integrity-manifest.json (Critical TCB Scripts)"]
         L1C["evidence-matrix.json (50 Artifact Hashes)"]
         L1A --- L1B --- L1C
         L1_Desc["Guarantee: Bit-for-bit file integrity once digests are known.<br/>Scope: Local, offline, self-contained verification (0 npm dependencies)."]

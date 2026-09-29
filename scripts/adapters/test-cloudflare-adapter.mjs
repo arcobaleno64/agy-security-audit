@@ -583,17 +583,25 @@ test('Proves run-to-run bitwise identity across 10 repeated executions', () => {
 // -----------------------------------------------------------------------------
 
 test('Adapter imports strictly zero external npm dependencies (Node.js ESM built-ins only)', () => {
-  const adapterSource = fs.readFileSync(path.join(REPO_ROOT, 'scripts/adapters/cloudflare-adapter.mjs'), 'utf8');
-  const importLines = adapterSource.match(/^import\s+.*?from\s+['"].*?['"]/gm) || [];
+  const targetFiles = [
+    path.join(REPO_ROOT, 'scripts/adapters/cloudflare-adapter.mjs'),
+    path.join(REPO_ROOT, 'skills/security-audit/scripts/adapters/cloudflare-adapter.mjs')
+  ];
 
-  for (const line of importLines) {
-    const match = line.match(/from\s+['"](.*?)['"]/);
-    assert(match, `Invalid import statement: ${line}`);
-    const moduleSpecifier = match[1];
-    assert(
-      moduleSpecifier.startsWith('node:') || moduleSpecifier.startsWith('.'),
-      `Disallowed external npm import '${moduleSpecifier}'. Must be 'node:*' or local relative import.`
-    );
+  for (const file of targetFiles) {
+    assert(fs.existsSync(file), `Expected adapter file to exist: ${file}`);
+    const adapterSource = fs.readFileSync(file, 'utf8');
+    const importLines = adapterSource.match(/^import\s+.*?from\s+['"].*?['"]/gm) || [];
+
+    for (const line of importLines) {
+      const match = line.match(/from\s+['"](.*?)['"]/);
+      assert(match, `Invalid import statement: ${line}`);
+      const moduleSpecifier = match[1];
+      assert(
+        moduleSpecifier.startsWith('node:') || moduleSpecifier.startsWith('.'),
+        `Disallowed external npm import '${moduleSpecifier}' in ${file}. Must be 'node:*' or local relative import.`
+      );
+    }
   }
 });
 
