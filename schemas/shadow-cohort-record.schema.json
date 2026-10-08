@@ -1,0 +1,368 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://antigravity.google/schemas/security-audit/shadow-cohort-record.schema.json",
+  "title": "ShadowCohortRecord",
+  "description": "Measurement contract schema for Fresh Shadow Cohort (10-15 cases) and future Blocking Promotion Cohort (20-30+ cases) conforming to RFC 0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordId",
+    "recordedAt",
+    "targetChange",
+    "humanOracle",
+    "expectedSecurityRelevance",
+    "toolFinding",
+    "confidenceState",
+    "evidenceProvenance",
+    "toolClaimedState",
+    "evaluatorAdjudication",
+    "outcomeClassification"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1", "1.0.0"]
+    },
+    "recordId": {
+      "type": "string",
+      "description": "Unique identifier for the shadow cohort observation record (e.g. SHADOW-001)."
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of record capture."
+    },
+    "targetChange": {
+      "type": "object",
+      "description": "Target pull request, commit, or patch under review.",
+      "required": [
+        "repositoryUri",
+        "changeRef",
+        "commitSha",
+        "changeKind"
+      ],
+      "properties": {
+        "repositoryUri": {
+          "type": "string"
+        },
+        "changeRef": {
+          "type": "string",
+          "description": "Reference label, e.g. PR #123, commit hash, or patch name."
+        },
+        "commitSha": {
+          "type": "string"
+        },
+        "changeKind": {
+          "type": "string",
+          "enum": ["PULL_REQUEST", "COMMIT", "PATCH", "SYNTHETIC_DIFF"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "primaryLanguage": {
+          "type": "string"
+        }
+      }
+    },
+    "humanOracle": {
+      "type": "object",
+      "description": "Human security expert or Ground Truth determination. Strictly forbidden from defaulting missing oracle to CLEAN.",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED_VULNERABLE",
+            "CONFIRMED_CLEAN",
+            "SECURITY_IRRELEVANT",
+            "PENDING_REVIEW",
+            "DISPUTED",
+            "UNAVAILABLE"
+          ]
+        },
+        "reviewer": {
+          "type": ["string", "null"]
+        },
+        "rationale": {
+          "type": ["string", "null"]
+        },
+        "adjudicatedAt": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "expectedSecurityRelevance": {
+      "type": "string",
+      "description": "Expected security relevance of the target change according to the Ground Truth hierarchy.",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "NONE",
+        "UNKNOWN",
+        "DISPUTED"
+      ]
+    },
+    "toolFinding": {
+      "type": "object",
+      "description": "Findings observed by agy-security-audit during review.",
+      "required": [
+        "observed",
+        "findingsCount"
+      ],
+      "properties": {
+        "observed": {
+          "type": "boolean"
+        },
+        "findingsCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findingIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ruleFamilies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "confidenceState": {
+      "type": "string",
+      "description": "Confidence state derived by the multi-lens verification and evidence binding.",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "DEGRADED",
+        "UNVERIFIED"
+      ]
+    },
+    "evidenceProvenance": {
+      "type": "object",
+      "description": "Provenance conditions required to evaluate authority integrity.",
+      "required": [
+        "reviewScopeCompleted",
+        "unresolvedEvidenceGaps",
+        "executionDegraded",
+        "provenanceComplete"
+      ],
+      "properties": {
+        "reviewScopeCompleted": {
+          "type": "boolean",
+          "description": "True if 100% of the target diff/repository review scope was accounted for."
+        },
+        "unresolvedEvidenceGaps": {
+          "type": "boolean",
+          "description": "True if any evidence gap, unresolvable sink, or skipped path exists."
+        },
+        "executionDegraded": {
+          "type": "boolean",
+          "description": "True if runtime confinement, subagent timeouts, or tool fallbacks occurred."
+        },
+        "provenanceComplete": {
+          "type": "boolean",
+          "description": "True if execution attestation and verifiable line bindings are unbroken."
+        },
+        "executionAttestationRef": {
+          "type": ["string", "null"]
+        },
+        "sarifLogRef": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "toolClaimedState": {
+      "type": "string",
+      "description": "The authority state or finding disposition claimed by the tool during execution.",
+      "enum": [
+        "CLEAN",
+        "UNVERIFIED",
+        "NO_FINDING_OBSERVED",
+        "VULNERABILITIES_REPORTED"
+      ]
+    },
+    "evaluatorAdjudication": {
+      "type": "string",
+      "description": "Authoritative adjudication determined by external ground-truth evaluation under RFC 0003.",
+      "enum": [
+        "CLEAN",
+        "UNVERIFIED",
+        "NO_FINDING_OBSERVED",
+        "CONFIRMED_VULNERABLE",
+        "DISPUTED",
+        "PENDING_ORACLE"
+      ]
+    },
+    "outcomeClassification": {
+      "type": "string",
+      "description": "Evaluation outcome comparing toolClaimedState against ground truth. Distinguishes FALSE_ADVANCE from passive false negatives.",
+      "enum": [
+        "TRUE_POSITIVE",
+        "TRUE_NEGATIVE",
+        "FALSE_POSITIVE",
+        "FALSE_NEGATIVE",
+        "FALSE_ADVANCE",
+        "UNRESOLVED_PENDING_ORACLE",
+        "UNRESOLVED_EVIDENCE_GAP",
+        "FAIL_CLOSED_DEGRADED"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "description": "Cross-Field Rule 1: Pending/unresolved Human Oracle strictly forbids CLEAN adjudication and resolved outcome classifications.",
+      "if": {
+        "properties": {
+          "humanOracle": {
+            "properties": {
+              "status": {
+                "enum": ["PENDING_REVIEW", "DISPUTED", "UNAVAILABLE"]
+              }
+            },
+            "required": ["status"]
+          }
+        },
+        "required": ["humanOracle"]
+      },
+      "then": {
+        "properties": {
+          "evaluatorAdjudication": {
+            "not": { "const": "CLEAN" }
+          },
+          "outcomeClassification": {
+            "enum": [
+              "UNRESOLVED_PENDING_ORACLE",
+              "UNRESOLVED_EVIDENCE_GAP",
+              "FAIL_CLOSED_DEGRADED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "Cross-Field Rule 2: Incomplete scope, unresolved evidence gaps, degraded execution, or broken provenance strictly forbids CLEAN adjudication and TRUE_NEGATIVE.",
+      "if": {
+        "properties": {
+          "evidenceProvenance": {
+            "anyOf": [
+              { "properties": { "reviewScopeCompleted": { "const": false } }, "required": ["reviewScopeCompleted"] },
+              { "properties": { "unresolvedEvidenceGaps": { "const": true } }, "required": ["unresolvedEvidenceGaps"] },
+              { "properties": { "executionDegraded": { "const": true } }, "required": ["executionDegraded"] },
+              { "properties": { "provenanceComplete": { "const": false } }, "required": ["provenanceComplete"] }
+            ]
+          }
+        },
+        "required": ["evidenceProvenance"]
+      },
+      "then": {
+        "properties": {
+          "evaluatorAdjudication": {
+            "not": { "const": "CLEAN" }
+          },
+          "outcomeClassification": {
+            "not": { "const": "TRUE_NEGATIVE" }
+          }
+        }
+      }
+    },
+    {
+      "description": "Cross-Field Rule 3: Confirmed vulnerable target with tool claiming CLEAN is classified as FALSE_ADVANCE and forbids CLEAN evaluator adjudication.",
+      "if": {
+        "properties": {
+          "humanOracle": {
+            "properties": {
+              "status": { "const": "CONFIRMED_VULNERABLE" }
+            },
+            "required": ["status"]
+          },
+          "toolClaimedState": {
+            "const": "CLEAN"
+          }
+        },
+        "required": ["humanOracle", "toolClaimedState"]
+      },
+      "then": {
+        "properties": {
+          "outcomeClassification": {
+            "const": "FALSE_ADVANCE"
+          },
+          "evaluatorAdjudication": {
+            "not": { "const": "CLEAN" }
+          }
+        }
+      }
+    },
+    {
+      "description": "Cross-Field Rule 4: Confirmed vulnerable target with tool claiming NO_FINDING_OBSERVED is classified as FALSE_NEGATIVE or FALSE_ADVANCE and forbids CLEAN evaluator adjudication.",
+      "if": {
+        "properties": {
+          "humanOracle": {
+            "properties": {
+              "status": { "const": "CONFIRMED_VULNERABLE" }
+            },
+            "required": ["status"]
+          },
+          "toolClaimedState": {
+            "const": "NO_FINDING_OBSERVED"
+          }
+        },
+        "required": ["humanOracle", "toolClaimedState"]
+      },
+      "then": {
+        "properties": {
+          "outcomeClassification": {
+            "enum": ["FALSE_ADVANCE", "FALSE_NEGATIVE"]
+          },
+          "evaluatorAdjudication": {
+            "not": { "const": "CLEAN" }
+          }
+        }
+      }
+    },
+    {
+      "description": "Cross-Field Rule 5: Evaluator adjudication of CLEAN requires confirmed clean Oracle and complete, non-degraded evidence provenance.",
+      "if": {
+        "properties": {
+          "evaluatorAdjudication": { "const": "CLEAN" }
+        },
+        "required": ["evaluatorAdjudication"]
+      },
+      "then": {
+        "properties": {
+          "humanOracle": {
+            "properties": {
+              "status": { "const": "CONFIRMED_CLEAN" }
+            },
+            "required": ["status"]
+          },
+          "evidenceProvenance": {
+            "properties": {
+              "reviewScopeCompleted": { "const": true },
+              "unresolvedEvidenceGaps": { "const": false },
+              "executionDegraded": { "const": false },
+              "provenanceComplete": { "const": true }
+            },
+            "required": [
+              "reviewScopeCompleted",
+              "unresolvedEvidenceGaps",
+              "executionDegraded",
+              "provenanceComplete"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

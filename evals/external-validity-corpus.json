@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "schemaVersion": "1.0.0",
+  "corpusId": "EXTERNAL-VALIDITY-CORPUS-V1",
+  "title": "External Validity Corpus Manifest (Planning Skeleton)",
+  "description": "Planned external validity corpus evaluating discrimination between vulnerable and remediated versions under RFC 0003, with explicit recorded coverage gaps.",
+  "planningStatus": "SKELETON_PLANNED",
+  "authorityClaim": "NONE",
+  "cleanControlCapabilityClaim": "NOT_ESTABLISHED",
+  "metricsSummary": {
+    "plannedTotalCases": 16,
+    "plannedPairedGroups": 8,
+    "verifiedCasesCount": 0,
+    "verifiedPairsCount": 0,
+    "independentCleanControlsCount": 0,
+    "independentCleanControlsPlanned": 4,
+    "completionRatio": 0.0,
+    "recordedCoverageGaps": [
+      "INDEPENDENT_CLEAN_CONTROLS",
+      "NATIVE_MEMORY_PARSER_SAFETY",
+      "SECRETS_AND_INFRASTRUCTURE_CONFIG",
+      "DEPENDENCY_AND_SUPPLY_CHAIN"
+    ],
+    "note": "Corpus scale is a planning envelope, not completion evidence. The current 8 pairs evaluate paired vulnerable vs remediated discrimination only. Clean-control capability and native/supply-chain coverage remain recorded gaps."
+  },
+  "coverageGapsAndLimitations": {
+    "independentCleanControls": {
+      "status": "GAP_RECORDED_NOT_ESTABLISHED",
+      "plannedCount": 4,
+      "description": "The current 16 cases evaluate vulnerable vs remediated diff pairs. Standalone clean negative controls (codebases without prior CVEs or recent security patches) are not yet included. Clean-control capability claims remain UNVERIFIED and NOT_ESTABLISHED until independent clean controls are integrated."
+    },
+    "uncoveredVulnerabilityFacets": {
+      "nativeParsers": {
+        "status": "GAP_RECORDED",
+        "description": "Uncovered in this cohort: C/C++ native buffer bounds, pointer lifetimes, null pointer dereferences, sliding-window parser state machines."
+      },
+      "secretsAndConfiguration": {
+        "status": "GAP_RECORDED",
+        "description": "Uncovered in this cohort: hardcoded secrets, IAM privilege creep, cloud resource misconfigurations, and container runtime settings."
+      },
+      "dependencyAndSupplyChain": {
+        "status": "GAP_RECORDED",
+        "description": "Uncovered in this cohort: dependency confusion, lockfile poisoning, typosquatting, and CI/CD workflow pipeline tampering."
+      }
+    }
+  },
+  "pairs": [
+    {
+      "pairId": "PAIR-01",
+      "vulnerabilityFamily": "PATH_TRAVERSAL",
+      "cwe": "CWE-22",
+      "language": "JavaScript / Node.js",
+      "hypothesis": "Engine detects unconfined path join in vulnerable version; suppresses false positive in remediated version with path.relative confinement.",
+      "vulnerableCase": {
+        "caseId": "EVC-01-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-01-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-02",
+      "vulnerabilityFamily": "PROTOTYPE_POLLUTION",
+      "cwe": "CWE-1321",
+      "language": "JavaScript / TypeScript",
+      "hypothesis": "Engine identifies recursive property assignment without __proto__/constructor barrier; refrains from flagging once key blocking is implemented.",
+      "vulnerableCase": {
+        "caseId": "EVC-02-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-02-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-03",
+      "vulnerabilityFamily": "SERVER_SIDE_REQUEST_FORGERY",
+      "cwe": "CWE-918",
+      "language": "JavaScript / Python",
+      "hypothesis": "Engine traces untrusted URL to HTTP fetch sink without IP pinning; suppresses when DNS rebinding & private IP validator barrier is present.",
+      "vulnerableCase": {
+        "caseId": "EVC-03-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-03-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-04",
+      "vulnerabilityFamily": "COMMAND_INJECTION",
+      "cwe": "CWE-78",
+      "language": "Node.js / Shell",
+      "hypothesis": "Engine catches shell concatenation via child_process.exec; passes remediated parameter array via execFile/spawn safely.",
+      "vulnerableCase": {
+        "caseId": "EVC-04-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-04-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-05",
+      "vulnerabilityFamily": "AUTHORIZATION_BYPASS",
+      "cwe": "CWE-285",
+      "language": "TypeScript / Express / Go",
+      "hypothesis": "Engine catches missing tenancy check on object lookup; confirms remediation when tenantId scoping guard is enforced in query predicate.",
+      "vulnerableCase": {
+        "caseId": "EVC-05-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-05-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-06",
+      "vulnerabilityFamily": "SQL_INJECTION",
+      "cwe": "CWE-89",
+      "language": "JavaScript / SQL",
+      "hypothesis": "Engine identifies raw string interpolation in database query sink; confirms safety when parameterized query or ORM prepared statement is used.",
+      "vulnerableCase": {
+        "caseId": "EVC-06-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-06-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-07",
+      "vulnerabilityFamily": "CONFUSED_DEPUTY",
+      "cwe": "CWE-441",
+      "language": "JavaScript / Cloudflare Workers",
+      "hypothesis": "Engine detects ambient credential forwarded to unauthenticated third-party destination; confirms fix when destination identity is validated before credential attachment.",
+      "vulnerableCase": {
+        "caseId": "EVC-07-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-07-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    },
+    {
+      "pairId": "PAIR-08",
+      "vulnerabilityFamily": "TOCTOU_RACE_CONDITION",
+      "cwe": "CWE-367",
+      "language": "Node.js / Systems",
+      "hypothesis": "Engine spots check-then-act gap on filesystem resource; verifies remediation when atomic file descriptor operation (O_EXCL / fstat) is adopted.",
+      "vulnerableCase": {
+        "caseId": "EVC-08-VULN",
+        "role": "VULNERABLE",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      },
+      "fixedCase": {
+        "caseId": "EVC-08-FIXED",
+        "role": "REMEDIATED_FIXED",
+        "cveId": "[PENDING_SELECTION]",
+        "targetRepository": "[PENDING_SELECTION]",
+        "commitSha": "[PENDING_SELECTION]",
+        "humanOracleStatus": "PENDING_SELECTION",
+        "verificationStatus": "UNVERIFIED"
+      }
+    }
+  ]
+}
