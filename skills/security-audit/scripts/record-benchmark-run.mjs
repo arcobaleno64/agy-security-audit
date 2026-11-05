@@ -452,12 +452,21 @@ export function parseStreamJsonTrace(rawNdjson) {
     };
   }
 
-  if (!hasResultEvent && !rawResponse.trim()) {
+  if (!hasResultEvent) {
     return {
       success: false,
       telemetry,
       rawResponse,
-      error: 'NDJSON stream terminated prematurely without result event or response text'
+      error: 'CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event'
+    };
+  }
+
+  if (!rawResponse.trim()) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: 'CENSORED_EXPOSURE: NDJSON stream completed with empty response text'
     };
   }
 

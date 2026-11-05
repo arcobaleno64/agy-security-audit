@@ -39,13 +39,15 @@ flowchart TD
   3. Enforce deterministic rejection (`exitCode: 2`, `terminationBehavior: "terminate"`) when secrets are detected.
   4. **Value**: Zero-token leak prevention and fail-closed secret containment.
 
-### Workstream 2: Agent Client Protocol (`agy acp`) Stdio Bridge
-- **Background**: AGY 1.5.1 provides the Agent Client Protocol (`agy acp`), a standardized JSON-RPC stdio protocol for editor integrations.
-- **Implementation Goal**:
-  1. Create `scripts/adapters/acp-stdio-bridge.mjs`.
-  2. Map incoming editor file events directly to `security-audit` subagents (`discovery-agent`, `threat-modeler`, `verifier-*`).
-  3. Stream partial SARIF 2.1.0 diagnostics back to the client editor in real time.
-  4. **Value**: Seamless developer ergonomics with inline vulnerability squiggles in VS Code and Antigravity IDE.
+### Workstream 2: Agent Client Protocol (`agy acp`) Native Integration
+- **Background**: AGY 1.5.1 provides the Agent Client Protocol (`agy acp`), a standardized JSON-RPC 2.0 stdio protocol for IDE and client integrations.
+- **Empirical Architectural Decision (M54-P1-F04 Closure)**:
+  1. **Native Priority**: Direct integration with the native `agy acp --stdio` server. No external custom bridge layer (`acp-stdio-bridge.mjs`) is required because native ACP already supports full session lifecycle (`loadSession`, `session/new`, `session/list`, `session/update`) and dynamic model/effort configuration (13 distinct model/effort profiles).
+  2. **Protocol Boundary Distinction**:
+     - **Real-Time Editor Interface Protocol**: Native ACP JSON-RPC 2.0 over stdio.
+     - **Static Analysis & Compliance Exchange Format**: SARIF 2.1.0 standard.
+     - SARIF is an archival and exchange format, never an interactive editor communication protocol.
+  3. **Verification**: Live JSON-RPC handshake, capability negotiation, and session creation verified empirically and captured in `docs/rfcs/0004-acp-native-protocol-spike-report.md` and `evals/protocols/acp-stdio-probe-record.json`.
 
 ### Workstream 3: Formalized 3-Tier Effort Orchestration (`low` | `medium` | `high`)
 - **Background**: Verified live across `SEM-01` and `SEM-08`:
@@ -80,9 +82,9 @@ $$\text{EXECUTION\_COMPLETE} \ne \text{FINDING\_VERIFIED} \ne \text{RELEASE\_AUT
 | :--- | :--- | :--- |
 | **`M54-P1-F01`** | **Critical** | **PreInvocation Hook Fail-Closed**: Hook must specify exact input sources covered (`lastUserInput`); fail-closed on hook error, timeout, or missing context; prohibited from claiming absolute "zero-token leak prevention" (restated as "deterministic model turn suppression upon rule hit"); real secrets prohibited in testing. |
 | **`M54-P1-F02`** | **High** | **`finished_reason` Omission Handling**: Antigravity CLI omits `finished_reason` on normal completion; success must be evaluated via exit code 0, complete result event, and schema validity; non-zero exit, timeout, or interruption must be classified strictly as `CENSORED_EXPOSURE`, never `CLEAN`. |
-| **`M54-P1-F03`** | **High** | **RFC 0003 Authority Promotion Inheritance**: 3-tier reasoning profiles (`low` / `medium` / `high`) cannot bypass RFC 0003 Authority Promotion Protocol (Internal -> External -> Shadow -> Blocking); higher thinking budget does not grant automatic blocking authority. |
-| **`M54-P1-F04`** | **Medium** | **Native ACP Prioritization**: Prioritize native `agy acp` stdio server; custom bridge layers permitted only if native protocol cannot support subagent routing or SARIF transformation; editor squiggles require independent UI verification. |
-| **`M54-P1-F05`** | **Medium** | **Audit Traceability**: RFC 0004, baseline commit `d1e5e1a`, and empirical benchmark traces across all evaluated models must maintain immutable cryptographic provenance. |
+| **`M54-P1-F03`** | **High** | **RFC 0003 Authority Promotion Inheritance**: 3-tier reasoning profiles (`low` / `medium` / `high`) cannot bypass RFC 0003 Authority Promotion Protocol (Internal -> External -> Shadow -> Blocking).<br>- *Allowed State Transitions*: `RAW_CANDIDATE (Low/Medium/High) -> UNVERIFIED -> 3-Lens Verification Panel -> REPORTABLE`.<br>- *Prohibited Transitions*: Direct promotion from `RAW_CANDIDATE -> REPORTABLE` is strictly rejected fail-closed; self-asserted `CONFIRMED` status is downgraded to `DEFERRED` (`NEEDS_MANUAL_REVIEW`).<br>- Verified via negative unit test suite `tests/test-effort-authority-promotion-invariants.mjs`. |
+| **`M54-P1-F04`** | **Medium** | **Native ACP Prioritization**: Prioritize native `agy acp` stdio server (Antigravity ACP Server 1.5.1); custom bridge layers rejected in favor of native protocol integration; editor squiggles require independent UI verification; verified with reproducible probe trace `evals/protocols/acp-stdio-probe-record.json`. |
+| **`M54-P1-F05`** | **Medium** | **Audit Traceability**: RFC 0004, baseline commit `d1e5e1a`, and empirical benchmark traces across all evaluated models must maintain immutable cryptographic provenance and reproducible execution hashes. |
 
 ---
 
@@ -90,11 +92,11 @@ $$\text{EXECUTION\_COMPLETE} \ne \text{FINDING\_VERIFIED} \ne \text{RELEASE\_AUT
 
 | Phase Step | Target Deliverable | Verification Gate |
 | :--- | :--- | :--- |
-| **Gate 0: Contract Verification** | Gate 0 Invariant Checklist Sign-off | All 5 OPEN findings verified against CLI specifications. |
-| **Step 1: Hook Architecture** | `hooks/pre-invocation-secret-guard.mjs` + `plugin.json` hook definition | Synthetic secret injection test exits with 0 tokens consumed. |
+| **Gate 0: Contract Verification** | Gate 0 Invariant Checklist Sign-off | All 5 OPEN findings verified against CLI specifications and regression tests. |
+| **Step 1: Hook Architecture** | `hooks/pre-invocation-secret-guard.mjs` + `plugin.json` hook definition | Synthetic secret injection test exits with 0 tokens consumed and `tests/test-pre-invocation-secret-guard.mjs` passes 9/9. |
 | **Step 2: Effort Wiring** | `skills/security-audit/SKILL.md` update + CLI parameter schema update | `npm test` and `agy plugin validate . --strict` return 0 findings. |
-| **Step 3: Lifecycle Hardening** | `finished_reason` telemetry ingestion in `record-benchmark-run.mjs` | Multi-pass runner classifies simulated timeouts as `CENSORED_EXPOSURE`. |
-| **Step 4: ACP Prototype** | `scripts/adapters/acp-stdio-bridge.mjs` POC | JSON-RPC handshake verified over stdin/stdout. |
+| **Step 3: Lifecycle Hardening** | `finished_reason` telemetry ingestion in `record-benchmark-run.mjs` | Multi-pass runner classifies simulated timeouts/truncation as `CENSORED_EXPOSURE` (`tests/test-finished-reason-governance.mjs` passes 6/6). |
+| **Step 4: ACP Native Integration** | `docs/rfcs/0004-acp-native-protocol-spike-report.md` | Native `agy acp --stdio` JSON-RPC 2.0 handshake, session lifecycle, and 13-model matrix verified with `evals/protocols/acp-stdio-probe-record.json`. |
 
 ---
 

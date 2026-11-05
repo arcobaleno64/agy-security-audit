@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * test-pre-invocation-secret-guard.mjs
- * Verification suite for PreInvocation zero-token secret guard hook (M54-P1-F01).
+ * Verification suite for PreInvocation secret guard hook (M54-P1-F01).
  */
 
 import { test } from 'node:test';
@@ -37,6 +37,7 @@ test('PreInvocation Secret Guard - scanForSecrets unit checks', () => {
   assert.equal(scanForSecrets('-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...'), 'PRIVATE_KEY');
   const dummySlack = ['xoxb', '-1234567890-1234567890123-abcdefghijklmnopqrstuvwx'].join('');
   assert.equal(scanForSecrets(dummySlack), 'SLACK_TOKEN');
+  assert.equal(scanForSecrets('Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature'), 'BEARER_TOKEN');
 });
 
 test('PreInvocation Secret Guard - Clean Prompt (Allow Turn)', () => {
@@ -57,6 +58,7 @@ test('PreInvocation Secret Guard - Private Key Detection (Fail-Closed Terminate)
   assert.equal(response.terminationBehavior, 'terminate');
   assert.ok(Array.isArray(response.injectSteps));
   assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('PRIVATE_KEY'));
+  assert.ok(!response.injectSteps[0].errorMessage.userMessage.includes('0 token leak'), 'Must not claim absolute 0 token leak');
 });
 
 test('PreInvocation Secret Guard - AWS Key Detection in Messages Array', () => {
@@ -71,8 +73,36 @@ test('PreInvocation Secret Guard - AWS Key Detection in Messages Array', () => {
   assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('AWS_ACCESS_KEY'));
 });
 
+test('PreInvocation Secret Guard - Bearer Token Detection (Fail-Closed Terminate)', () => {
+  const payload = {
+    conversationId: 'test-bearer',
+    prompt: 'Use header Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.secret'
+  };
+  const response = runHook(JSON.stringify(payload));
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('BEARER_TOKEN'));
+});
+
 test('PreInvocation Secret Guard - Malformed JSON Payload (Fail-Closed Invariant)', () => {
   const response = runHook('MALFORMED_NON_JSON_CONTENT');
   assert.equal(response.terminationBehavior, 'terminate');
   assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Fail-Closed'));
+});
+
+test('PreInvocation Secret Guard - Empty Stdin (Fail-Closed Invariant)', () => {
+  const response = runHook('');
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Empty or whitespace'));
+});
+
+test('PreInvocation Secret Guard - Whitespace Stdin (Fail-Closed Invariant)', () => {
+  const response = runHook('   \n  \t ');
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Empty or whitespace'));
+});
+
+test('PreInvocation Secret Guard - Missing Verifiable Content Fields (Fail-Closed Invariant)', () => {
+  const response = runHook(JSON.stringify({ conversationId: 'no-content' }));
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Missing required verifiable prompt or message payload fields'));
 });

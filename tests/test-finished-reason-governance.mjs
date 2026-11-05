@@ -80,3 +80,37 @@ test('finished_reason lifecycle governance: token truncation fails closed as CEN
   assert.equal(trace.telemetry.finishedReason, 'max_tokens');
   assert.match(trace.error, /CENSORED_EXPOSURE.*token limit/);
 });
+
+test('finished_reason lifecycle governance: accumulated text without final result event fails closed as CENSORED_EXPOSURE', () => {
+  const noResultTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        text_delta: '{"candidates":[{"id":"SEC-01"}]}'
+      }
+    })
+    // No result event!
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(noResultTrace);
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /CENSORED_EXPOSURE.*without final result event/);
+});
+
+test('finished_reason lifecycle governance: empty response on result event fails closed as CENSORED_EXPOSURE', () => {
+  const emptyResTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: '   '
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(emptyResTrace);
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /CENSORED_EXPOSURE.*empty response text/);
+});

@@ -824,7 +824,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       });
 
       if (result.error) {
-        stderr = result.error.message;
+        stderr = result.error.code === 'ETIMEDOUT'
+          ? `CENSORED_EXPOSURE: Process execution timed out after ${timeoutMs}ms`
+          : `CENSORED_EXPOSURE: Process execution error: ${result.error.message}`;
         exitCode = 1;
       } else {
         stdout = result.stdout || '';
@@ -832,7 +834,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
         exitCode = result.status ?? 0;
       }
     } catch (err) {
-      stderr = err.message;
+      stderr = `CENSORED_EXPOSURE: Process execution exception: ${err.message}`;
       exitCode = 1;
     }
 
@@ -851,21 +853,15 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       try {
         parsedOutput = JSON.parse(cleanJson);
       } catch (err) {
-        schemaError = `SCHEMA_VIOLATION: Invalid JSON in stream result response: ${err.message}`;
+        schemaError = `CENSORED_EXPOSURE: Invalid JSON in stream result response: ${err.message}`;
       }
     } else {
       if (trace.telemetry) {
         executionTelemetry = trace.telemetry;
       }
-      // Fallback in case raw JSON was returned directly without stream events
-      const rawStdout = stdout.trim();
-      const fenceMatchFallback = rawStdout.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-      const cleanFallback = fenceMatchFallback ? fenceMatchFallback[1].trim() : rawStdout;
-      try {
-        parsedOutput = JSON.parse(cleanFallback);
-      } catch (err) {
-        schemaError = `STREAM_JSON_PARSE_ERROR: ${trace.error || err.message}`;
-      }
+      schemaError = trace.error?.startsWith('CENSORED_EXPOSURE')
+        ? trace.error
+        : `CENSORED_EXPOSURE: Stream trace validation failed (${trace.error || 'terminated prematurely'})`;
     }
 
     if (executionTelemetry) {
@@ -902,7 +898,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     }
 
     const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked") || (executionTelemetry?.finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(executionTelemetry.finishedReason).toLowerCase()));
-    let error = exitCode !== 0 ? (stderr || `Process exited with code ${exitCode}`) : null;
+    let error = exitCode !== 0
+      ? (stderr?.startsWith('CENSORED_EXPOSURE') ? stderr : `CENSORED_EXPOSURE: Process exited with code ${exitCode} (${stderr || 'non-zero exit'})`)
+      : null;
     if (!error && executionTelemetry?.finishedReason && ['max_tokens', 'length'].includes(String(executionTelemetry.finishedReason).toLowerCase())) {
       error = `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${executionTelemetry.finishedReason}`;
     }

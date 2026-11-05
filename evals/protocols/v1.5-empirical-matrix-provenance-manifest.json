@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "manifestVersion": "1.0.0",
+  "provenanceScope": {
+    "gitBaseline": "d1e5e1a1c5ac6776301539b98a353e40d1075ece",
+    "featureBranch": "feat/m54-phase1-runtime-adaptation",
+    "timestamp": "2026-11-06T06:45:00Z",
+    "purpose": "Milestone 5.4 Phase 1 Gate 0 Cryptographic Sealing of Empirical 3-Tier Model Matrices (M54-P1-F05)"
+  },
+  "workingTreeAttestation": {
+    "trackedFilesCleanAtCommit": true,
+    "dirtyClassification": "WORKSPACE_SCRATCH_UNTRACKED_ONLY",
+    "rationale": "Tool reported toolDirty: true during execution because temporary scratch deliverables and untracked artifacts were present in the root directory. No tracked source code was dirty relative to commit bfedbb3."
+  },
+  "runs": [
+    {
+      "matrix": "smoke-compare (Flash SEM-01-SAFE)",
+      "tier": "low",
+      "relativePath": "evals/live-runs/smoke-compare/low/run-pass-1.json",
+      "sha256": "885735B32EE047875AA1C859D940C54E807A2384605D04B67AD296462C676252",
+      "telemetryDigest": "b1b07671a5b48e24c2fece2d89a695e267156ce5fe854b7ae2948bbd6d2a7f56"
+    },
+    {
+      "matrix": "smoke-compare (Flash SEM-01-SAFE)",
+      "tier": "medium",
+      "relativePath": "evals/live-runs/smoke-compare/medium/run-pass-1.json",
+      "sha256": "90D31A0B2D8A8FBA4B97CBC58EC041520BA03A68C2D3CCEE8C1619189A44BABA",
+      "telemetryDigest": "689dd9c2c6fe963d3f5e95454b5dfd4fec0ee8b69eeecda7251d2f78e4726078"
+    },
+    {
+      "matrix": "smoke-compare (Flash SEM-01-SAFE)",
+      "tier": "high",
+      "relativePath": "evals/live-runs/smoke-compare/high/run-pass-1.json",
+      "sha256": "848A4CB21A5AD9A3CE1A65CBCAE5836E41500F52766845E622748DC2C22DECCD",
+      "telemetryDigest": "41639c0fa464490f23ce08253a660a9f5d3feaa9a647e33e9d3ef6a7f14b609c"
+    },
+    {
+      "matrix": "smoke-compare-complex (Flash SEM-08)",
+      "tier": "low",
+      "relativePath": "evals/live-runs/smoke-compare-complex/low/run-pass-1.json",
+      "sha256": "30353561DFF7F9C17461EB1637B35052692E1A8F6D63A78E19C846510C6D3AB3",
+      "telemetryDigest": "6e3bc640f1a92e1069eb87e38cf4f3640ae0cfcbdb09a2599d107a61d15c7e1c"
+    },
+    {
+      "matrix": "smoke-compare-complex (Flash SEM-08)",
+      "tier": "medium",
+      "relativePath": "evals/live-runs/smoke-compare-complex/medium/run-pass-1.json",
+      "sha256": "C00B08A3B2F87012E43AD5C21A16895FE761E967736C6AB213AC257508DD81F1",
+      "telemetryDigest": "cbff84869804e3049b7ec6be13404c000f5be8e8f96e474ca60d65ffcfcf336c"
+    },
+    {
+      "matrix": "smoke-compare-complex (Flash SEM-08)",
+      "tier": "high",
+      "relativePath": "evals/live-runs/smoke-compare-complex/high/run-pass-1.json",
+      "sha256": "50797403C48F3D130961DE852D7C4BE1E4418E9D43BD8FC965D9AD88B681BC59",
+      "telemetryDigest": "c928cb0bb5b8364b63e1fa759d575cbbec758a0bc7a59755d78fa18a666e8140"
+    },
+    {
+      "matrix": "argon-compare (Argon SEM-08)",
+      "tier": "low",
+      "relativePath": "evals/live-runs/argon-compare/low/run-pass-1.json",
+      "sha256": "975BF0DE3D2F494964E959E310092406043101904E0404B150AEC79DD1257906",
+      "telemetryDigest": "c86cfc0788ee550f2257bb5263152069f9cf08208ba2fffa21b960c1d1e4eec4"
+    },
+    {
+      "matrix": "argon-compare (Argon SEM-08)",
+      "tier": "medium",
+      "relativePath": "evals/live-runs/argon-compare/medium/run-pass-1.json",
+      "sha256": "D314C3B8EE3DE05572B791D35A05AF38D409F44393D22AF6AC71A9233C137B3F",
+      "telemetryDigest": "b47fa0ec6b1d44eb64082260f1e84d4715f33534b46dbb768b444b7d5ebc7e0c"
+    },
+    {
+      "matrix": "argon-compare (Argon SEM-08)",
+      "tier": "high",
+      "relativePath": "evals/live-runs/argon-compare/high/run-pass-1.json",
+      "sha256": "83CE57147F9E9190994A196B9904591682F47C1F48D834AF5450B6E9BDF11F53",
+      "telemetryDigest": "7872d8a5ea972e6b010a37330553bb895e7ce00f8fc23f66c06a3806be44d930"
+    }
+  ]
+}

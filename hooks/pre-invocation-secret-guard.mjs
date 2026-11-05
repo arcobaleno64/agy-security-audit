@@ -50,6 +50,10 @@ export const SECRET_PATTERNS = [
     regex: /\bAIza[0-9A-Za-z\-_]{35}\b/
   },
   {
+    name: 'BEARER_TOKEN',
+    regex: /\bBearer\s+(?:eyJ[A-Za-z0-9_\-\.=:_\+\/]{16,}|[A-Za-z0-9_\-\.=:_\+\/]{24,})\b/i
+  },
+  {
     name: 'GENERIC_HIGH_ENTROPY_TOKEN',
     regex: /(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"][A-Za-z0-9+/=_\-]{24,}['"]/i
   }
@@ -114,8 +118,17 @@ export async function main() {
   }
 
   if (!rawInput || !rawInput.trim()) {
-    // Clean empty input
-    return emit({});
+    // Fail-Closed: Empty input cannot be verified, terminate to prevent uninspected turn dispatch
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: '[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Empty or whitespace stdin received. Invocation terminated.'
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
   }
 
   let payload = null;
@@ -152,6 +165,20 @@ export async function main() {
     }
   }
 
+  // Fail-Closed: Missing verifiable prompt or message payload fields
+  if (candidatesToScan.length === 0) {
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: '[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Missing required verifiable prompt or message payload fields. Invocation terminated.'
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  }
+
   // Check each text candidate
   for (const text of candidatesToScan) {
     const matchedSecret = scanForSecrets(text);
@@ -161,7 +188,7 @@ export async function main() {
         injectSteps: [
           {
             errorMessage: {
-              userMessage: `[PRE_INVOCATION_SECRET_GUARD] Blocked: Credential pattern '${matchedSecret}' detected in user prompt. Model invocation terminated before dispatch (0 token leak invariant).`
+              userMessage: `[PRE_INVOCATION_SECRET_GUARD] Blocked: Credential pattern '${matchedSecret}' detected in user input. Model turn dispatch suppressed under Fail-Closed policy.`
             }
           }
         ],
