@@ -109,7 +109,8 @@ Only the current MINOR line is supported. Update this table with every MINOR bum
 
 | Version | Supported |
 |---|---|
-| 1.9.x | :white_check_mark: |
+| 1.10.x | :white_check_mark: |
+| 1.9.x | :x: |
 | 1.8.x | :x: |
 | 1.7.x | :x: |
 | 1.6.x | :x: |
