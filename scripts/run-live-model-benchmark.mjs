@@ -845,8 +845,11 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     const trace = parseStreamJsonTrace(stdout);
     if (trace.success) {
       executionTelemetry = trace.telemetry;
+      const rawText = trace.rawResponse.trim();
+      const fenceMatch = rawText.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+      const cleanJson = fenceMatch ? fenceMatch[1].trim() : rawText;
       try {
-        parsedOutput = JSON.parse(trace.rawResponse.trim());
+        parsedOutput = JSON.parse(cleanJson);
       } catch (err) {
         schemaError = `SCHEMA_VIOLATION: Invalid JSON in stream result response: ${err.message}`;
       }
@@ -855,8 +858,11 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
         executionTelemetry = trace.telemetry;
       }
       // Fallback in case raw JSON was returned directly without stream events
+      const rawStdout = stdout.trim();
+      const fenceMatchFallback = rawStdout.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+      const cleanFallback = fenceMatchFallback ? fenceMatchFallback[1].trim() : rawStdout;
       try {
-        parsedOutput = JSON.parse(stdout.trim());
+        parsedOutput = JSON.parse(cleanFallback);
       } catch (err) {
         schemaError = `STREAM_JSON_PARSE_ERROR: ${trace.error || err.message}`;
       }
