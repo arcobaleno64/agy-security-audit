@@ -224,6 +224,7 @@ export function parseStreamJsonTrace(rawNdjson) {
   let accumulatedText = '';
   let durationSeconds = null;
   let finalStatus = null;
+  let finishedReason = null;
   let hasResultEvent = false;
   let resultError = null;
 
@@ -352,6 +353,11 @@ export function parseStreamJsonTrace(rawNdjson) {
       if (res.status) {
         finalStatus = res.status;
       }
+      if (res.finished_reason || res.finishedReason || res.finish_reason || res.finishReason) {
+        finishedReason = res.finished_reason || res.finishedReason || res.finish_reason || res.finishReason;
+      } else if (eventObj.finished_reason || eventObj.finishedReason || eventObj.finish_reason || eventObj.finishReason) {
+        finishedReason = eventObj.finished_reason || eventObj.finishedReason || eventObj.finish_reason || eventObj.finishReason;
+      }
       if (res.error) {
         resultError = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
       } else if (eventObj.error) {
@@ -403,6 +409,7 @@ export function parseStreamJsonTrace(rawNdjson) {
     toolsUsed: Array.from(toolsUsed),
     subagentsInvoked: Array.from(subagentsInvoked),
     permissionMode: permissionMode || null,
+    finishedReason: finishedReason || null,
     tokenUsage,
     durationSeconds: durationSeconds !== null ? durationSeconds : null
   };
@@ -414,6 +421,25 @@ export function parseStreamJsonTrace(rawNdjson) {
       telemetry,
       rawResponse,
       error: `Stream execution error: ${resultError}`
+    };
+  }
+
+  // Gate 0 (M54-P1-F02): Finished reason indicating safety block or truncation fails closed as CENSORED_EXPOSURE
+  if (finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(finishedReason).toLowerCase())) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `CENSORED_EXPOSURE: Stream blocked by safety filter with finished_reason: ${finishedReason}`
+    };
+  }
+
+  if (finishedReason && ['max_tokens', 'length'].includes(String(finishedReason).toLowerCase())) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${finishedReason}`
     };
   }
 

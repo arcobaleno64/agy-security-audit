@@ -901,13 +901,16 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       candidates.push(cand);
     }
 
-    const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked");
+    const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked") || (executionTelemetry?.finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(executionTelemetry.finishedReason).toLowerCase()));
     let error = exitCode !== 0 ? (stderr || `Process exited with code ${exitCode}`) : null;
+    if (!error && executionTelemetry?.finishedReason && ['max_tokens', 'length'].includes(String(executionTelemetry.finishedReason).toLowerCase())) {
+      error = `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${executionTelemetry.finishedReason}`;
+    }
     if (!error && schemaError) {
       error = schemaError;
     }
     if (!error && isFilterBlocked) {
-      error = 'Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
+      error = 'CENSORED_EXPOSURE: Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
     }
 
     const isRateLimit = isRateLimitError(stderr) || isRateLimitError(stdout) || isRateLimitError(error);
