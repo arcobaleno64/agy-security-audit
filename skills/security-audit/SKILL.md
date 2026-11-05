@@ -4,7 +4,7 @@ description: >-
   Conducts evidence-backed, multi-stage security assurance reviews, vulnerability verification, and patch analysis on codebases or git diffs, informed by NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, and frontier defensive frameworks (Anthropic's Claude Security and OpenAI's Codex Security research). Employs elastic subagent voting under Default-Deny on authority claims, double-blind 3-lens verification, CVSS v4.0 metrics, and SARIF 2.1.0 report generation. Use when the user asks to review code for security flaws, audit vulnerabilities, run security scans, or patch vulnerabilities.
 ---
 
-# AGY Security Audit Skill (`security-audit`)
+# AGY Security Audit Skill (`security-audit` v1.10.0)
 
 An evidence-driven security assurance workflow for Google Antigravity (AGY), aligned with NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, CWE taxonomy, and CVSS v4.0, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
 
@@ -36,7 +36,7 @@ external targets or harmful real-world actions.
 When launched, the skill inspects explicit user flags or prompts for customization across core dimensions:
 
 ```text
-/security-audit [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--patch] [--export]
+/security-audit [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--patch] [--export] [--preflight]
 ```
 
 ### Dimension 0: Audit Intent (`auditIntent`)
@@ -50,19 +50,23 @@ When executing security review, the skill operates under one of three distinct i
 2. **`scan` (Repository Security Scan)**: Comprehensive whole-repository or scoped directory scan with deterministic Directory Accounting. See [scan.md](./jobs/scan.md).
 3. **`validate` (Candidate Validation)**: Focused 3-Lens evaluation of specific candidate hypotheses without rescanning the entire repository. See [validate.md](./jobs/validate.md).
 4. **`patch` / `verify-fix` (Remediation Patches & Verification)**: Dual-track remediation patch generation and 3-lens patch verification under Patch Jail isolation. See [verify-fix.md](./jobs/verify-fix.md).
+5. **`preflight` / `verify-isolation` (Third-Party Preflight & Replay Verification)**: Three-phase offline audit of frozen baseline assets, Ed25519 confinement receipts, monotonic anti-rollback journals, and leak-free container teardown.
 
 ### Dimension 2: Four-Stage Pipeline
 ```
 [Stage 1: Deterministic Inventory & Threat Modeling]
                        │
                        ▼
-[Stage 2: 3-Tier Triage & Component-Aware Discovery]
+[Stage 2: 3-Tier Triage & Component-Aware Discovery (Shadow Context)]
                        │
                        ▼
 [Stage 3: Fixed 3-Lens Double-Blind Consensus Verification]
                        │
                        ▼
 [Stage 4: Deterministic Finalizer & Canonical Reporting]
+                       │
+                       ▼
+[Stage 5: Isolated Replica View (IRV) & Preflight Replay Verification]
 ```
 
 ---
@@ -152,6 +156,18 @@ When executing security review, the skill operates under one of three distinct i
 
 
 ---
+
+
+
+### Stage 5: Isolated Replica View (IRV) & Preflight Replay Verification
+When empirical candidate validation, native container confinement, or third-party proof replay is required:
+1. **OS-Level Container Confinement (IRV)**:
+   - **Linux Native Isolation**: Must execute strictly via Bubblewrap (`bwrap`) under non-root UID 1000 with unprivileged User Namespace (`--unshare-user --uid 1000 --gid 1000 --ro-bind / / cat /proc/self/uid_map` proving `1000 1000 1`).
+   - **Mount & Network Containment**: Completely unshares Mount and Network namespaces; projects target code onto disposable tmpfs (`/tmp/irv-...`); blocks all outbound network via synthetic canary socket checks; enforces zero host filesystem mutation.
+2. **Three-Phase Automated Preflight Verifier (`verify-third-party-preflight.mjs`)**:
+   - **Phase 1 (Baseline Audit)**: Hashes all frozen reference assets against `m52-asset-freeze-manifest.json` (9 pinned assets, canonical equality on `checkpointProvenanceContract`, `antiRollbackRules`, and `governanceInvariants`); halts fail-closed on any mismatch.
+   - **Phase 2 (Confinement & Anti-Rollback Audit)**: Verifies the resulting Ed25519 signature against the out-of-band pinned supervisor public key (`a2a222ec7ca284666f70554925dc8596b96e163cbc881cafdec9e0f7dabbb678`); audits all 92 discrete assertion records; validates monotonic sequence freshness against `.irv-revocation-journal.jsonl` and resolves trusted authority floor from `supervisor-trust-registry.json` without silent fallback.
+   - **Phase 3 (Post-Cleanup Audit)**: Audits raw mountinfo, process tree, and directory logs proving zero leaked host mounts, zero orphan processes, and total ephemeral workspace destruction.
 
 ## Non-Interactive & Headless Fallbacks
 

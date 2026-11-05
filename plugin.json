@@ -1,5 +1,12 @@
 {
-  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "security-audit",
-  "description": "agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy)."
+  "displayName": "Security Audit & Verification",
+  "version": "1.10.0",
+  "description": "Evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI, featuring double-blind 3-lens consensus and OS-isolated replays.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Audit the current Git workspace for vulnerabilities and security posture",
+    "Perform a 3-lens adversarial verification review on pending git diffs",
+    "Verify isolated replay sandbox setup and trust anchor status before an audit"
+  ]
 }
