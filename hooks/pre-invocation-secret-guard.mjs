@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+/**
+ * pre-invocation-secret-guard.mjs
+ * PreInvocation Lifecycle Hook for Antigravity (AGY).
+ *
+ * Intercepts incoming user prompts BEFORE model dispatch.
+ * Scans for high-entropy secrets, private keys, and cloud credentials.
+ * Enforces Fail-Closed terminationBehavior: "terminate" to prevent token leakage.
+ *
+ * Subprocess Calling Contract Compliance:
+ * 1. Non-blocking stdin read with unref'd timer (fails closed on empty pipe / timeout).
+ * 2. Explicit LF-only JSON output (no CRLF).
+ * 3. Strict schema adherence (injectSteps, terminationBehavior).
+ *
+ * Governance Invariant (M54-P1-F01):
+ * - Does not claim absolute zero-leak coverage; protects against specified credential patterns.
+ * - Fails safe (closed) on parsing exceptions or execution timeouts.
+ *
+ * Zero external npm dependencies.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Emits result with strict LF line ending, avoiding CRLF conversion issues on Windows
+function emit(obj) {
+  process.stdout.write(JSON.stringify(obj) + '\n');
+}
+
+// Credential detection patterns
+export const SECRET_PATTERNS = [
+  {
+    name: 'PRIVATE_KEY',
+    regex: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/
+  },
+  {
+    name: 'AWS_ACCESS_KEY',
+    regex: /\bAKIA[0-9A-Z]{16}\b/
+  },
+  {
+    name: 'GITHUB_TOKEN',
+    regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/
+  },
+  {
+    name: 'SLACK_TOKEN',
+    regex: /\bxox[baprs]-[0-9A-Za-z]{10,48}\b/
+  },
+  {
+    name: 'GOOGLE_API_KEY',
+    regex: /\bAIza[0-9A-Za-z\-_]{35}\b/
+  },
+  {
+    name: 'GENERIC_HIGH_ENTROPY_TOKEN',
+    regex: /(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"][A-Za-z0-9+/=_\-]{24,}['"]/i
+  }
+];
+
+/**
+ * Scans a string for prohibited secret patterns.
+ * Returns the first matched pattern name, or null if clean.
+ */
+export function scanForSecrets(text) {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  for (const { name, regex } of SECRET_PATTERNS) {
+    if (regex.test(text)) {
+      return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Reads stdin with timeout, failing closed on unexpected hang.
+ */
+function readStdinWithTimeout(timeoutMs = 1500) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    const timer = setTimeout(() => {
+      reject(new Error(`[FAIL_CLOSED] Stdin read timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref();
+
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on('end', () => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+    process.stdin.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+export async function main() {
+  let rawInput = '';
+  try {
+    rawInput = await readStdinWithTimeout(1500);
+  } catch (err) {
+    // Fail-Closed: If stdin hangs or fails, terminate to avoid uninspected pass-through
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: `[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Stdin ingestion error (${err.message}). Turn halted.`
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  }
+
+  if (!rawInput || !rawInput.trim()) {
+    // Clean empty input
+    return emit({});
+  }
+
+  let payload = null;
+  try {
+    payload = JSON.parse(rawInput);
+  } catch (err) {
+    // Fail-Closed on invalid JSON payload
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: `[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Invalid hook JSON payload (${err.message}). Turn halted.`
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  }
+
+  // Extract all text candidates from user prompt and common fields
+  const candidatesToScan = [];
+
+  if (typeof payload?.lastUserInput === 'string') {
+    candidatesToScan.push(payload.lastUserInput);
+  }
+  if (typeof payload?.prompt === 'string') {
+    candidatesToScan.push(payload.prompt);
+  }
+  if (Array.isArray(payload?.messages)) {
+    for (const msg of payload.messages) {
+      if (typeof msg?.content === 'string') {
+        candidatesToScan.push(msg.content);
+      }
+    }
+  }
+
+  // Check each text candidate
+  for (const text of candidatesToScan) {
+    const matchedSecret = scanForSecrets(text);
+    if (matchedSecret) {
+      // Deterministic block: emit errorMessage and terminationBehavior: "terminate"
+      return emit({
+        injectSteps: [
+          {
+            errorMessage: {
+              userMessage: `[PRE_INVOCATION_SECRET_GUARD] Blocked: Credential pattern '${matchedSecret}' detected in user prompt. Model invocation terminated before dispatch (0 token leak invariant).`
+            }
+          }
+        ],
+        terminationBehavior: 'terminate'
+      });
+    }
+  }
+
+  // Clean prompt: proceed normally
+  return emit({});
+}
+
+// Direct execution guard
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+  main().catch((err) => {
+    emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: `[PRE_INVOCATION_SECRET_GUARD] Fatal exception: ${err.message}. Turn halted.`
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  });
+}
