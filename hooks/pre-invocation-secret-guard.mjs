@@ -148,6 +148,19 @@ export async function main() {
     });
   }
 
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: '[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Hook payload must be a non-null JSON object. Turn halted.'
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  }
+
   // Extract all text candidates from user prompt and common fields
   const candidatesToScan = [];
 
@@ -172,6 +185,21 @@ export async function main() {
         {
           errorMessage: {
             userMessage: '[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Missing required verifiable prompt or message payload fields. Invocation terminated.'
+          }
+        }
+      ],
+      terminationBehavior: 'terminate'
+    });
+  }
+
+  // Fail-Closed (Gate 0 / M54-P1-F01): Empty or whitespace-only candidates cannot be verified
+  const hasNonEmptyCandidate = candidatesToScan.some(text => text.trim().length > 0);
+  if (!hasNonEmptyCandidate) {
+    return emit({
+      injectSteps: [
+        {
+          errorMessage: {
+            userMessage: '[PRE_INVOCATION_SECRET_GUARD] Fail-Closed: Empty or whitespace-only prompt payload received. Invocation terminated.'
           }
         }
       ],

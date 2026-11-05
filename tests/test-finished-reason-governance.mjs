@@ -114,3 +114,84 @@ test('finished_reason lifecycle governance: empty response on result event fails
   assert.equal(trace.success, false);
   assert.match(trace.error, /CENSORED_EXPOSURE.*empty response text/);
 });
+
+test('finished_reason lifecycle governance: delta fallback bypass counterexample F02 (Fail-Closed Invariant)', () => {
+  // Counterexample identified by ChatGPT R3:
+  // Even if accumulated text was received via step_update, if result.response is empty, it MUST NOT fall back to accumulated text!
+  const deltaFallbackTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        text_delta: '{"candidates":[{"id":"SEC-01"}]}'
+      }
+    }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: '' // Empty response in result!
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(deltaFallbackTrace);
+  assert.equal(trace.success, false, 'Empty result.response must not be rescued by accumulated delta text');
+  assert.match(trace.error, /CENSORED_EXPOSURE.*empty response text/);
+});
+
+test('finished_reason lifecycle governance: non-allowlisted finished_reason interrupted (Fail-Closed Invariant)', () => {
+  const interruptedTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        finished_reason: 'interrupted',
+        response: '{"candidates":[]}'
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(interruptedTrace);
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /CENSORED_EXPOSURE.*non-allowlisted finished_reason: 'interrupted'/);
+});
+
+test('finished_reason lifecycle governance: non-allowlisted finished_reason print_timeout (Fail-Closed Invariant)', () => {
+  const timeoutTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        finished_reason: 'print_timeout',
+        response: '{"candidates":[]}'
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(timeoutTrace);
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /CENSORED_EXPOSURE.*non-allowlisted finished_reason: 'print_timeout'/);
+});
+
+test('finished_reason lifecycle governance: allowlist completion reasons (stop, end_turn, complete)', () => {
+  for (const reason of ['stop', 'end_turn', 'complete', 'completed', 'eos', 'stop_sequence']) {
+    const traceString = [
+      JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+      JSON.stringify({
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          finished_reason: reason,
+          response: '{"candidates":[]}'
+        }
+      })
+    ].join('\n');
+
+    const trace = parseStreamJsonTrace(traceString);
+    assert.equal(trace.success, true, `Reason '${reason}' should be accepted in allowlist`);
+    assert.equal(trace.telemetry.finishedReason, reason);
+  }
+});

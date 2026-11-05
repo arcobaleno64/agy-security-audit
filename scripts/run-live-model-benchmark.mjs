@@ -897,12 +897,21 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       candidates.push(cand);
     }
 
+    const ALLOWED_FINISHED_REASONS = new Set(['stop', 'end_turn', 'complete', 'completed', 'eos', 'stop_sequence']);
+    let nonAllowlistedFinishedReason = false;
+    if (executionTelemetry?.finishedReason) {
+      const normReason = String(executionTelemetry.finishedReason).trim().toLowerCase();
+      if (!ALLOWED_FINISHED_REASONS.has(normReason)) {
+        nonAllowlistedFinishedReason = true;
+      }
+    }
+
     const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked") || (executionTelemetry?.finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(executionTelemetry.finishedReason).toLowerCase()));
     let error = exitCode !== 0
       ? (stderr?.startsWith('CENSORED_EXPOSURE') ? stderr : `CENSORED_EXPOSURE: Process exited with code ${exitCode} (${stderr || 'non-zero exit'})`)
       : null;
-    if (!error && executionTelemetry?.finishedReason && ['max_tokens', 'length'].includes(String(executionTelemetry.finishedReason).toLowerCase())) {
-      error = `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${executionTelemetry.finishedReason}`;
+    if (!error && nonAllowlistedFinishedReason) {
+      error = `CENSORED_EXPOSURE: Stream terminated with non-allowlisted finished_reason: ${executionTelemetry.finishedReason}`;
     }
     if (!error && schemaError) {
       error = schemaError;

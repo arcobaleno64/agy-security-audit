@@ -1668,6 +1668,11 @@ export function validateBallot(vote, candidate = null, options = {}) {
     return { valid: false, reason: `Invalid lens '${vote.lens}'. Must be one of: ${validLenses.join(', ')}` };
   }
 
+  // Gate 0 (M54-P1-F03): Ballots for effort-directed candidates strictly require a valid lens
+  if ((candidate?.modelEffort || candidate?.effort) && (!vote.lens || !validLenses.includes(String(vote.lens).toUpperCase()))) {
+    return { valid: false, reason: `Effort-directed candidate strictly requires a valid lens ballot from: ${validLenses.join(', ')}` };
+  }
+
   const validDecisions = ['CONFIRMED', 'SUPPORTS', 'REPORTABLE', 'FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED', 'DEFERRED', 'NEEDS_MANUAL_REVIEW'];
   const decision = String(vote.decision || vote.verdict || '').toUpperCase();
   if (!validDecisions.includes(decision)) {
@@ -1916,6 +1921,26 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       };
     }
 
+    const isEffortCandidate = Boolean(candidate?.modelEffort || candidate?.effort || candidate?.reasoningProfile || candidate?.tier);
+
+    // Gate 0 (M54-P1-F03 / RFC 0003): All effort-directed candidates strictly require unanimous Fixed 3-Lens panel
+    if (isEffortCandidate && !isThreeLens) {
+      if (validDecisiveMitigationVote && refutes / total >= 0.66) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Affirmatively refuted by verifier with verified mitigation evidence',
+          votesSummary: { total, supports, refutes, unanimous: refutes === total, isThreeLens: false, lenses: Array.from(lenses) }
+        };
+      }
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: `Effort discovery candidate [${candidate.modelEffort || candidate.effort}] strictly requires unanimous Fixed 3-Lens panel verification (REACHABILITY, DEFENSES, IMPACT); non-lens or partial ballots cannot grant REPORTABLE disposition under default-deny`,
+        votesSummary: { total, supports, refutes, unanimous: false, isThreeLens: false, lenses: Array.from(lenses) }
+      };
+    }
+
     // If lens ballots were submitted but the 3-Lens panel is incomplete (missing required lens), fail-closed under Default-Deny
     if (lenses.size > 0 && !isThreeLens) {
       return {
@@ -1960,7 +1985,8 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     const authoritativeRigor = deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
 
     // Reportable requirement: 2/3 supermajority + authoritative rigor >= 0.60 + source & sink verified
-    if (supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
+    // Gate 0 (M54-P1-F03): Effort candidates are strictly barred from non-3-lens promotion
+    if (!isEffortCandidate && supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',

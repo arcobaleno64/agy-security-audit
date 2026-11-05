@@ -85,6 +85,58 @@ for (const effort of EFFORT_TIERS) {
     assert.equal(disposition.disposition, 'DEFERRED');
     assert.notEqual(disposition.disposition, 'REPORTABLE');
   });
+
+  test(`Authority Invariant [${effort}]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)`, () => {
+    const candidate = {
+      id: `SEC-NONLENS-${effort.toUpperCase()}-05`,
+      ruleId: 'CWE-89',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+      modelEffort: effort
+    };
+
+    // 2/3 votes without lens attribute, even with valid evidence and high rigor
+    const nonLensVotes = [
+      {
+        findingId: candidate.id,
+        reviewerId: 'rev-general-1',
+        decision: 'CONFIRMED',
+        evidence: [
+          { path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' },
+          { path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }
+        ]
+      },
+      {
+        findingId: candidate.id,
+        reviewerId: 'rev-general-2',
+        decision: 'CONFIRMED',
+        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      }
+    ];
+
+    const disposition = deriveFinalDisposition(candidate, nonLensVotes, { score: 0.95 }, process.cwd());
+    assert.notEqual(disposition.disposition, 'REPORTABLE', `Effort ${effort} candidate must NEVER reach REPORTABLE via non-lens legacy voting`);
+    assert.equal(disposition.disposition, 'DEFERRED');
+    assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
+  });
+
+  test(`Authority Invariant [${effort}]: 3/3 non-lens supports strictly cannot transition to REPORTABLE`, () => {
+    const candidate = {
+      id: `SEC-NONLENS3-${effort.toUpperCase()}-06`,
+      ruleId: 'CWE-79',
+      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+      modelEffort: effort
+    };
+
+    const nonLensVotes = [
+      { findingId: candidate.id, reviewerId: 'rev-1', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+      { findingId: candidate.id, reviewerId: 'rev-2', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
+      { findingId: candidate.id, reviewerId: 'rev-3', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] }
+    ];
+
+    const disposition = deriveFinalDisposition(candidate, nonLensVotes, { score: 0.95 }, process.cwd());
+    assert.notEqual(disposition.disposition, 'REPORTABLE');
+    assert.equal(disposition.disposition, 'DEFERRED');
+  });
 }
 
 test('Authority Promotion Gate: EXECUTION_COMPLETE != FINDING_VERIFIED != RELEASE_AUTHORIZED', () => {
@@ -101,4 +153,38 @@ test('Authority Promotion Gate: EXECUTION_COMPLETE != FINDING_VERIFIED != RELEAS
 
   assert.equal(partialCoverageScan.summary.canDeclareClean, false, 'Incomplete manifest cannot authorize clean release');
   assert.notEqual(partialCoverageScan.summary.execution?.verdict, 'COMPLETE_VERIFIED');
+});
+
+test('Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Release Authority (RFC 0003 Section 3)', () => {
+  // RFC 0003 Section 3: Internal Advisory (REPORTABLE) != Release Authority
+  // Even if a finding is confirmed REPORTABLE by unanimous 3-Lens panel, it can NEVER grant Release Authority (canDeclareClean must be false)
+  const reportableCandidate = {
+    id: 'SEC-REPORTABLE-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in SafeGit',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high',
+    disposition: 'REPORTABLE'
+  };
+
+  const unanimousVotes = [
+    { findingId: 'SEC-REPORTABLE-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+  ];
+
+  const disposition = deriveFinalDisposition(reportableCandidate, unanimousVotes, { score: 0.95 }, process.cwd());
+  assert.equal(disposition.disposition, 'REPORTABLE', 'Unanimous 3-Lens panel with evidence achieves REPORTABLE');
+
+  const scanWithReportable = finalizeScan({
+    candidates: [reportableCandidate],
+    votes: unanimousVotes,
+    manifest: { complete: true, coverageStatus: 'COMPLETE', files: ['skills/security-audit/scripts/safe-git.mjs'] },
+    repoRoot: process.cwd(),
+    allowSelfAudit: true
+  });
+
+  // Release authority MUST be denied when any REPORTABLE finding exists
+  assert.equal(scanWithReportable.summary.canDeclareClean, false, 'Scan with REPORTABLE findings strictly cannot declare clean');
+  assert.equal(scanWithReportable.summary.assuranceLabel, 'NON_CLEAN');
 });

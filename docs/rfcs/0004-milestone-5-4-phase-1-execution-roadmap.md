@@ -1,7 +1,7 @@
 # Milestone 5.4 Phase 1 Planning Proposal: Next-Generation Runtime Adaptation & Multi-Tier Governance
 
 **Document Version**: `1.0.0-PROPOSAL`  
-**Milestone Scope**: Milestone 5.4 — Runtime Evolution, Zero-Token Invariants & Multi-Tier Orchestration  
+**Milestone Scope**: Milestone 5.4 — Runtime Evolution, Pre-Invocation Deterministic Interception & Multi-Tier Governance  
 **Governance Framework**: NIST SSDF (SP 800-218) / NIST SP 800-53 / Default-Deny Authority Invariant  
 **Target Release**: `v1.11.0`  
 **Authoritative Context**: Builds directly upon frozen Milestone 5.3 baseline (`v1.10.0`) and Antigravity CLI 1.5.1 runtime capabilities.
@@ -16,12 +16,12 @@ Having achieved mathematical closure and 112-round double-blind audit freeze in 
 flowchart TD
     M53["Milestone 5.3 Baseline<br/>(v1.10.0 Frozen)"] --> M54["Milestone 5.4 Runtime Adaptation"]
     
-    M54 --> Axis1["Axis 1: PreInvocation Zero-Token Guard<br/>(Deterministic Hook Interception)"]
+    M54 --> Axis1["Axis 1: PreInvocation Secret Guard<br/>(Deterministic Hook Interception)"]
     M54 --> Axis2["Axis 2: ACP Stdio Bridge<br/>(IDE & Native Client Protocol)"]
     M54 --> Axis3["Axis 3: 3-Tier Effort Orchestration<br/>(Low / Medium / High Routing)"]
     M54 --> Axis4["Axis 4: Fail-Closed Lifecycle<br/>(finished_reason Awareness)"]
     
-    Axis1 --> Value1["0-Token Secret & Path Rejection"]
+    Axis1 --> Value1["Deterministic Model Turn Suppression"]
     Axis2 --> Value2["Real-time Inline 3-Lens Review"]
     Axis3 --> Value3["-70% Token Burn on Smoke Checks"]
     Axis4 --> Value4["Strict SSDF Audit Proof"]
@@ -31,13 +31,13 @@ flowchart TD
 
 ## 2. Four Technical Workstreams for Phase 1
 
-### Workstream 1: Native PreInvocation Zero-Token Security Hook
-- **Background**: Antigravity CLI v1.5.1 introduced `terminationBehavior: "terminate"` for `PreInvocation` hooks, enabling scripts to reject turns *before* any prompt tokens are transmitted to the LLM.
+### Workstream 1: Native PreInvocation Security Hook
+- **Background**: Antigravity CLI v1.5.1 introduced `terminationBehavior: "terminate"` for `PreInvocation` hooks, enabling scripts to reject turns *before* prompt tokens are transmitted to the LLM upon detecting credentials.
 - **Implementation Goal**:
   1. Register a native `PreInvocation` hook (`hooks/pre-invocation-secret-guard.mjs`).
   2. Implement local high-speed regex scan for high-entropy secrets, private keys (`BEGIN PRIVATE KEY`), and unmasked cloud credentials.
-  3. Enforce deterministic rejection (`exitCode: 2`, `terminationBehavior: "terminate"`) when secrets are detected.
-  4. **Value**: Zero-token leak prevention and fail-closed secret containment.
+  3. Enforce deterministic rejection (`terminationBehavior: "terminate"`, subprocess exit status 0 with LF-only JSON output per subprocess contract) when secrets are detected.
+  4. **Value**: Deterministic model turn dispatch suppression upon rule match under fail-closed credential containment.
 
 ### Workstream 2: Agent Client Protocol (`agy acp`) Native Integration
 - **Background**: AGY 1.5.1 provides the Agent Client Protocol (`agy acp`), a standardized JSON-RPC 2.0 stdio protocol for IDE and client integrations.

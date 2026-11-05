@@ -20,7 +20,10 @@
         "id": 1,
         "method": "initialize",
         "params": {
-          "clientInfo": { "name": "sec-audit-probe", "version": "1.0.0" },
+          "clientInfo": {
+            "name": "sec-audit-probe",
+            "version": "1.0.0"
+          },
           "protocolVersion": 1
         }
       }
@@ -33,20 +36,65 @@
         "id": 1,
         "result": {
           "protocolVersion": 1,
-          "agentInfo": { "name": "Antigravity ACP Server", "version": "1.5.1" },
           "agentCapabilities": {
             "loadSession": true,
             "load_session": true,
-            "promptCapabilities": { "image": true, "audio": false, "embeddedContext": true },
-            "sessionCapabilities": { "resume": {}, "close": {}, "load": {}, "list": {}, "additionalDirectories": {} },
-            "auth": { "logout": {} },
-            "_meta": { "antigravity": { "tier": true, "systemPrompt": { "append": true } } }
+            "promptCapabilities": {
+              "image": true,
+              "audio": false,
+              "embeddedContext": true
+            },
+            "sessionCapabilities": {
+              "resume": {},
+              "close": {},
+              "load": {},
+              "list": {},
+              "additionalDirectories": {}
+            },
+            "session_capabilities": {
+              "resume": {},
+              "close": {},
+              "load": {},
+              "list": {},
+              "additionalDirectories": {}
+            },
+            "auth": {
+              "logout": {}
+            },
+            "_meta": {
+              "antigravity": {
+                "tier": true,
+                "systemPrompt": {
+                  "append": true
+                }
+              }
+            }
+          },
+          "agentInfo": {
+            "name": "Antigravity ACP Server",
+            "version": "1.5.1"
           },
           "authMethods": [
-            { "id": "oauth-personal", "name": "Log in with Google" },
-            { "id": "oauth-business", "name": "Log in with Gemini Enterprise" },
-            { "id": "gemini-api-key", "name": "Gemini API key" },
-            { "id": "agent-platform", "name": "Gemini Enterprise Agent Platform" }
+            {
+              "id": "oauth-personal",
+              "name": "Log in with Google",
+              "description": "Log in with your Google account"
+            },
+            {
+              "id": "oauth-business",
+              "name": "Log in with Gemini Enterprise",
+              "description": "Log in with your Gemini Enterprise account"
+            },
+            {
+              "id": "gemini-api-key",
+              "name": "Gemini API key",
+              "description": "Use an API key with Gemini Developer API"
+            },
+            {
+              "id": "agent-platform",
+              "name": "Gemini Enterprise Agent Platform",
+              "description": "Use Gemini Enterprise Agent Platform (formerly Vertex AI) with Application Default Credentials"
+            }
           ]
         }
       }
@@ -56,9 +104,11 @@
       "direction": "CLIENT_TO_SERVER",
       "message": {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": 3,
         "method": "session/new",
-        "params": {}
+        "params": {
+          "cwd": "C:/Users/arcobaleno/Documents/Code/agy-security-audit"
+        }
       }
     },
     {
@@ -66,17 +116,18 @@
       "direction": "SERVER_TO_CLIENT",
       "message": {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": 3,
         "result": {
+          "sessionId": "7cb052b8-d647-475c-b8e3-d6bdc840a30d",
           "models": {
             "currentModelId": "gemini-4-argon-medium",
             "availableModels": [
-              { "modelId": "gemini-4-argon-low", "name": "Gemini 4 Argon (Low)" },
               { "modelId": "gemini-4-argon-medium", "name": "Gemini 4 Argon (Medium)" },
               { "modelId": "gemini-4-argon-high", "name": "Gemini 4 Argon (High)" },
-              { "modelId": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash (Low)" },
-              { "modelId": "gemini-3.8-flash-medium", "name": "Gemini 3.8 Flash (Medium)" },
+              { "modelId": "gemini-4-argon-low", "name": "Gemini 4 Argon (Low)" },
               { "modelId": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash (High)" },
+              { "modelId": "gemini-3.8-flash-medium", "name": "Gemini 3.8 Flash (Medium)" },
+              { "modelId": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash (Low)" },
               { "modelId": "claude-opus-5-5-low", "name": "Claude Opus 5.5 (Low)" },
               { "modelId": "claude-opus-5-5-medium", "name": "Claude Opus 5.5 (Medium)" },
               { "modelId": "claude-opus-5-5-high", "name": "Claude Opus 5.5 (High)" },
@@ -89,9 +140,21 @@
           "modes": {
             "currentModeId": "default",
             "availableModes": [
-              { "id": "default", "name": "Default" },
-              { "id": "accept-edits", "name": "Accept edits" },
-              { "id": "plan", "name": "Plan" }
+              {
+                "id": "default",
+                "name": "Default",
+                "description": "Ask before edits and commands, per your permission settings."
+              },
+              {
+                "id": "accept-edits",
+                "name": "Accept edits",
+                "description": "Approve file edits in the workspace without asking."
+              },
+              {
+                "id": "plan",
+                "name": "Plan",
+                "description": "Plan carefully before executing a task."
+              }
             ]
           },
           "configOptions": [
@@ -120,8 +183,55 @@
                 { "value": "medium", "name": "Medium" },
                 { "value": "high", "name": "High" }
               ]
+            },
+            {
+              "id": "mode",
+              "name": "Mode",
+              "category": "mode",
+              "type": "select",
+              "currentValue": "default",
+              "options": [
+                { "value": "default", "name": "Default", "description": "Ask before edits and commands, per your permission settings." },
+                { "value": "accept-edits", "name": "Accept edits", "description": "Approve file edits in the workspace without asking." },
+                { "value": "plan", "name": "Plan", "description": "Plan carefully before executing a task." }
+              ]
             }
-          ]
+          ],
+          "_meta": {
+            "antigravity": {
+              "tier": {
+                "name": "Google AI Pro",
+                "id": "g1-pro-tier",
+                "upgradeUri": "https://antigravity.google/g1-upgrade"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "step": 5,
+      "direction": "SERVER_TO_CLIENT",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "7cb052b8-d647-475c-b8e3-d6bdc840a30d",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              { "name": "goal", "description": "Run until the specified goal is completely finished." },
+              { "name": "compact", "description": "Compact the conversation now (summarize history to free up the context window)." },
+              { "name": "schedule", "description": "Run an instruction on a recurring schedule or as a one-time timer." },
+              { "name": "browser", "description": "Invoke a browser agent for web tasks." },
+              { "name": "plan", "description": "Plan carefully before executing a task." },
+              { "name": "grill-me", "description": "Interview me to align on a plan." },
+              { "name": "teamwork", "description": "Invoke a team of agents to autonomously tackle large projects." },
+              { "name": "learn", "description": "Reflect on recent successes or corrections to capture reusable skills or rules." },
+              { "name": "boost", "description": "Invoke the Boost multi-agent orchestrator for complex tasks." },
+              { "name": "security-audit", "description": "Conducts evidence-backed, multi-stage security assurance reviews, vulnerability verification, and patch analysis on codebases or git diffs, informed by NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, and frontier defensive frameworks." }
+            ]
+          }
         }
       }
     }

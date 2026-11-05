@@ -385,11 +385,6 @@ export function parseStreamJsonTrace(rawNdjson) {
     };
   }
 
-  // Fallback to accumulated text if no result.response was provided
-  if (!rawResponse && accumulatedText) {
-    rawResponse = accumulatedText;
-  }
-
   // If tokenUsage was not populated by step_update events, but resultUsage exists, use resultUsage
   if (tokenUsage.totalTokens === 0 && tokenUsage.inputTokens === 0 && tokenUsage.outputTokens === 0 && resultUsage) {
     tokenUsage = resultUsage;
@@ -424,23 +419,35 @@ export function parseStreamJsonTrace(rawNdjson) {
     };
   }
 
-  // Gate 0 (M54-P1-F02): Finished reason indicating safety block or truncation fails closed as CENSORED_EXPOSURE
-  if (finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(finishedReason).toLowerCase())) {
-    return {
-      success: false,
-      telemetry,
-      rawResponse,
-      error: `CENSORED_EXPOSURE: Stream blocked by safety filter with finished_reason: ${finishedReason}`
-    };
-  }
-
-  if (finishedReason && ['max_tokens', 'length'].includes(String(finishedReason).toLowerCase())) {
-    return {
-      success: false,
-      telemetry,
-      rawResponse,
-      error: `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${finishedReason}`
-    };
+  // Gate 0 (M54-P1-F02): Finished reason must belong to strict allowlist of successful completions
+  // If finishedReason is present, non-allowlisted values (interrupted, error, print_timeout, safety, max_tokens, etc.) Fail-Closed
+  const ALLOWED_FINISHED_REASONS = new Set(['stop', 'end_turn', 'complete', 'completed', 'eos', 'stop_sequence']);
+  if (finishedReason) {
+    const normalizedReason = String(finishedReason).trim().toLowerCase();
+    if (['max_tokens', 'length'].includes(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${finishedReason}`
+      };
+    }
+    if (['safety', 'content_filter', 'filter', 'recitation'].includes(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream blocked by safety filter with finished_reason: ${finishedReason}`
+      };
+    }
+    if (!ALLOWED_FINISHED_REASONS.has(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream terminated with non-allowlisted finished_reason: '${finishedReason}'`
+      };
+    }
   }
 
   if (finalStatus && finalStatus !== 'SUCCESS' && finalStatus !== 'COMPLETED') {

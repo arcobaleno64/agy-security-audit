@@ -106,3 +106,38 @@ test('PreInvocation Secret Guard - Missing Verifiable Content Fields (Fail-Close
   assert.equal(response.terminationBehavior, 'terminate');
   assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Missing required verifiable prompt or message payload fields'));
 });
+
+test('PreInvocation Secret Guard - Empty String Field Counterexample F01 (Fail-Closed Invariant)', () => {
+  // Counterexample identified by ChatGPT R3: {"lastUserInput": ""} must NOT bypass missing field check
+  const response = runHook(JSON.stringify({ lastUserInput: '' }));
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Empty or whitespace-only prompt payload'));
+});
+
+test('PreInvocation Secret Guard - Whitespace-only Field (Fail-Closed Invariant)', () => {
+  const response = runHook(JSON.stringify({ lastUserInput: '   \t  \n ' }));
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Empty or whitespace-only prompt payload'));
+});
+
+test('PreInvocation Secret Guard - Empty Prompt and Whitespace Messages (Fail-Closed Invariant)', () => {
+  const response = runHook(JSON.stringify({
+    prompt: '',
+    messages: [
+      { role: 'user', content: '' },
+      { role: 'user', content: '   ' }
+    ]
+  }));
+  assert.equal(response.terminationBehavior, 'terminate');
+  assert.ok(response.injectSteps[0].errorMessage.userMessage.includes('Empty or whitespace-only prompt payload'));
+});
+
+test('PreInvocation Secret Guard - Non-Object JSON Payload (Fail-Closed Invariant)', () => {
+  const responseArray = runHook(JSON.stringify(['arbitrary', 'array']));
+  assert.equal(responseArray.terminationBehavior, 'terminate');
+  assert.ok(responseArray.injectSteps[0].errorMessage.userMessage.includes('must be a non-null JSON object'));
+
+  const responseNull = runHook(JSON.stringify(null));
+  assert.equal(responseNull.terminationBehavior, 'terminate');
+  assert.ok(responseNull.injectSteps[0].errorMessage.userMessage.includes('must be a non-null JSON object'));
+});
