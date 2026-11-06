@@ -2918,13 +2918,24 @@ export function finalizeScan({
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
+  // RFC 0003 Section 3 / R9-F03-01: Under Default-Deny on Authority Claims,
+  // an execution nonce from manifest is ONLY inheritable if the manifest is incomplete AND
+  // executionRunId strictly matches manifestRunId.
+  // When scanRunId is specified but manifest lacks scanRunId (or vice versa, or mismatched),
+  // inheritance is strictly refused under default-deny.
+  const manifestRunId = (manifest?.scanRunId && String(manifest.scanRunId).trim().length > 0)
+    ? String(manifest.scanRunId).trim()
+    : null;
+  const executionRunId = (scanRunId && String(scanRunId).trim().length > 0)
+    ? String(scanRunId).trim()
+    : null;
   const isManifestStaleOrMismatched = Boolean(
     manifest && (
       manifest.complete === true ||
-      (scanRunId && manifest.scanRunId && manifest.scanRunId !== scanRunId)
+      (executionRunId !== manifestRunId)
     )
   );
-  let effectiveNonce = nonce || (!isManifestStaleOrMismatched ? (manifest?.nonce || manifest?.taskCorrelationNonce || null) : null);
+  let effectiveNonce = nonce || (!isManifestStaleOrMismatched ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
