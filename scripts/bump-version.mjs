@@ -40,8 +40,8 @@ const JSON_TARGETS = [
 const DOC_TARGETS = [
   {
     file: "README.md",
-    pattern: /^# agy-security-audit \(plugin ID: `security-audit`\) v[^\s]+/m,
-    replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
+    pattern: /^# Three-Lens \(3lens\) v[^\s]+/m,
+    replacement: (v) => `# Three-Lens (3lens) v${v}`
   },
   {
     file: "README.md",
@@ -50,8 +50,8 @@ const DOC_TARGETS = [
   },
   {
     file: "README.zh-TW.md",
-    pattern: /^# agy-security-audit \(plugin ID: `security-audit`\) v[^\s]+/m,
-    replacement: (v) => `# agy-security-audit (plugin ID: \`security-audit\`) v${v}`
+    pattern: /^# Three-Lens \(3lens\) v[^\s]+/m,
+    replacement: (v) => `# Three-Lens (3lens) v${v}`
   },
   {
     file: "README.zh-TW.md",

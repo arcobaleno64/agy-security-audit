@@ -1,4 +1,4 @@
-# three-lens (plugin ID: `three-lens`) v1.10.0
+# Three-Lens (3lens) v1.10.0
 
 three-lens is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
 

@@ -1,4 +1,4 @@
-# three-lens (plugin ID: `three-lens`) v1.10.0
+# Three-Lens (3lens) v1.10.0
 
 three-lens 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
