@@ -660,6 +660,73 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
   assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
 });
 
+test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest Nonce Counterexample R10-F03-01 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R10 (R10-F03-01):
+  // When finalizeScan is invoked with NO caller-provided scanRunId (scanRunId: null)
+  // and NO caller-provided nonce (nonce: null),
+  // but receives an incomplete manifest (complete: false) that also lacks scanRunId (manifest.scanRunId: missing)
+  // while carrying nonce: 'NONCE-RUN-A',
+  // and 3 ballots from a previous run with nonce: 'NONCE-RUN-A',
+  // finalizeScan MUST NOT treat null === null as proof of execution identity parity!
+  // Manifest nonce inheritance strictly requires both executionRunId and manifestRunId to be valid, non-empty, and matching.
+  // It must strictly fail closed to DEFERRED.
+  const candidate = {
+    id: 'SEC-MANIFEST-DUAL-MISSING-RUNID-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate Facing Manifest with Missing Both RunIds',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const incompleteManifestWithoutRunId = {
+    complete: false,
+    nonce: 'NONCE-RUN-A',
+    taskCorrelationNonce: 'NONCE-RUN-A',
+    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+  };
+
+  const oldVotesWithOldNonce = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const scanResult = finalizeScan({
+    candidates: [candidate],
+    manifest: incompleteManifestWithoutRunId,
+    // Neither scanRunId nor nonce is provided (both null/undefined)
+    votes: oldVotesWithOldNonce,
+    repoRoot: process.cwd(),
+    allowSelfAudit: true
+  });
+
+  const resFinding = scanResult.canonicalFindings[0];
+  assert.equal(resFinding.disposition, 'DEFERRED', 'Manifest missing both scanRunIds must not supply nonce to achieve REPORTABLE');
+  assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+});
+
+
 
 
 

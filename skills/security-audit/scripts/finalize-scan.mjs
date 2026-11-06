@@ -2918,24 +2918,26 @@ export function finalizeScan({
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
-  // RFC 0003 Section 3 / R9-F03-01: Under Default-Deny on Authority Claims,
-  // an execution nonce from manifest is ONLY inheritable if the manifest is incomplete AND
-  // executionRunId strictly matches manifestRunId.
-  // When scanRunId is specified but manifest lacks scanRunId (or vice versa, or mismatched),
-  // inheritance is strictly refused under default-deny.
+  // RFC 0003 Section 3 / R10-F03-01: Under Default-Deny on Authority Claims,
+  // an execution nonce from manifest is ONLY inheritable if:
+  // 1. Manifest exists and is incomplete (manifest.complete !== true)
+  // 2. Both executionRunId and manifestRunId are non-empty strings
+  // 3. executionRunId strictly equals manifestRunId
+  // Missing Run ID on either or both sides strictly refuses nonce inheritance under default-deny.
   const manifestRunId = (manifest?.scanRunId && String(manifest.scanRunId).trim().length > 0)
     ? String(manifest.scanRunId).trim()
     : null;
   const executionRunId = (scanRunId && String(scanRunId).trim().length > 0)
     ? String(scanRunId).trim()
     : null;
-  const isManifestStaleOrMismatched = Boolean(
-    manifest && (
-      manifest.complete === true ||
-      (executionRunId !== manifestRunId)
-    )
+  const isManifestRunBound = Boolean(
+    manifest &&
+    !manifest.complete &&
+    executionRunId &&
+    manifestRunId &&
+    executionRunId === manifestRunId
   );
-  let effectiveNonce = nonce || (!isManifestStaleOrMismatched ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
+  let effectiveNonce = nonce || (isManifestRunBound ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
@@ -3488,7 +3490,7 @@ export function finalizeScan({
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = effectiveManifest;
   const effectiveScanRunId = scanRunId || effectiveManifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  effectiveNonce = effectiveNonce || (!isManifestStaleOrMismatched ? (effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null) : null);
+  effectiveNonce = effectiveNonce || (isManifestRunBound ? (effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null) : null);
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
@@ -3519,7 +3521,7 @@ export function finalizeScan({
     if (effectiveNonce) {
       effectiveManifest.nonce = effectiveNonce;
       effectiveManifest.taskCorrelationNonce = effectiveNonce;
-    } else if (isManifestStaleOrMismatched) {
+    } else if (!isManifestRunBound) {
       delete effectiveManifest.nonce;
       delete effectiveManifest.taskCorrelationNonce;
     }

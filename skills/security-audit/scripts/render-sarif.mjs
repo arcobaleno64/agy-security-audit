@@ -154,7 +154,7 @@ export function getGitProvenance(repoRoot) {
  * Builds standard SARIF 2.1.0 document.
  * Centralized through finalizeScan to enforce default-deny and canonical contract.
  */
-export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null }) {
+export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null, scanRunId = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
@@ -162,7 +162,8 @@ export function renderSarif({ findings = [], manifest = null, provenance = null,
     provenance,
     votes,
     auditIntent,
-    nonce
+    nonce,
+    scanRunId
   });
   return renderSarifFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -317,6 +318,7 @@ export function runTests() {
   // 4. Directory manifest validation
   const validManifest = {
     complete: false,
+    scanRunId: 'SCAN-RUN-SARIF-001',
     nonce: 'NONCE-SARIF-001',
     taskCorrelationNonce: 'NONCE-SARIF-001',
     entries: [
@@ -401,7 +403,7 @@ export function runTests() {
     }
   ];
 
-  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes, repoRoot: process.cwd() });
+  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes, scanRunId: 'SCAN-RUN-SARIF-001', repoRoot: process.cwd() });
   if (sarif.version !== '2.1.0') throw new Error('SARIF version must be 2.1.0');
   if (sarif.runs[0].tool.driver.rules.length !== 1) throw new Error('Rule was not registered in driver.rules');
   if (sarif.runs[0].results[0].level !== 'error') throw new Error('Critical confirmed finding must map to level error');
