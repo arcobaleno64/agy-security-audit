@@ -1653,7 +1653,7 @@ export function validateBallot(vote, candidate = null, options = {}) {
   }
 
   // Task-correlation nonce enforcement
-  const expectedNonce = options.expectedNonce || candidate?.nonce;
+  const expectedNonce = options.expectedNonce || options.nonce || candidate?.nonce;
   if (expectedNonce) {
     if (!vote.nonce) {
       return { valid: false, reason: `Missing required task-correlation nonce (expected '${expectedNonce}')` };
@@ -1716,9 +1716,10 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
 
   // 2. Candidate task-binding and deduplication of votes
   const safeVotes = Array.isArray(votes) ? votes : [];
+  const expectedNonce = options.expectedNonce || options.nonce || candidate?.nonce || null;
   const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
-    return validateBallot(v, candidate).valid;
+    return validateBallot(v, candidate, { expectedNonce }).valid;
   });
 
   // Gate 0 (M54-P1-F03 / R5-F03-01): Conflicting/Contradictory Ballot Detection
@@ -2867,6 +2868,7 @@ export function finalizeScan({
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
+  let effectiveNonce = nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null;
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
@@ -2992,7 +2994,7 @@ export function finalizeScan({
     // Check for IMPACT lens calibration (strictly validating candidate identity, lens, and nonce)
     const candidateVotes = safeVotes.filter(v => {
       if (!v || (v.findingId !== raw.id && v.findingId !== candidateId)) return false;
-      return validateBallot(v, raw).valid;
+      return validateBallot(v, raw, { expectedNonce: effectiveNonce || raw.nonce || null }).valid;
     });
     const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
 
@@ -3030,7 +3032,9 @@ export function finalizeScan({
         enforceThreeLens: true,
         auditIntent: safeAuditIntent,
         modelProvenance: safeModelProvenance,
-        modelEffort: raw.modelEffort || raw.effort || modelProvenance?.effort
+        modelEffort: raw.modelEffort || raw.effort || modelProvenance?.effort,
+        nonce: effectiveNonce || raw.nonce || null,
+        expectedNonce: effectiveNonce || raw.nonce || null
       };
       dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot, dispositionOptions);
     }
@@ -3410,7 +3414,7 @@ export function finalizeScan({
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = effectiveManifest;
   const effectiveScanRunId = scanRunId || effectiveManifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  const effectiveNonce = nonce || effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null;
+  effectiveNonce = effectiveNonce || effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null;
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {

@@ -321,4 +321,55 @@ test('Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Req
   assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
 });
 
+test('Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample R6-F03-03 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R6 (R6-F03-03):
+  // When finalizeScan is invoked with execution nonce 'RUN-B',
+  // ballots from a previous run without nonce (or with old nonce)
+  // must NOT bind to the candidate and must strictly fail closed to DEFERRED!
+  const candidate = {
+    id: 'SEC-REPLAY-NONCE-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate with Replayed Ballots',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const oldVotesWithoutNonce = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const scanResult = finalizeScan({
+    candidates: [candidate],
+    votes: oldVotesWithoutNonce,
+    nonce: 'RUN-B',
+    repoRoot: process.cwd(),
+    allowSelfAudit: true
+  });
+
+  const resFinding = scanResult.canonicalFindings[0];
+  assert.equal(resFinding.disposition, 'DEFERRED', 'Old ballots missing execution nonce must fail closed to DEFERRED');
+  assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+});
+
+
 

@@ -369,6 +369,7 @@ export function runTests() {
     {
       findingId: 'SEC-001',
       reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
       decision: 'CONFIRMED',
       evidence: [
         { path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'source' },
@@ -378,8 +379,16 @@ export function runTests() {
     {
       findingId: 'SEC-001',
       reviewerId: 'rev-2',
+      lens: 'DEFENSES',
       decision: 'CONFIRMED',
       evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'control' }]
+    },
+    {
+      findingId: 'SEC-001',
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'CONFIRMED',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }]
     }
   ];
 
