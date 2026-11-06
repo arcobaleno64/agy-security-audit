@@ -1688,7 +1688,7 @@ export function validateBallot(vote, candidate = null, options = {}) {
  * Every REFUTES decision strictly requires verifiable evidence binding (P1-02).
  * Every SUPPORTS decision strictly requires verifiable evidence binding and cannot self-certify via raw rigorMetrics (R1-P0-01).
  */
-export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null) {
+export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null, options = {}) {
   // 1. Schema & Location Containment Validation
   if (!candidate || typeof candidate !== 'object') {
     return { disposition: 'DEFERRED', mappedVerdict: 'NEEDS_MANUAL_REVIEW', reason: 'Malformed candidate' };
@@ -1720,6 +1720,56 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     if (!v) return false;
     return validateBallot(v, candidate).valid;
   });
+
+  // Gate 0 (M54-P1-F03 / R5-F03-01): Conflicting/Contradictory Ballot Detection
+  // Check if any reviewerId, persona, or lens submitted contradictory/conflicting decisions
+  const decisionsByReviewer = new Map();
+  const decisionsByLens = new Map();
+  let hasConflictingBallots = false;
+  let conflictReason = null;
+
+  for (const v of candidateVotes) {
+    const revKey = v.reviewerId || v.persona || null;
+    const lensKey = v.lens ? String(v.lens).toUpperCase() : null;
+    const rawDecision = String(v.decision || v.verdict || '').toUpperCase();
+    const normDecision = ['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(rawDecision)
+      ? 'SUPPORTS'
+      : (['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(rawDecision) ? 'REFUTES' : 'DEFERRED');
+
+    if (revKey) {
+      if (!decisionsByReviewer.has(revKey)) {
+        decisionsByReviewer.set(revKey, new Set());
+      }
+      const set = decisionsByReviewer.get(revKey);
+      if (set.size > 0 && !set.has(normDecision)) {
+        hasConflictingBallots = true;
+        conflictReason = `Reviewer '${revKey}' submitted conflicting decisions: [${[...set, normDecision].join(', ')}]`;
+      }
+      set.add(normDecision);
+    }
+
+    if (lensKey) {
+      if (!decisionsByLens.has(lensKey)) {
+        decisionsByLens.set(lensKey, new Set());
+      }
+      const set = decisionsByLens.get(lensKey);
+      if (set.size > 0 && !set.has(normDecision)) {
+        hasConflictingBallots = true;
+        conflictReason = `Lens '${lensKey}' received conflicting decisions: [${[...set, normDecision].join(', ')}]`;
+      }
+      set.add(normDecision);
+    }
+  }
+
+  // Under Default-Deny, any candidate with contradictory/conflicting ballots strictly fails closed to DEFERRED
+  if (hasConflictingBallots) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: `Contradictory ballots detected (${conflictReason}); deferred under default-deny`,
+      votesSummary: { total: candidateVotes.length, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
 
   const dedupedVotes = [];
   const seenKeys = new Set();
@@ -1859,10 +1909,14 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         };
       }
 
-      // Gate 0 (M54-P1-F03): Strict 3-Lens Unanimous Panel Enforcement
+      // Gate 0 (M54-P1-F03 / R5-F03-01): Strict 3-Lens Unanimous Panel Enforcement
       // Requires exactly 1 valid supporting ballot for REACHABILITY, 1 for DEFENSES, and 1 for IMPACT.
+      // Must have zero conflicting ballots, total === 3, candidateVotes.length === 3, and dedupedVotes.length === 3.
       // Any duplicate votes per lens, split votes, deferrals, refutations, or total !== 3 strictly fails closed to DEFERRED
       const isUnanimousThreeLens = Boolean(
+        !hasConflictingBallots &&
+        candidateVotes.length === 3 &&
+        dedupedVotes.length === 3 &&
         total === 3 &&
         supports === 3 &&
         refutes === 0 &&
@@ -1947,10 +2001,29 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       };
     }
 
-    const isEffortCandidate = Boolean(candidate?.modelEffort || candidate?.effort || candidate?.reasoningProfile || candidate?.tier);
+    const isEffortCandidate = Boolean(
+      candidate?.modelEffort ||
+      candidate?.effort ||
+      candidate?.reasoningProfile ||
+      candidate?.tier ||
+      options?.modelEffort ||
+      options?.effort ||
+      options?.modelProvenance?.effort
+    );
 
-    // Gate 0 (M54-P1-F03 / RFC 0003): All effort-directed candidates strictly require unanimous Fixed 3-Lens panel
-    if (isEffortCandidate && !isThreeLens) {
+    // Gate 0 (M54-P1-F03 / R5-F03-02 / RFC 0003):
+    // 3-Lens verification panel is required if:
+    // 1. Candidate carries effort metadata (modelEffort, reasoningProfile, tier, etc.)
+    // 2. Execution context mandates 3-lens (options.enforceThreeLens === true)
+    // 3. Any lens-based ballots were submitted (lenses.size > 0)
+    const requiresThreeLens = Boolean(
+      isEffortCandidate ||
+      options?.enforceThreeLens ||
+      lenses.size > 0
+    );
+
+    // Gate 0 (M54-P1-F03 / R5-F03-02 / RFC 0003): All candidates subject to 3-Lens requirement strictly require unanimous Fixed 3-Lens panel
+    if (requiresThreeLens && !isThreeLens) {
       if (validDecisiveMitigationVote && refutes / total >= 0.66) {
         return {
           disposition: 'SUPPRESSED',
@@ -1962,7 +2035,7 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
       return {
         disposition: 'DEFERRED',
         mappedVerdict: 'NEEDS_MANUAL_REVIEW',
-        reason: `Effort discovery candidate [${candidate.modelEffort || candidate.effort}] strictly requires unanimous Fixed 3-Lens panel verification (REACHABILITY, DEFENSES, IMPACT); non-lens or partial ballots cannot grant REPORTABLE disposition under default-deny`,
+        reason: `Candidate subject to Fixed 3-Lens requirement strictly requires unanimous 3-Lens panel verification (REACHABILITY, DEFENSES, IMPACT); non-lens or partial ballots cannot grant REPORTABLE disposition under default-deny`,
         votesSummary: { total, supports, refutes, unanimous: false, isThreeLens: false, lenses: Array.from(lenses) }
       };
     }
@@ -2011,8 +2084,8 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     const authoritativeRigor = deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
 
     // Reportable requirement: 2/3 supermajority + authoritative rigor >= 0.60 + source & sink verified
-    // Gate 0 (M54-P1-F03): Effort candidates are strictly barred from non-3-lens promotion
-    if (!isEffortCandidate && supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
+    // Gate 0 (M54-P1-F03 / R5-F03-02): All candidates subject to 3-lens requirement cannot bypass via legacy 2/3
+    if (!requiresThreeLens && supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
@@ -2953,7 +3026,13 @@ export function finalizeScan({
         votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
       };
     } else {
-      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot);
+      const dispositionOptions = {
+        enforceThreeLens: true,
+        auditIntent: safeAuditIntent,
+        modelProvenance: safeModelProvenance,
+        modelEffort: raw.modelEffort || raw.effort || modelProvenance?.effort
+      };
+      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot, dispositionOptions);
     }
 
 

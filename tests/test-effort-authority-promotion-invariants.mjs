@@ -236,3 +236,89 @@ test('Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03
   assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
   assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
 });
+
+test('Authority Promotion Gate: Conflicting Duplicate Reviewer Counterexample R5-F03-01 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R5 (R5-F03-01):
+  // 4 votes:
+  // rev-1: REACHABILITY -> SUPPORTS
+  // rev-2: DEFENSES -> SUPPORTS
+  // rev-3: IMPACT -> SUPPORTS
+  // rev-2: DEFENSES -> DEFERRED (conflicting duplicate from same reviewer rev-2)
+  const candidate = {
+    id: 'SEC-R5-F03-COUNTEREXAMPLE-REV2-CONFLICT',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate with Conflicting Reviewer Ballots',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const conflictingBallots = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'DEFERRED'
+    }
+  ];
+
+  const disposition = deriveFinalDisposition(candidate, conflictingBallots, { score: 0.95 }, process.cwd());
+  assert.equal(disposition.disposition, 'DEFERRED', 'Conflicting ballot from same reviewer rev-2 must fail-closed to DEFERRED');
+  assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+  assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
+});
+
+test('Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Requirement (R5-F03-02)', () => {
+  // Counterexample identified by ChatGPT R5 (R5-F03-02):
+  // Candidate lacking modelEffort/effort/reasoningProfile/tier fields.
+  // In an execution context requiring 3-lens (e.g. options.enforceThreeLens: true),
+  // non-lens ballots (legacy 2/3 confirmation) strictly cannot bypass 3-lens verification to achieve REPORTABLE!
+  const candidateNoEffort = {
+    id: 'SEC-R5-F03-NO-EFFORT-METADATA',
+    ruleId: 'CWE-89',
+    title: 'Candidate without explicit effort metadata',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 }
+  };
+
+  const twoNonLensSupports = [
+    {
+      findingId: candidateNoEffort.id,
+      reviewerId: 'rev-1',
+      decision: 'CONFIRMED',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidateNoEffort.id,
+      reviewerId: 'rev-2',
+      decision: 'CONFIRMED',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const disposition = deriveFinalDisposition(candidateNoEffort, twoNonLensSupports, { score: 0.95 }, process.cwd(), { enforceThreeLens: true });
+  assert.equal(disposition.disposition, 'DEFERRED', 'Enforced 3-lens context must reject legacy 2/3 confirmation');
+  assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+  assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
+});
+
+

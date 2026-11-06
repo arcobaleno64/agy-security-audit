@@ -894,6 +894,9 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
           symbol: cand.symbol || fixture.id
         });
       }
+      if (options.tier || options.effort) {
+        cand.modelEffort = options.tier || options.effort;
+      }
       candidates.push(cand);
     }
 

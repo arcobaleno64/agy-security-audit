@@ -979,7 +979,13 @@ export function createBenchmarkRunEnvelope(options = {}) {
     ...cleanEnvOverrides
   };
 
-  const candidates = Array.isArray(options.candidates) ? options.candidates : [];
+  const tierEffort = options.tier || options.effort || (options.environment?.modelTier) || null;
+  const candidates = (Array.isArray(options.candidates) ? options.candidates : []).map(c => {
+    if (c && typeof c === 'object' && tierEffort && !c.modelEffort) {
+      return { ...c, modelEffort: tierEffort };
+    }
+    return c;
+  });
   const verifiedFindings = Array.isArray(options.verifiedFindings)
     ? options.verifiedFindings
     : (Array.isArray(options.findings) ? options.findings : null);

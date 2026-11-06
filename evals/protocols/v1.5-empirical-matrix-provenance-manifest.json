@@ -2,7 +2,10 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "manifestVersion": "1.0.0",
   "provenanceScope": {
+    "gitTag": "v1.10.0",
+    "gitTagCommit": "50b2437f2b485c8f491f1a507c324d9b7d0b88f1",
     "gitBaseline": "d1e5e1a1c5ac6776301539b98a353e40d1075ece",
+    "gitBaselineRationale": "Commit d1e5e1a is the frozen pre-m54 main branch baseline commit following release tag v1.10.0 (50b2437), incorporating baseline documentation integrity.",
     "featureBranch": "feat/m54-phase1-runtime-adaptation",
     "timestamp": "2026-11-05T22:45:00Z",
     "purpose": "Milestone 5.4 Phase 1 Gate 0 Cryptographic Sealing of Empirical 3-Tier Model Matrices & Output Artifacts (M54-P1-F05)",
@@ -12,7 +15,11 @@
   "workingTreeAttestation": {
     "trackedFilesCleanAtCommit": true,
     "dirtyClassification": "WORKSPACE_SCRATCH_UNTRACKED_ONLY",
-    "scopeBoundary": "Empirical run output artifacts and executionTelemetry integrity. Does not assert historical uncaptured upstream raw network stream reproduction.",
+    "scopeBoundary": {
+      "OUTPUT_ARTIFACT_INTEGRITY": "VERIFIED",
+      "RECORDED_TELEMETRY_DIGEST_CONSISTENCY": "VERIFIED",
+      "RAW_STREAM_REPRODUCIBILITY": "NOT_ESTABLISHED (historical uncaptured upstream raw network streams are excluded from attestation scope)"
+    },
     "rationale": "Tool reported toolDirty: true during execution because temporary scratch deliverables and untracked artifacts were present in the root directory. No tracked source code was dirty relative to commit bfedbb3."
   },
   "runs": [
