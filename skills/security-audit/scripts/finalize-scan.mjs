@@ -3294,7 +3294,7 @@ export function finalizeScan({
     ? (matrixValidation.valid && !hasUnresolvedCells && !hasUnconfirmedCriticalZeros)
     : (safeAuditIntent === 'REGRESSION');
 
-  let effectiveManifest = manifest;
+  let effectiveManifest = manifest ? { ...manifest } : null;
   if (!effectiveManifest && cloudflareCoverage) {
     effectiveManifest = {
       schemaVersion: '1.0.0',

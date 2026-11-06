@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveFinalDisposition, finalizeScan } from '../skills/security-audit/scripts/finalize-scan.mjs';
+import { renderSarif, renderMarkdown } from '../skills/security-audit/scripts/render-sarif.mjs';
 
 const EFFORT_TIERS = ['low', 'medium', 'high'];
 
@@ -725,6 +726,44 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
   assert.equal(resFinding.disposition, 'DEFERRED', 'Manifest missing both scanRunIds must not supply nonce to achieve REPORTABLE');
   assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
 });
+
+test('Authority Promotion Gate: Public Renderer Canonical Parity Counterexample R11-F03-01 (renderSarif and renderMarkdown)', () => {
+  // Counterexample identified by ChatGPT R11 (R11-F03-01):
+  // Public renderers renderSarif and renderMarkdown must maintain 100% canonical parity.
+  // Both must accept scanRunId and propagate it to finalizeScan, ensuring active in-progress
+  // manifest nonce binding behaves identically whether generating SARIF or Markdown.
+  const candidate = {
+    id: 'SEC-PARITY-RENDERER-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Auth for Parity Check',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const manifest = {
+    complete: false,
+    scanRunId: 'SCAN-PARITY-RUN-01',
+    nonce: 'NONCE-PARITY-01',
+    taskCorrelationNonce: 'NONCE-PARITY-01',
+    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+  };
+
+  const votes = [
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+  ];
+
+  const sarifRes = renderSarif({ findings: [candidate], manifest, votes, scanRunId: 'SCAN-PARITY-RUN-01', repoRoot: process.cwd() });
+  const mdRes = renderMarkdown({ findings: [candidate], manifest, votes, scanRunId: 'SCAN-PARITY-RUN-01', repoRoot: process.cwd() });
+
+  assert.equal(sarifRes.runs[0].results[0].properties.disposition, 'REPORTABLE', 'renderSarif must promote finding to REPORTABLE');
+  assert.ok(mdRes.includes('- **Confirmed Vulnerabilities (Reportable)**: 1'), 'renderMarkdown must reflect 1 Confirmed Vulnerabilities (Reportable)');
+  assert.ok(mdRes.includes('- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: 0'), 'renderMarkdown must reflect 0 deferred items');
+  assert.ok(mdRes.includes('Confirmed Vulnerabilities (High Assurance)'), 'renderMarkdown must output Confirmed section');
+  assert.ok(mdRes.includes('SQL Injection in Auth for Parity Check'), 'renderMarkdown must list candidate in Confirmed section');
+});
+
 
 
 

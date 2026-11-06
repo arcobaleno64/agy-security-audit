@@ -179,7 +179,7 @@ export function renderSarif({ findings = [], manifest = null, provenance = null,
  * Builds Human-Readable Markdown Audit Report with strict entity escaping and default-deny.
  * Centralized through finalizeScan to guarantee 100% parity with SARIF and JSON.
  */
-export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null }) {
+export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null, scanRunId = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
@@ -187,7 +187,8 @@ export function renderMarkdown({ findings = [], manifest = null, provenance = nu
     provenance,
     votes,
     auditIntent,
-    nonce
+    nonce,
+    scanRunId
   });
   return renderMarkdownFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -614,6 +615,28 @@ export function runTests() {
 
   if (canonicalSarif.runs[0].results.length !== 1 || !canonicalMd.includes('SQL Injection in Auth')) {
     throw new Error('P0 VIOLATION: Inconsistency between canonical SARIF and Markdown outputs!');
+  }
+
+  // 17.1 Public Renderer Parity (R11-F03-01): renderSarif and renderMarkdown maintain identical canonical disposition parity under scanRunId inheritance
+  const publicSarif = renderSarif({
+    findings: confirmedFindings,
+    manifest: validManifest,
+    votes: confirmedVotes,
+    scanRunId: 'SCAN-RUN-SARIF-001',
+    repoRoot: process.cwd()
+  });
+  const publicMd = renderMarkdown({
+    findings: confirmedFindings,
+    manifest: validManifest,
+    votes: confirmedVotes,
+    scanRunId: 'SCAN-RUN-SARIF-001',
+    repoRoot: process.cwd()
+  });
+  if (publicSarif.runs[0].results[0].properties.disposition !== 'REPORTABLE') {
+    throw new Error('R11-F03-01 VIOLATION: renderSarif failed to produce REPORTABLE under scanRunId inheritance');
+  }
+  if (!publicMd.includes('REPORTABLE') && publicMd.includes('DEFERRED')) {
+    throw new Error('R11-F03-01 VIOLATION: renderMarkdown produced DEFERRED while renderSarif produced REPORTABLE under scanRunId inheritance');
   }
   console.log('✔ 17. P0 Invariant: 100% Canonical Parity between SARIF and Markdown.');
 
