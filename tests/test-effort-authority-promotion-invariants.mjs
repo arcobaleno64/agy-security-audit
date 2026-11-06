@@ -764,6 +764,130 @@ test('Authority Promotion Gate: Public Renderer Canonical Parity Counterexample 
   assert.ok(mdRes.includes('SQL Injection in Auth for Parity Check'), 'renderMarkdown must list candidate in Confirmed section');
 });
 
+test('Authority Promotion Gate: Direct-input CLI (render-sarif.mjs --input --votes) with trusted nonce produces REPORTABLE findings (R22-F03-01)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cli-test-'));
+  const candidatesPath = path.join(tmpDir, 'candidates.json');
+  const votesPath = path.join(tmpDir, 'votes.json');
+  const sarifOut = path.join(tmpDir, 'output.sarif');
+  const mdOut = path.join(tmpDir, 'output.md');
+
+  const testNonce = 'nonce-cli-exec-test-01';
+  const testRunId = 'SCAN-CLI-RUN-01';
+
+  const candidate = {
+    id: 'SEC-CLI-DIRECT-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Direct CLI Path',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high',
+    nonce: testNonce,
+    scanRunId: testRunId
+  };
+
+  const votes = [
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+  ];
+
+  fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
+  fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
+
+  try {
+    const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+    const result = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--nonce', testNonce,
+      '--scan-run-id', testRunId,
+      '--output-sarif', sarifOut,
+      '--output-md', mdOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(result.status, 0, `CLI failed with code ${result.status}: ${result.stderr}`);
+    assert.ok(fs.existsSync(sarifOut), 'SARIF output file must exist');
+    assert.ok(fs.existsSync(mdOut), 'Markdown output file must exist');
+
+    const sarif = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarif.runs[0].results.length, 1);
+    assert.equal(sarif.runs[0].results[0].properties.disposition, 'REPORTABLE', 'Direct CLI with matching nonce must promote to REPORTABLE');
+
+    const md = fs.readFileSync(mdOut, 'utf8');
+    assert.ok(md.includes('- **Confirmed Vulnerabilities (Reportable)**: 1'));
+    assert.ok(md.includes('- **Needs Manual Review (Deferred / Presumption of Non-Pass)**: 0'));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Authority Promotion Gate: Direct-input CLI without nonce or with mismatched nonce strictly defaults to DEFERRED under Default-Deny (R22-F03-01)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cli-fail-'));
+  const candidatesPath = path.join(tmpDir, 'candidates.json');
+  const votesPath = path.join(tmpDir, 'votes.json');
+  const sarifOut = path.join(tmpDir, 'output.sarif');
+
+  const testNonce = 'nonce-cli-exec-test-02';
+  const candidate = {
+    id: 'SEC-CLI-DIRECT-02',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Direct CLI Path Without Nonce',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high',
+    nonce: testNonce
+  };
+
+  const votes = [
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+  ];
+
+  fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
+  fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
+
+  try {
+    const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+
+    // Case 1: CLI invocation without --nonce
+    const resNoNonce = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resNoNonce.status, 0);
+    const sarifNoNonce = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifNoNonce.runs[0].results[0].properties.disposition, 'DEFERRED', 'Omitted nonce must fail closed to DEFERRED');
+
+    // Case 2: CLI invocation with mismatched nonce
+    const resMismatch = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--nonce', 'wrong-mismatched-nonce',
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resMismatch.status, 0);
+    const sarifMismatch = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifMismatch.runs[0].results[0].properties.disposition, 'DEFERRED', 'Mismatched nonce must fail closed to DEFERRED');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 
 
 

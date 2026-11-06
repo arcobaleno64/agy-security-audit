@@ -400,6 +400,11 @@ export async function probeNativeAcpServerAsync(options = {}) {
       return fail(`Failed to spawn ACP binary: ${err.message}`);
     }
 
+    // Drain stderr continuously to prevent pipe buffer backpressure during async probe (Codex P2)
+    if (child.stderr) {
+      child.stderr.on('data', () => {});
+    }
+
     timer = setTimeout(() => {
       fail(`Handshake timed out after ${timeoutMs}ms`);
     }, timeoutMs);

@@ -6117,6 +6117,8 @@ const votesPath = getArg('--votes');
 const manifestPath = getArg('--manifest');
 const repoRootArg = getArg('--repo-root') || process.cwd();
 const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
+const nonceArg = getArg('--nonce') || getArg('--task-correlation-nonce');
+const scanRunIdArg = getArg('--scan-run-id') || getArg('--run-id');
 const outputSarifPath = getArg('--output-sarif');
 const outputMdPath = getArg('--output-md');
 
@@ -6151,7 +6153,18 @@ if (canonicalPath || inputPath) {
         console.warn('[DEFAULT-DENY] Direct render without --votes. Under Default-Deny, all findings are derived as DEFERRED.');
       }
 
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg });
+      const effectiveNonce = nonceArg || manifest?.taskCorrelationNonce || manifest?.nonce || null;
+      const effectiveScanRunId = scanRunIdArg || manifest?.scanRunId || null;
+
+      const finalization = finalizeScan({
+        candidates,
+        manifest,
+        repoRoot,
+        votes,
+        auditIntent: intentArg,
+        nonce: effectiveNonce,
+        scanRunId: effectiveScanRunId
+      });
       canonicalFindings = finalization.canonicalFindings;
       coverageStatus = finalization.coverageStatus;
       activeIntent = finalization.auditIntent;
