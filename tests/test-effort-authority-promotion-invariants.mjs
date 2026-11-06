@@ -188,3 +188,51 @@ test('Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Relea
   assert.equal(scanWithReportable.summary.canDeclareClean, false, 'Scan with REPORTABLE findings strictly cannot declare clean');
   assert.equal(scanWithReportable.summary.assuranceLabel, 'NON_CLEAN');
 });
+
+test('Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R4:
+  // 4 votes: rev-1 (REACHABILITY: SUPPORTS), rev-2 (DEFENSES: SUPPORTS), rev-3 (DEFENSES: SUPPORTS), rev-4 (IMPACT: DEFERRED)
+  // Even with valid source and sink evidence and high rigor, non-unanimous / duplicate-lens / incomplete IMPACT must strictly evaluate to DEFERRED!
+  const candidate = {
+    id: 'SEC-F03-COUNTEREXAMPLE-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate with Split Lens Ballots',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const splitBallots = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-4',
+      lens: 'IMPACT',
+      decision: 'DEFERRED'
+    }
+  ];
+
+  const disposition = deriveFinalDisposition(candidate, splitBallots, { score: 0.95 }, process.cwd());
+  assert.equal(disposition.disposition, 'DEFERRED', 'Split ballots with duplicate DEFENSES and deferred IMPACT must be DEFERRED');
+  assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+  assert.equal(disposition.mappedVerdict, 'NEEDS_MANUAL_REVIEW');
+});

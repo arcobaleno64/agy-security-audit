@@ -5,13 +5,14 @@
     "gitBaseline": "d1e5e1a1c5ac6776301539b98a353e40d1075ece",
     "featureBranch": "feat/m54-phase1-runtime-adaptation",
     "timestamp": "2026-11-05T22:45:00Z",
-    "purpose": "Milestone 5.4 Phase 1 Gate 0 Cryptographic Sealing of Empirical 3-Tier Model Matrices (M54-P1-F05)",
-    "telemetryDigestDefinition": "Direct extraction of executionTelemetry.telemetryDigest from each empirical run JSON record",
-    "telemetryDigestAlgorithm": "SHA-256 over canonical NDJSON event stream"
+    "purpose": "Milestone 5.4 Phase 1 Gate 0 Cryptographic Sealing of Empirical 3-Tier Model Matrices & Output Artifacts (M54-P1-F05)",
+    "telemetryDigestDefinition": "Direct extraction of executionTelemetry.telemetryDigest computed via crypto.createHash('sha256').update(rawNdjson, 'utf8') in record-benchmark-run.mjs",
+    "telemetryDigestAlgorithm": "SHA-256 over raw captured stream trace string"
   },
   "workingTreeAttestation": {
     "trackedFilesCleanAtCommit": true,
     "dirtyClassification": "WORKSPACE_SCRATCH_UNTRACKED_ONLY",
+    "scopeBoundary": "Empirical run output artifacts and executionTelemetry integrity. Does not assert historical uncaptured upstream raw network stream reproduction.",
     "rationale": "Tool reported toolDirty: true during execution because temporary scratch deliverables and untracked artifacts were present in the root directory. No tracked source code was dirty relative to commit bfedbb3."
   },
   "runs": [

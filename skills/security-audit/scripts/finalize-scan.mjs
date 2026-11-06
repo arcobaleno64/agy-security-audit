@@ -1747,9 +1747,20 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     let defensesSupports = null;
     let impactSupports = null;
     const lenses = new Set();
+    const lensVotes = {
+      REACHABILITY: [],
+      DEFENSES: [],
+      IMPACT: []
+    };
 
     for (const v of dedupedVotes) {
-      if (v.lens) lenses.add(String(v.lens).toUpperCase());
+      if (v.lens) {
+        const uLens = String(v.lens).toUpperCase();
+        lenses.add(uLens);
+        if (lensVotes[uLens]) {
+          lensVotes[uLens].push(v);
+        }
+      }
       const decision = String(v.decision || v.verdict || '').toUpperCase();
       const lens = v.lens ? String(v.lens).toUpperCase() : null;
 
@@ -1848,8 +1859,23 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         };
       }
 
-      // 3-Lens requires unanimous confirmation (supports === 3)
-      if (supports === 3) {
+      // Gate 0 (M54-P1-F03): Strict 3-Lens Unanimous Panel Enforcement
+      // Requires exactly 1 valid supporting ballot for REACHABILITY, 1 for DEFENSES, and 1 for IMPACT.
+      // Any duplicate votes per lens, split votes, deferrals, refutations, or total !== 3 strictly fails closed to DEFERRED
+      const isUnanimousThreeLens = Boolean(
+        total === 3 &&
+        supports === 3 &&
+        refutes === 0 &&
+        reachabilitySupports &&
+        defensesSupports &&
+        impactSupports &&
+        lensVotes.REACHABILITY.length === 1 &&
+        lensVotes.DEFENSES.length === 1 &&
+        lensVotes.IMPACT.length === 1 &&
+        validSupportVotes.length === 3
+      );
+
+      if (isUnanimousThreeLens) {
         // R1-P0-01: Verify required evidence tuple:
         // 1. REACHABILITY must prove source/entrypoint
         const reachEv = reachabilitySupports?._validatedEvidence || [];
