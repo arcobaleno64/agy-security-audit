@@ -48,7 +48,7 @@ assert(fs.existsSync(readmePath), 'README.md must exist');
 const readme = fs.readFileSync(readmePath, 'utf8');
 
 assert(
-  readme.includes(`# agy-security-audit (plugin ID: \`security-audit\`) v${currentVersion}`),
+  readme.includes(`# three-lens (plugin ID: \`three-lens\`) v${currentVersion}`),
   `README.md header must match v${currentVersion}`
 );
 assert(
@@ -72,7 +72,7 @@ assert(fs.existsSync(readmeZhPath), 'README.zh-TW.md must exist');
 const readmeZh = fs.readFileSync(readmeZhPath, 'utf8');
 
 assert(
-  readmeZh.includes(`# agy-security-audit (plugin ID: \`security-audit\`) v${currentVersion}`),
+  readmeZh.includes(`# three-lens (plugin ID: \`three-lens\`) v${currentVersion}`),
   `README.zh-TW.md header must match v${currentVersion}`
 );
 assert(

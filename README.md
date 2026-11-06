@@ -1,6 +1,6 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.10.0
+# three-lens (plugin ID: `three-lens`) v1.10.0
 
-agy-security-audit is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
+three-lens is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
 
 Its defensive architecture aligns with **NIST SSDF (SP 800-218)**, **OWASP ASVS 5.0.0**, **OWASP SAMM**, **CWE Taxonomy**, **CVSS v4.0**, and **SARIF 2.1.0**, and incorporates defensive concepts from Anthropic's Claude Security and OpenAI's Codex Security research.
 
@@ -8,9 +8,9 @@ Its defensive architecture aligns with **NIST SSDF (SP 800-218)**, **OWASP ASVS 
 
 ## Related project
 
-[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) is a separate Claude Code companion for running Gemini CLI or Antigravity CLI (`agy`) as a cross-model task delegate and code reviewer. It delegates work from Claude Code; `agy-security-audit` runs natively inside Antigravity CLI. Neither project is bundled with or required by the other.
+[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) is a separate Claude Code companion for running Gemini CLI or Antigravity CLI (`agy`) as a cross-model task delegate and code reviewer. It delegates work from Claude Code; `three-lens` runs natively inside Antigravity CLI. Neither project is bundled with or required by the other.
 
-> **Independent project.** `agy-security-audit` is community-maintained and is **not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic, or OpenAI**. Third-party names identify tools, standards, or research this project interoperates with or discusses; their respective terms govern those systems.
+> **Independent project.** `three-lens` is community-maintained and is **not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic, or OpenAI**. Third-party names identify tools, standards, or research this project interoperates with or discusses; their respective terms govern those systems.
 
 ## Getting Started
 
@@ -24,7 +24,7 @@ Its defensive architecture aligns with **NIST SSDF (SP 800-218)**, **OWASP ASVS 
 ### Installation
 Clone or install the plugin into your Antigravity plugin directory:
 ```bash
-git clone https://github.com/arcobaleno64/agy-security-audit.git ~/.gemini/config/plugins/security-audit
+git clone https://github.com/arcobaleno64/three-lens.git ~/.gemini/config/plugins/three-lens
 ```
 
 ### Running Your First Security Audit
@@ -35,12 +35,16 @@ agy
 ```
 In the Antigravity prompt, invoke the skill:
 ```text
-/security-audit:security-audit
+/three-lens:3lens
+```
+Or use the short skill alias:
+```text
+/3lens
 ```
 Or run with non-interactive scope flags:
-- **Full repository scan**: `/security-audit:security-audit --scope codebase`
-- **Scoped path review**: `/security-audit:security-audit --scope path --path src/`
-- **Git diff review**: `/security-audit:security-audit --scope changes`
+- **Full repository scan**: `/three-lens:3lens --scope codebase` (or `/3lens --scope codebase`)
+- **Scoped path review**: `/three-lens:3lens --scope path --path src/` (or `/3lens --scope path --path src/`)
+- **Git diff review**: `/three-lens:3lens --scope changes` (or `/3lens --scope changes`)
 
 ### Expected Outputs
 Upon completion of the 4-stage pipeline, findings and evidence are generated under:
@@ -115,7 +119,7 @@ The role permissions defined in `recommended-security-audit-permissions.json` en
 ## Directory Structure
 
 ```text
-security-audit/
+three-lens/
 ├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.10.0)
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
 ├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
@@ -152,7 +156,7 @@ security-audit/
 ├── rules/
 │   └── AGENTS.md                         # Global zero-trust and data-review boundary rules
 └── skills/
-    └── security-audit/
+    └── 3lens/
         ├── SKILL.md                      # Primary skill entrypoint and workflow orchestration
         ├── standards/                    # R2-P1-01 standards-mapping layer
         │   ├── standards-map.json        # CWE -> ASVS 5.0 / SSDF / OWASP mapping

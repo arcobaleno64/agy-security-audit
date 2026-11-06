@@ -1,6 +1,6 @@
-# agy-security-audit (plugin ID: `security-audit`) v1.10.0
+# three-lens (plugin ID: `three-lens`) v1.10.0
 
-agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
+three-lens 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
 其防禦性架構對齊 **NIST SSDF (SP 800-218)**、**OWASP ASVS 5.0.0**、**OWASP SAMM**、**CWE 分類法**、**CVSS v4.0** 與 **SARIF 2.1.0**，並融入 Anthropic Claude Security 與 OpenAI Codex Security 研究中的防禦性概念。
 
@@ -8,9 +8,9 @@ agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證�
 
 ## 相關專案
 
-[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) 是獨立的 Claude Code 協作外掛，可透過 Gemini CLI 或 Antigravity CLI（`agy`）進行跨模型任務委派與程式碼審查。它從 Claude Code 委派工作；`agy-security-audit` 則原生執行於 Antigravity CLI 內。兩個專案都不會隨另一個一併提供，也不是使用另一個的必要條件。
+[`agy-plugin-cc`](https://github.com/arcobaleno64/agy-plugin-cc) 是獨立的 Claude Code 協作外掛，可透過 Gemini CLI 或 Antigravity CLI（`agy`）進行跨模型任務委派與程式碼審查。它從 Claude Code 委派工作；`three-lens` 則原生執行於 Antigravity CLI 內。兩個專案都不會隨另一個一併提供，也不是使用另一個的必要條件。
 
-> **獨立專案。** `agy-security-audit` 由社群維護，**與 Google LLC、Anthropic 及 OpenAI 均無隸屬、背書或贊助關係**。第三方名稱僅用於指稱本專案互通或討論的工具、標準或研究；使用相關系統時，適用其各自條款。
+> **獨立專案。** `three-lens` 由社群維護，**與 Google LLC、Anthropic 及 OpenAI 均無隸屬、背書或贊助關係**。第三方名稱僅用於指稱本專案互通或討論的工具、標準或研究；使用相關系統時，適用其各自條款。
 
 ## 快速上手 (Getting Started)
 
@@ -24,7 +24,7 @@ agy-security-audit 是以證據為本、多階段的安全保證與弱點驗證�
 ### 安裝方式 (Installation)
 將外掛複製或安裝至 Antigravity 外掛目錄：
 ```bash
-git clone https://github.com/arcobaleno64/agy-security-audit.git ~/.gemini/config/plugins/security-audit
+git clone https://github.com/arcobaleno64/three-lens.git ~/.gemini/config/plugins/three-lens
 ```
 
 ### 執行第一次安全審查 (Running Your First Security Audit)
@@ -35,12 +35,16 @@ agy
 ```
 在 Antigravity 對話提示中，調用此技能：
 ```text
-/security-audit:security-audit
+/three-lens:3lens
+```
+或直接使用簡潔指令：
+```text
+/3lens
 ```
 或使用非互動式範圍旗標執行：
-- **全代碼庫掃描**：`/security-audit:security-audit --scope codebase`
-- **指定路徑審查**：`/security-audit:security-audit --scope path --path src/`
-- **Git 變更審查**：`/security-audit:security-audit --scope changes`
+- **全代碼庫掃描**：`/three-lens:3lens --scope codebase`（或 `/3lens --scope codebase`）
+- **指定路徑審查**：`/three-lens:3lens --scope path --path src/`（或 `/3lens --scope path --path src/`）
+- **Git 變更審查**：`/three-lens:3lens --scope changes`（或 `/3lens --scope changes`）
 
 ### 預期產出 (Expected Outputs)
 4 階段管線執行完成後，發現與證據會生成於：
@@ -91,7 +95,7 @@ agy
 | 防禦層 | 組件 | 邊界與防護機制 | 安全目標 |
 | :--- | :--- | :--- | :--- |
 | **Layer 1** | **終端沙盒**<br>`agy --sandbox` | OS 層級容器 / 命名空間 / Seatbelt 隔離 | 阻斷不受信任目標代碼在終端執行任意指令、惡意網路外聯或持久破壞檔案系統。 |
-| **Layer 2** | **權限引擎**<br>`recommended-security-audit-permissions.json` | AGY CLI 運行時工具調度 (`deny > ask > allow`) | 依審計角色 (`coordinator`、`discovery`、`verifiers`、`remediation`) 限縮可用工具，杜絕越權調度或資料外洩。 |
+| **Layer 2** | **權限引擎**<br>`recommended-security-audit-permissions.json` | AGY CLI 執行期工具調度 (`deny > ask > allow`) | 依審計角色 (`coordinator`、`discovery`、`verifiers`、`remediation`) 限縮可用工具，杜絕越權調度或資料外洩。 |
 | **Layer 3** | **陰影上下文守衛**<br>`hooks/shadow-context-guard.mjs` | PreToolUse 生命週期勾點 | 攔截檔案讀取操作，透明重定向至 `scratch/context/` 去敏沙盒複本，阻斷符號連結目錄逃逸 (CWE-59)。 |
 | **Layer 4** | **確定性 TCB**<br>`path-containment.mjs` | 原子檔案描述子檢驗 (`fs.openSync` + `fs.fstatSync`) | 消除檔案系統競爭條件 (TOCTOU) 與同級目錄欺騙 (如 `scratch/context-evil`)。 |
 
@@ -115,7 +119,7 @@ agy --sandbox "audit this repository for security vulnerabilities"
 ## 目錄結構
 
 ```text
-security-audit/
+three-lens/
 ├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.10.0)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
 ├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
@@ -152,8 +156,8 @@ security-audit/
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
 └── skills/
-    └── security-audit/
-        ├── SKILL.md                      # 主技能入口與工作流調度
+    └── 3lens/
+        ├── SKILL.md                      # 主技能進入點與工作流程調度
         ├── standards/                    # R2-P1-01 標準映射層
         │   ├── standards-map.json        # CWE -> ASVS 5.0 / SSDF / OWASP 映射
         │   └── applicability-profiles.json # 專案類型適用性設定檔
