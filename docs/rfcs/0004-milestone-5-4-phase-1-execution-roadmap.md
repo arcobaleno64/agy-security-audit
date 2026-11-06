@@ -92,7 +92,7 @@ $$\text{EXECUTION\_COMPLETE} \ne \text{FINDING\_VERIFIED} \ne \text{RELEASE\_AUT
 
 | Phase Step | Target Deliverable | Verification Gate |
 | :--- | :--- | :--- |
-| **Gate 0: Contract Verification** | Gate 0 Invariant Checklist Sign-off | All 5 OPEN findings verified against CLI specifications and regression tests (test:hooks 13/13, test:lifecycle 10/10, test:authority 26/26). |
+| **Gate 0: Contract Verification** | Gate 0 Invariant Checklist Sign-off | All 5 OPEN findings verified against CLI specifications and regression tests (test:hooks 13/13, test:lifecycle 10/10, test:authority 28/28). |
 | **Step 1: Hook Architecture** | `hooks/pre-invocation-secret-guard.mjs` + `plugin.json` hook definition | Deterministic model turn dispatch suppression upon rule match verified via fail-closed `terminationBehavior: "terminate"` (`tests/test-pre-invocation-secret-guard.mjs` passes 13/13). |
 | **Step 2: Effort Wiring** | `skills/security-audit/SKILL.md` update + CLI parameter schema update | `npm test` and `agy plugin validate . --strict` return 0 findings. |
 | **Step 3: Lifecycle Hardening** | `finished_reason` telemetry ingestion in `record-benchmark-run.mjs` | Multi-pass runner classifies simulated timeouts/truncation and non-allowlisted finished reasons as `CENSORED_EXPOSURE` (`tests/test-finished-reason-governance.mjs` passes 10/10). |

@@ -483,6 +483,119 @@ test('Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexamp
   assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
 });
 
+test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Defense Counterexample R8-F03-01 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R8 (R8-F03-01):
+  // When finalizeScan is invoked with a new execution run (scanRunId: 'RUN-B')
+  // and receives a completed old manifest (scanRunId: 'RUN-A') without a fresh nonce,
+  // effectiveNonce correctly evaluates to null.
+  // HOWEVER, if the untrusted candidate ingress itself self-asserts nonce: 'NONCE-RUN-A',
+  // and 3 ballots from the previous run carry nonce: 'NONCE-RUN-A',
+  // finalizeScan MUST NOT allow candidate.nonce to become the expectedNonce authority!
+  // It must strictly fail closed to DEFERRED.
+  const candidateWithOldNonce = {
+    id: 'SEC-CANDIDATE-NONCE-BYPASS-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate Self-Asserting Stale Nonce',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high',
+    nonce: 'NONCE-RUN-A' // Untrusted candidate self-asserts old nonce
+  };
+
+  const oldManifest = {
+    scanRunId: 'RUN-A',
+    nonce: 'NONCE-RUN-A',
+    taskCorrelationNonce: 'NONCE-RUN-A',
+    complete: true,
+    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+  };
+
+  const oldVotesWithOldNonce = [
+    {
+      findingId: candidateWithOldNonce.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidateWithOldNonce.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidateWithOldNonce.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const scanResult = finalizeScan({
+    candidates: [candidateWithOldNonce],
+    manifest: oldManifest,
+    scanRunId: 'RUN-B',
+    // Caller does not specify fresh nonce
+    votes: oldVotesWithOldNonce,
+    repoRoot: process.cwd(),
+    allowSelfAudit: true
+  });
+
+  const resFinding = scanResult.canonicalFindings[0];
+  assert.equal(resFinding.disposition, 'DEFERRED', 'Candidate self-asserted nonce under stale manifest must fail closed to DEFERRED');
+  assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+});
+
+test('Authority Promotion Gate: Missing Execution Nonce Cannot Suppress Finding Counterexample R8-F03-02 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R8 (R8-F03-02):
+  // Under Default-Deny on Authority Claims (RFC 0003 Section 3),
+  // candidate disposition mutation (both REPORTABLE and SUPPRESSED) strictly requires a verified execution nonce.
+  // When an effort candidate lacks an execution nonce, ballots voting REFUTES with verified mitigation
+  // MUST NOT suppress the finding to SUPPRESSED / FALSE_POSITIVE!
+  // It must strictly fail closed to DEFERRED.
+  const candidate = {
+    id: 'SEC-EFFORT-NO-NONCE-REFUTE-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate without Nonce Facing Refutation',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const refutingVotesWithoutNonce = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'REFUTES',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const disposition = deriveFinalDisposition(candidate, refutingVotesWithoutNonce, { score: 0.95 }, process.cwd());
+  assert.equal(disposition.disposition, 'DEFERRED', 'Missing execution nonce on refutation must fail closed to DEFERRED');
+  assert.notEqual(disposition.disposition, 'SUPPRESSED', 'Must strictly not achieve SUPPRESSED without verified nonce');
+});
+
+
 
 
 

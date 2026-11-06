@@ -1652,8 +1652,10 @@ export function validateBallot(vote, candidate = null, options = {}) {
     return { valid: false, reason: `Finding ID mismatch: ballot for '${vote.findingId}' passed to candidate '${candidate.id}'` };
   }
 
-  // Task-correlation nonce enforcement
-  const expectedNonce = options.expectedNonce || options.nonce || candidate?.nonce;
+  // Task-correlation nonce enforcement: execution options take strict precedence over candidate self-assertions
+  const expectedNonce = ('expectedNonce' in options)
+    ? options.expectedNonce
+    : (('nonce' in options) ? options.nonce : (candidate?.nonce || null));
   if (expectedNonce) {
     if (!vote.nonce) {
       return { valid: false, reason: `Missing required task-correlation nonce (expected '${expectedNonce}')` };
@@ -1716,7 +1718,20 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
 
   // 2. Candidate task-binding and deduplication of votes
   const safeVotes = Array.isArray(votes) ? votes : [];
-  const expectedNonce = options.expectedNonce || options.nonce || candidate?.nonce || null;
+  // R8-F03-01: executionNonce derives strictly from trusted execution context, never untrusted candidate
+  const executionNonce = options.expectedNonce || options.nonce || null;
+  const candidateNonce = candidate?.nonce || null;
+
+  // 1. If candidate self-asserts a nonce that contradicts the execution context nonce, fail-closed
+  if (candidateNonce && executionNonce && candidateNonce !== executionNonce) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: `Candidate task-correlation nonce mismatch: candidate claims '${candidateNonce}', execution expected '${executionNonce}'; deferred under default-deny`,
+      votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
+
   const isEffortCandidate = Boolean(
     candidate?.modelEffort ||
     candidate?.effort ||
@@ -1728,6 +1743,20 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
   );
   const requiresNonce = Boolean(isEffortCandidate || options?.enforceThreeLens || options?.requireNonce);
 
+  // 2. Gate 0 (R8-F03-02 / RFC 0003 Section 3):
+  // Candidate disposition mutation (both REPORTABLE and SUPPRESSED) strictly requires verified execution nonce from execution context!
+  // Untrusted candidate.nonce cannot substitute for executionNonce to achieve authority.
+  if (requiresNonce && !executionNonce) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce from execution context; deferred under default-deny',
+      votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
+
+  // 3. For ballot filtering: ballot must match executionNonce if present, or candidateNonce
+  const expectedNonce = executionNonce || candidateNonce || null;
   const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
     return validateBallot(v, candidate, { expectedNonce }).valid;
@@ -2979,6 +3008,12 @@ export function finalizeScan({
     delete raw.isSingleCandidate;
     delete raw.mitigationProofLine;
     delete raw.mitigationReason;
+    // R8-F03-01: Untrusted candidate cannot self-assert execution nonce authority
+    const candidateClaimedNonce = raw.nonce || null;
+    delete raw.nonce;
+    if (candidateClaimedNonce && effectiveNonce && candidateClaimedNonce !== effectiveNonce) {
+      raw.nonce = candidateClaimedNonce; // Retain mismatch for deterministic fail-closed check
+    }
 
     // Sanitize attackPath location types: candidates cannot self-assert preimage/artifact types
     if (raw.attackPath && typeof raw.attackPath === 'object') {
@@ -3019,9 +3054,10 @@ export function finalizeScan({
     const rigor = calculateEvidenceSufficiency(raw.rigorMetrics);
 
     // Check for IMPACT lens calibration (strictly validating candidate identity, lens, and nonce)
+    const expectedCandidateNonce = effectiveNonce || candidateClaimedNonce || null;
     const candidateVotes = safeVotes.filter(v => {
       if (!v || (v.findingId !== raw.id && v.findingId !== candidateId)) return false;
-      return validateBallot(v, raw, { expectedNonce: effectiveNonce || raw.nonce || null }).valid;
+      return validateBallot(v, raw, { expectedNonce: expectedCandidateNonce }).valid;
     });
     const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
 
@@ -3060,8 +3096,8 @@ export function finalizeScan({
         auditIntent: safeAuditIntent,
         modelProvenance: safeModelProvenance,
         modelEffort: raw.modelEffort || raw.effort || modelProvenance?.effort,
-        nonce: effectiveNonce || raw.nonce || null,
-        expectedNonce: effectiveNonce || raw.nonce || null
+        nonce: effectiveNonce || null,
+        expectedNonce: effectiveNonce || null
       };
       dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot, dispositionOptions);
     }

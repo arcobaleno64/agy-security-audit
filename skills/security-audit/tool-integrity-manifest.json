@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.10.0",
-  "generatedAt": "2026-11-06T01:55:10.487Z",
-  "manifestDigest": "e2e22936c6f3fceb73e3995bf346c6980e59e48252b845f013648608bb8f49fd",
+  "generatedAt": "2026-11-06T03:06:41.264Z",
+  "manifestDigest": "3930997624d574beca4b478171695c5057f4ceb03c7963fa005ff178ade72b14",
   "criticalScripts": {
     "scripts/adapters/cloudflare-adapter.mjs": "36c3eac48d828b2d582ac411db35c7bab4522d679d7d7a855de12fa6ef0ef2a0",
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
     "scripts/build-threat-model.mjs": "b71c553f1bd61da374753d9f05891c839ae684f80103716afce1e6fbc4bae9e2",
-    "scripts/finalize-scan.mjs": "37a117875808bc34c1d376ee88f06e82783693d93c34f30ca68623c05922371e",
+    "scripts/finalize-scan.mjs": "cdeb39495269f522582c0cf769f9bf3196e9c8385986a2e417402e1b1c085a55",
     "scripts/path-containment.mjs": "8044a629e15bc113998417823359e5fdf1286e228ae1c384220c006559ffcbf8",
     "scripts/prepare-review-context.mjs": "ddbf271d330963d8b70ce6bc0c6dd585a468da7a6bf35c01a151276ea77fa2c8",
     "scripts/project-context.mjs": "63ffb3d89f3df1ff247e98b6a42b6cd618f0e74a23c468ad3df5995af3773929",
