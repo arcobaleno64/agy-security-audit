@@ -30,10 +30,11 @@ export const TRANSPORT_PRIORITIES = Object.freeze({
 });
 
 export const TRANSPORT_STATUS = Object.freeze({
-  ACTIVE: 'ACTIVE',
-  PROBE_VERIFIED: 'PROBE_VERIFIED',
-  FALLBACK: 'FALLBACK',
-  FAILED: 'FAILED'
+  ACTIVE: 'ACTIVE',                 // Live persistent session with bidirectional communication
+  PROBE_VERIFIED: 'PROBE_VERIFIED', // One-time handshake probe verified
+  FALLBACK: 'FALLBACK',             // Degraded to isolated stdio
+  TERMINATED: 'TERMINATED',         // Active session has terminated/disconnected
+  FAILED: 'FAILED'                  // Failed closed
 });
 
 /**
@@ -464,7 +465,8 @@ export async function probeNativeAcpServerAsync(options = {}) {
 
 /**
  * Asynchronously establishes a persistent, active Native ACP session.
- * Keeps the server process running and returns an active channel for full bidirectional communication.
+ * Keeps the server process running, maintains a bidirectional request/response dispatcher,
+ * and dynamically tracks server exit invalidation across the session lifecycle (R16-F04-01).
  *
  * @param {object} [options={}]
  * @returns {Promise<object>} Active transport session with status 'ACTIVE'
@@ -478,14 +480,20 @@ export async function connectNativeAcpTransport(options = {}) {
   } = options;
 
   return new Promise((resolve) => {
-    let settled = false;
+    let handshakeSettled = false;
     let timer = null;
     let child = null;
+    let sessionStatus = TRANSPORT_STATUS.FAILED;
+    let nextRequestId = 2;
+    const pendingRequests = new Map();
+    const messageListeners = new Set();
+    const closeListeners = new Set();
 
-    const fail = (reason) => {
-      if (settled) return;
-      settled = true;
+    const failHandshake = (reason) => {
+      if (handshakeSettled) return;
+      handshakeSettled = true;
       if (timer) clearTimeout(timer);
+      sessionStatus = TRANSPORT_STATUS.FAILED;
       if (child && !child.killed) {
         try { child.kill('SIGTERM'); } catch {}
       }
@@ -515,64 +523,169 @@ export async function connectNativeAcpTransport(options = {}) {
         stdio: ['pipe', 'pipe', 'pipe']
       });
     } catch (err) {
-      return fail(`Failed to spawn ACP binary: ${err.message}`);
+      return failHandshake(`Failed to spawn ACP binary: ${err.message}`);
     }
 
     timer = setTimeout(() => {
-      fail(`Connection handshake timed out after ${timeoutMs}ms`);
+      failHandshake(`Connection handshake timed out after ${timeoutMs}ms`);
     }, timeoutMs);
 
+    // Dynamic Server Exit & Invalidation Governance across full lifecycle (R16-F04-01):
+    child.on('exit', (code, sig) => {
+      const wasActive = sessionStatus === TRANSPORT_STATUS.ACTIVE;
+      sessionStatus = TRANSPORT_STATUS.TERMINATED;
+      const termMsg = `ACP server terminated with exit code ${code}, signal ${sig}`;
+
+      // Reject all pending in-flight requests immediately fail-closed
+      for (const [id, req] of pendingRequests.entries()) {
+        req.reject(new Error(`Channel terminated: ${termMsg}`));
+      }
+      pendingRequests.clear();
+
+      if (!handshakeSettled) {
+        failHandshake(`ACP server exited prematurely with code ${code}, signal ${sig}`);
+      } else if (wasActive) {
+        for (const cb of closeListeners) {
+          try { cb({ code, signal: sig, reason: termMsg }); } catch {}
+        }
+      }
+    });
+
     child.on('error', (err) => {
-      fail(err.message);
+      sessionStatus = TRANSPORT_STATUS.TERMINATED;
+      for (const [id, req] of pendingRequests.entries()) {
+        req.reject(new Error(`Channel error: ${err.message}`));
+      }
+      pendingRequests.clear();
+
+      if (!handshakeSettled) {
+        failHandshake(err.message);
+      }
     });
 
     let buffer = '';
-    const onData = (chunk) => {
-      if (settled) return;
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
       buffer += chunk;
       const lines = buffer.split(/\r?\n/);
       buffer = lines.pop();
 
       for (const line of lines) {
-        if (!line.trim()) continue;
-        const validation = validateAcpHandshake(line, { expectedId: 1 });
-        if (validation.valid) {
-          settled = true;
-          if (timer) clearTimeout(timer);
-          child.stdout.removeListener('data', onData);
+        const trimmed = line.trim();
+        if (!trimmed) continue;
 
-          return resolve({
-            transport: 'NATIVE_ACP',
-            priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
-            protocol: ACP_PROTOCOL_NAME,
-            status: TRANSPORT_STATUS.ACTIVE,
-            agentInfo: validation.agentInfo,
-            capabilities: validation.capabilities,
-            process: child,
-            send: (message) => {
-              const payload = typeof message === 'string' ? message : JSON.stringify(message);
-              child.stdin.write(payload.endsWith('\n') ? payload : payload + '\n');
-            },
-            close: () => {
-              if (!child.killed) {
-                try { child.kill('SIGTERM'); } catch {}
-              }
-            },
-            error: null
-          });
-        } else if (line.includes('"error"')) {
-          child.stdout.removeListener('data', onData);
-          return fail(`Server returned error: ${validation.error}`);
+        let parsed = null;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          continue;
         }
-      }
-    };
 
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', onData);
+        // 1. Handshake Phase
+        if (!handshakeSettled) {
+          const validation = validateAcpHandshake(parsed, { expectedId: 1 });
+          if (validation.valid) {
+            handshakeSettled = true;
+            if (timer) clearTimeout(timer);
+            sessionStatus = TRANSPORT_STATUS.ACTIVE;
 
-    child.on('exit', (code, sig) => {
-      if (!settled) {
-        fail(`ACP server exited prematurely with code ${code}, signal ${sig}`);
+            const session = {
+              transport: 'NATIVE_ACP',
+              priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
+              protocol: ACP_PROTOCOL_NAME,
+              get status() { return sessionStatus; },
+              agentInfo: validation.agentInfo,
+              capabilities: validation.capabilities,
+              process: child,
+              isActive: () => sessionStatus === TRANSPORT_STATUS.ACTIVE && !child.killed,
+              // Direct message sending (Fail-Closed if not active)
+              send: (message) => {
+                if (sessionStatus !== TRANSPORT_STATUS.ACTIVE || child.killed) {
+                  throw new Error(`Cannot send message: ACP transport is not active (status: ${sessionStatus})`);
+                }
+                const payload = typeof message === 'string' ? message : JSON.stringify(message);
+                child.stdin.write(payload.endsWith('\n') ? payload : payload + '\n');
+              },
+              // Bidirectional JSON-RPC Request/Response (R16-F04-01)
+              request: (method, params = {}, reqTimeoutMs = 5000) => {
+                if (sessionStatus !== TRANSPORT_STATUS.ACTIVE || child.killed) {
+                  return Promise.reject(new Error(`Cannot send request: ACP transport is not active (status: ${sessionStatus})`));
+                }
+                const reqId = nextRequestId++;
+                return new Promise((resolveReq, rejectReq) => {
+                  const reqTimer = setTimeout(() => {
+                    pendingRequests.delete(reqId);
+                    rejectReq(new Error(`ACP request '${method}' (id: ${reqId}) timed out after ${reqTimeoutMs}ms`));
+                  }, reqTimeoutMs);
+
+                  pendingRequests.set(reqId, {
+                    resolve: (val) => { clearTimeout(reqTimer); resolveReq(val); },
+                    reject: (err) => { clearTimeout(reqTimer); rejectReq(err); }
+                  });
+
+                  try {
+                    const payload = JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: reqId,
+                      method,
+                      params
+                    }) + '\n';
+                    child.stdin.write(payload);
+                  } catch (err) {
+                    clearTimeout(reqTimer);
+                    pendingRequests.delete(reqId);
+                    rejectReq(err);
+                  }
+                });
+              },
+              onMessage: (listener) => {
+                messageListeners.add(listener);
+                return () => messageListeners.delete(listener);
+              },
+              onClose: (listener) => {
+                closeListeners.add(listener);
+                return () => closeListeners.delete(listener);
+              },
+              close: () => {
+                if (sessionStatus === TRANSPORT_STATUS.ACTIVE) {
+                  sessionStatus = TRANSPORT_STATUS.TERMINATED;
+                }
+                for (const [id, req] of pendingRequests.entries()) {
+                  req.reject(new Error('ACP session closed by client'));
+                }
+                pendingRequests.clear();
+                if (!child.killed) {
+                  try { child.kill('SIGTERM'); } catch {}
+                }
+              },
+              error: null
+            };
+
+            return resolve(session);
+          } else if (parsed.error) {
+            return failHandshake(`Server returned error: ${validation.error}`);
+          }
+        } else {
+          // 2. Active Session Dispatching Phase (R16-F04-01)
+          if (parsed && typeof parsed === 'object') {
+            // Check if this response answers a pending request
+            if (parsed.id !== undefined && pendingRequests.has(parsed.id)) {
+              const req = pendingRequests.get(parsed.id);
+              pendingRequests.delete(parsed.id);
+              if (parsed.error) {
+                const errMsg = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message || JSON.stringify(parsed.error));
+                req.reject(new Error(`ACP JSON-RPC error: ${errMsg}`));
+              } else {
+                req.resolve(parsed.result !== undefined ? parsed.result : parsed);
+              }
+            }
+
+            // Dispatch to generic message listeners
+            for (const listener of messageListeners) {
+              try { listener(parsed); } catch {}
+            }
+          }
+        }
       }
     });
 
@@ -590,7 +703,7 @@ export async function connectNativeAcpTransport(options = {}) {
     try {
       child.stdin.write(initPayload);
     } catch (err) {
-      fail(`Failed to write initialize payload: ${err.message}`);
+      failHandshake(`Failed to write initialize payload: ${err.message}`);
     }
   });
 }

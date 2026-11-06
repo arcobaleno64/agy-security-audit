@@ -293,3 +293,41 @@ test('finished_reason lifecycle governance: Claude stream missing result event f
   assert.match(trace.error, /^CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event/);
 });
 
+test('finished_reason lifecycle governance: Live benchmark runner signal normalization counterexample R16-F02-01 (SIGTERM with status null fails closed)', () => {
+  // Replays R16-F02-01 counterexample: spawnSync returns status: null, signal: 'SIGTERM'
+  // Live benchmark caller exitCode calculation and signal propagation must fail closed
+  const normalTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: JSON.stringify({ candidates: [{ ruleId: 'CWE-89' }] }),
+        duration_seconds: 1.2
+      }
+    })
+  ].join('\n');
+
+  // Simulated child process result from spawnSync:
+  const mockChildResult = {
+    status: null,
+    signal: 'SIGTERM',
+    stdout: normalTrace,
+    stderr: '',
+    error: undefined
+  };
+
+  // Live benchmark normalization logic (R16-F02-01):
+  const procSignal = mockChildResult.signal || null;
+  const exitCode = mockChildResult.status !== null
+    ? mockChildResult.status
+    : (mockChildResult.signal ? 128 : (mockChildResult.error ? 1 : 0));
+
+  assert.equal(exitCode, 128, 'Signal termination must not normalize to 0');
+
+  const trace = parseStreamJsonTrace(mockChildResult.stdout, { exitCode, signal: procSignal });
+  assert.equal(trace.success, false, 'Trace with SIGTERM must fail closed even with valid result event');
+  assert.match(trace.error, /CENSORED_EXPOSURE: Process terminated by signal: SIGTERM/);
+  assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
+});
+

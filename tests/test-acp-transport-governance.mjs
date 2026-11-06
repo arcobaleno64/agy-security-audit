@@ -232,32 +232,49 @@ test('ACP Governance: probeNativeAcpServer handles binary probe failure safely u
   assert.equal(fallback.priority, 2);
 });
 
-// Gate 0 (R15-F04-01): Persistent Mock ACP Server script code
+// Gate 0 (R15-F04-01 / R16-F04-01): Persistent Mock ACP Server script code
 const MOCK_PERSISTENT_SERVER_CODE = `
 process.stdin.setEncoding('utf8');
 let buffer = '';
 process.stdin.on('data', (chunk) => {
   buffer += chunk;
-  if (buffer.includes('\\n')) {
-    const response = {
-      jsonrpc: '2.0',
-      id: 1,
-      result: {
-        protocolVersion: 1,
-        agentInfo: { name: 'Antigravity ACP Persistent Server', version: '1.5.1' },
-        agentCapabilities: {
-          loadSession: true,
-          promptCapabilities: { image: true, embeddedContext: true },
-          sessionCapabilities: { resume: {}, close: {}, load: {} }
-        },
-        authMethods: [{ id: 'oauth-personal', name: 'Log in with Google' }]
-      }
-    };
-    process.stdout.write(JSON.stringify(response) + '\\n');
-    // Persistent server keeps running; does not exit
-    setInterval(() => {}, 1000000);
+  const lines = buffer.split('\\n');
+  buffer = lines.pop();
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let req;
+    try { req = JSON.parse(line.trim()); } catch { continue; }
+
+    if (req.method === 'initialize') {
+      const response = {
+        jsonrpc: '2.0',
+        id: req.id,
+        result: {
+          protocolVersion: 1,
+          agentInfo: { name: 'Antigravity ACP Persistent Server', version: '1.5.1' },
+          agentCapabilities: {
+            loadSession: true,
+            promptCapabilities: { image: true, embeddedContext: true },
+            sessionCapabilities: { resume: {}, close: {}, load: {} }
+          },
+          authMethods: [{ id: 'oauth-personal', name: 'Log in with Google' }]
+        }
+      };
+      process.stdout.write(JSON.stringify(response) + '\\n');
+    } else if (req.method === 'ping') {
+      const response = {
+        jsonrpc: '2.0',
+        id: req.id,
+        result: { pong: true, echo: req.params?.echo || 'ok' }
+      };
+      process.stdout.write(JSON.stringify(response) + '\\n');
+    } else if (req.method === 'exit') {
+      process.exit(0);
+    }
   }
 });
+setInterval(() => {}, 1000000);
 `;
 
 test('ACP Governance (R15-F04-01): probeNativeAcpServer succeeds with PROBE_VERIFIED on persistent daemon without requiring process exit', () => {
@@ -311,9 +328,63 @@ test('ACP Governance (R15-F04-01): connectNativeAcpTransport establishes persist
     assert.equal(session.agentInfo.name, 'Antigravity ACP Persistent Server');
     assert.ok(session.process, 'Active session must retain child process reference');
     assert.equal(typeof session.send, 'function', 'Active session must provide send function');
+    assert.equal(typeof session.request, 'function', 'Active session must provide request dispatcher');
     assert.equal(typeof session.close, 'function', 'Active session must provide close function');
     assert.equal(session.error, null);
+    assert.equal(session.isActive(), true);
   } finally {
     session.close();
   }
+});
+
+test('ACP Governance (R16-F04-01): Active session successfully executes subsequent JSON-RPC request-response exchange', async () => {
+  const session = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  try {
+    assert.equal(session.status, TRANSPORT_STATUS.ACTIVE);
+    const res = await session.request('ping', { echo: 'governance_verify' });
+    assert.equal(res.pong, true);
+    assert.equal(res.echo, 'governance_verify');
+  } finally {
+    session.close();
+  }
+});
+
+test('ACP Governance (R16-F04-01): Server exit immediately invalidates ACTIVE session to TERMINATED and fails subsequent requests fail-closed', async () => {
+  const session = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  assert.equal(session.status, TRANSPORT_STATUS.ACTIVE);
+  assert.equal(session.isActive(), true);
+
+  // Trigger server clean exit via JSON-RPC exit method
+  const closedPromise = new Promise((resolve) => session.onClose(resolve));
+  session.send({ jsonrpc: '2.0', id: 99, method: 'exit' });
+
+  await closedPromise;
+
+  // Verify dynamic state transition
+  assert.equal(session.status, TRANSPORT_STATUS.TERMINATED);
+  assert.equal(session.isActive(), false);
+
+  // Subsequent send() must throw fail-closed
+  assert.throws(
+    () => session.send({ jsonrpc: '2.0', method: 'ping' }),
+    /Cannot send message: ACP transport is not active/
+  );
+
+  // Subsequent request() must reject fail-closed
+  await assert.rejects(
+    async () => session.request('ping'),
+    /Cannot send request: ACP transport is not active/
+  );
 });

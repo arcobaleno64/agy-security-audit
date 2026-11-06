@@ -809,6 +809,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let procSignal = null;
 
     try {
       const agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy';
@@ -831,7 +832,15 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       } else {
         stdout = result.stdout || '';
         stderr = result.stderr || '';
-        exitCode = result.status ?? 0;
+        procSignal = result.signal || null;
+        // Gate 0 (R16-F02-01): Explicitly detect signal termination (SIGTERM/SIGKILL with status: null).
+        // Default-Deny: Convert null status with signal to non-zero exit code (128) rather than 0.
+        exitCode = result.status !== null ? result.status : (result.signal ? 128 : (result.error ? 1 : 0));
+        if (procSignal) {
+          stderr = stderr
+            ? `${stderr}\nProcess terminated by signal: ${procSignal}`
+            : `CENSORED_EXPOSURE: Process terminated by signal: ${procSignal}`;
+        }
       }
     } catch (err) {
       stderr = `CENSORED_EXPOSURE: Process execution exception: ${err.message}`;
@@ -844,7 +853,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let schemaError = null;
     let executionTelemetry = null;
 
-    const trace = parseStreamJsonTrace(stdout, { exitCode });
+    const trace = parseStreamJsonTrace(stdout, { exitCode, signal: procSignal });
     if (trace.success) {
       executionTelemetry = trace.telemetry;
       const rawText = trace.rawResponse.trim();
@@ -910,8 +919,8 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     }
 
     const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked") || (executionTelemetry?.finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(executionTelemetry.finishedReason).toLowerCase()));
-    let error = exitCode !== 0
-      ? (stderr?.startsWith('CENSORED_EXPOSURE') ? stderr : `CENSORED_EXPOSURE: Process exited with code ${exitCode} (${stderr || 'non-zero exit'})`)
+    let error = (exitCode !== 0 || procSignal)
+      ? (stderr?.startsWith('CENSORED_EXPOSURE') ? stderr : `CENSORED_EXPOSURE: Process exited with code ${exitCode}${procSignal ? ` (signal: ${procSignal})` : ''} (${stderr || 'non-zero exit'})`)
       : null;
     if (!error && nonAllowlistedFinishedReason) {
       error = `CENSORED_EXPOSURE: Stream terminated with non-allowlisted finished_reason: ${executionTelemetry.finishedReason}`;
@@ -921,6 +930,10 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     }
     if (!error && isFilterBlocked) {
       error = 'CENSORED_EXPOSURE: Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
+    }
+
+    if ((exitCode !== 0 || procSignal) && executionTelemetry) {
+      executionTelemetry.finishedReason = 'CENSORED_EXPOSURE';
     }
 
     const isRateLimit = isRateLimitError(stderr) || isRateLimitError(stdout) || isRateLimitError(error);
