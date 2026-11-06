@@ -15,7 +15,7 @@ test('finished_reason lifecycle governance: omitted finished_reason on exit 0 is
     })
   ].join('\n');
 
-  const trace = parseStreamJsonTrace(normalTrace);
+  const trace = parseStreamJsonTrace(normalTrace, { exitCode: 0 });
   assert.equal(trace.success, true);
   assert.equal(trace.telemetry.finishedReason, null);
   assert.equal(trace.error, null);
@@ -195,3 +195,40 @@ test('finished_reason lifecycle governance: allowlist completion reasons (stop, 
     assert.equal(trace.telemetry.finishedReason, reason);
   }
 });
+
+test('finished_reason lifecycle governance: non-zero exit code 1 fails closed (Exit Code + Result Event + Schema triple contract)', () => {
+  const normalTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: JSON.stringify({ candidates: [] }),
+        duration_seconds: 1.2
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(normalTrace, { exitCode: 1 });
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /Process terminated with non-zero exit code: 1/);
+});
+
+test('finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM) fails closed', () => {
+  const normalTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: JSON.stringify({ candidates: [] }),
+        duration_seconds: 1.2
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(normalTrace, 137);
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /Process terminated with non-zero exit code: 137/);
+});
+

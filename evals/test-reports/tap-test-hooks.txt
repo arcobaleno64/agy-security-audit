@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: PreInvocation Secret Guard - scanForSecrets unit checks
+ok 1 - PreInvocation Secret Guard - scanForSecrets unit checks
+  ---
+  duration_ms: 1.5787
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Clean Prompt (Allow Turn)
+ok 2 - PreInvocation Secret Guard - Clean Prompt (Allow Turn)
+  ---
+  duration_ms: 126.9674
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Private Key Detection (Fail-Closed Terminate)
+ok 3 - PreInvocation Secret Guard - Private Key Detection (Fail-Closed Terminate)
+  ---
+  duration_ms: 75.0281
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - AWS Key Detection in Messages Array
+ok 4 - PreInvocation Secret Guard - AWS Key Detection in Messages Array
+  ---
+  duration_ms: 103.6397
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Bearer Token Detection (Fail-Closed Terminate)
+ok 5 - PreInvocation Secret Guard - Bearer Token Detection (Fail-Closed Terminate)
+  ---
+  duration_ms: 85.012
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Malformed JSON Payload (Fail-Closed Invariant)
+ok 6 - PreInvocation Secret Guard - Malformed JSON Payload (Fail-Closed Invariant)
+  ---
+  duration_ms: 83.6163
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Empty Stdin (Fail-Closed Invariant)
+ok 7 - PreInvocation Secret Guard - Empty Stdin (Fail-Closed Invariant)
+  ---
+  duration_ms: 95.8593
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Whitespace Stdin (Fail-Closed Invariant)
+ok 8 - PreInvocation Secret Guard - Whitespace Stdin (Fail-Closed Invariant)
+  ---
+  duration_ms: 83.5983
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Missing Verifiable Content Fields (Fail-Closed Invariant)
+ok 9 - PreInvocation Secret Guard - Missing Verifiable Content Fields (Fail-Closed Invariant)
+  ---
+  duration_ms: 98.4431
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Empty String Field Counterexample F01 (Fail-Closed Invariant)
+ok 10 - PreInvocation Secret Guard - Empty String Field Counterexample F01 (Fail-Closed Invariant)
+  ---
+  duration_ms: 95.9597
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Whitespace-only Field (Fail-Closed Invariant)
+ok 11 - PreInvocation Secret Guard - Whitespace-only Field (Fail-Closed Invariant)
+  ---
+  duration_ms: 138.2891
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Empty Prompt and Whitespace Messages (Fail-Closed Invariant)
+ok 12 - PreInvocation Secret Guard - Empty Prompt and Whitespace Messages (Fail-Closed Invariant)
+  ---
+  duration_ms: 107.0403
+  type: 'test'
+  ...
+# Subtest: PreInvocation Secret Guard - Non-Object JSON Payload (Fail-Closed Invariant)
+ok 13 - PreInvocation Secret Guard - Non-Object JSON Payload (Fail-Closed Invariant)
+  ---
+  duration_ms: 146.7486
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1359.545

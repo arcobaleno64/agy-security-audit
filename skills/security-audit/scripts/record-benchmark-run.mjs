@@ -199,9 +199,12 @@ export function validateIndependenceAuthority(taxonomyA, taxonomyB, claimedTier)
  * subagent invocations, and token consumption under Default-Deny.
  *
  * @param {string} rawNdjson - Raw newline-delimited JSON stream output
+ * @param {object|number} [options={}] - Optional parse options or numeric exit code
+ * @param {number} [options.exitCode=0] - Process exit code (must be 0 for success)
  * @returns {{ success: boolean, telemetry: object|null, rawResponse: string, error: string|null }}
  */
-export function parseStreamJsonTrace(rawNdjson) {
+export function parseStreamJsonTrace(rawNdjson, options = {}) {
+  const { exitCode = 0 } = (typeof options === 'number' ? { exitCode: options } : options) || {};
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
     return {
       success: false,
@@ -410,6 +413,16 @@ export function parseStreamJsonTrace(rawNdjson) {
   };
 
   // Fail-Closed Validation under Default-Deny:
+  // Gate 0 (M54-P1-F02): Triple contract verification: Exit Code 0 + Result Event + Schema Validity
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `Process terminated with non-zero exit code: ${exitCode}`
+    };
+  }
+
   if (resultError) {
     return {
       success: false,
