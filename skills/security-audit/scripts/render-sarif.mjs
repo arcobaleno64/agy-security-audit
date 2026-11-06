@@ -6153,17 +6153,14 @@ if (canonicalPath || inputPath) {
         console.warn('[DEFAULT-DENY] Direct render without --votes. Under Default-Deny, all findings are derived as DEFERRED.');
       }
 
-      const effectiveNonce = nonceArg || manifest?.taskCorrelationNonce || manifest?.nonce || null;
-      const effectiveScanRunId = scanRunIdArg || manifest?.scanRunId || null;
-
       const finalization = finalizeScan({
         candidates,
         manifest,
         repoRoot,
         votes,
         auditIntent: intentArg,
-        nonce: effectiveNonce,
-        scanRunId: effectiveScanRunId
+        nonce: nonceArg || null,
+        scanRunId: scanRunIdArg || null
       });
       canonicalFindings = finalization.canonicalFindings;
       coverageStatus = finalization.coverageStatus;

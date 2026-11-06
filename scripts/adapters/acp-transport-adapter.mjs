@@ -692,7 +692,7 @@ export async function connectNativeAcpTransport(options = {}) {
             };
 
             return resolve(session);
-          } else if (parsed.error) {
+          } else if (parsed && parsed.error) {
             return failHandshake(`Server returned error: ${validation.error}`);
           }
         } else {

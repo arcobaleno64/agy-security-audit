@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0.0",
   "toolVersion": "1.10.0",
-  "generatedAt": "2026-11-06T09:31:23.142Z",
-  "manifestDigest": "5a91d37b7ff71c2e7ba761a3316fda42bba9925bf451750b33fa12d077131dab",
+  "generatedAt": "2026-11-06T10:05:38.739Z",
+  "manifestDigest": "23b510a167569a9c3801cb919623b1b56da5ad0fbadb103819483105fdd6fc19",
   "criticalScripts": {
     "scripts/adapters/cloudflare-adapter.mjs": "36c3eac48d828b2d582ac411db35c7bab4522d679d7d7a855de12fa6ef0ef2a0",
     "scripts/build-inventory.mjs": "3b9e80a194c774aef53c8f7d410d50a4ed6cc514d64fa893233cc8190073844a",
@@ -11,7 +11,7 @@
     "scripts/path-containment.mjs": "8044a629e15bc113998417823359e5fdf1286e228ae1c384220c006559ffcbf8",
     "scripts/prepare-review-context.mjs": "ddbf271d330963d8b70ce6bc0c6dd585a468da7a6bf35c01a151276ea77fa2c8",
     "scripts/project-context.mjs": "63ffb3d89f3df1ff247e98b6a42b6cd618f0e74a23c468ad3df5995af3773929",
-    "scripts/render-sarif.mjs": "b69dd4edcaf4b8fa4dff2685d8d647dd2d4ce9eb67dbb33f0ad1c43e52dbf89a",
+    "scripts/render-sarif.mjs": "48784af188b1833a373f828275d6710a5bdb5342b7f79d3c0a3a9432b85a6884",
     "scripts/safe-git.mjs": "4136727311736b5d388fa6250cf30a91dc6675c6abe87909e572b692acdbb5c0",
     "scripts/validate-attack-path.mjs": "b7a1c3ae4be60e386ade21c578958da6467aafbc2cd3c2c561cbafb5e5e64e87",
     "scripts/validate-patch.mjs": "aa8aab1b7854225047b003cc395061a2d21a28ecb61c7d2a63a94e9bb2d9b156"

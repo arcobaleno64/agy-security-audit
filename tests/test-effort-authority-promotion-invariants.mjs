@@ -888,6 +888,114 @@ test('Authority Promotion Gate: Direct-input CLI without nonce or with mismatche
   }
 });
 
+test('Authority Promotion Gate: Direct-input CLI with Manifest Run Binding enforces fail-closed Default-Deny across completed, mismatched, and omitted Run ID, and allows active matching Run Binding (R23-F03-02)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cli-manifest-binding-'));
+  const candidatesPath = path.join(tmpDir, 'candidates.json');
+  const votesPath = path.join(tmpDir, 'votes.json');
+  const manifestPath = path.join(tmpDir, 'manifest.json');
+  const sarifOut = path.join(tmpDir, 'output.sarif');
+
+  const manifestNonce = 'nonce-manifest-binding-test';
+  const candidate = {
+    id: 'SEC-CLI-MANIFEST-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection in Manifest Run Binding Test',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high',
+    nonce: manifestNonce,
+    scanRunId: 'RUN-MATCH-01'
+  };
+
+  const votes = [
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+  ];
+
+  fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
+  fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
+
+  const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+
+  try {
+    // Scenario 1: Manifest complete: true (Fail-Closed: even with matching scan-run-id, completed manifest cannot inherit nonce)
+    fs.writeFileSync(manifestPath, JSON.stringify({
+      complete: true,
+      scanRunId: 'RUN-MATCH-01',
+      nonce: manifestNonce,
+      taskCorrelationNonce: manifestNonce
+    }, null, 2), 'utf8');
+
+    const resCompleted = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--manifest', manifestPath,
+      '--scan-run-id', 'RUN-MATCH-01',
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resCompleted.status, 0);
+    const sarifCompleted = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifCompleted.runs[0].results[0].properties.disposition, 'DEFERRED', 'Completed manifest must NOT inherit nonce; must fail closed to DEFERRED');
+
+    // Scenario 2: Mismatched Run ID (Manifest has RUN-MATCH-01, execution has RUN-MISMATCH-02)
+    fs.writeFileSync(manifestPath, JSON.stringify({
+      complete: false,
+      scanRunId: 'RUN-MATCH-01',
+      nonce: manifestNonce,
+      taskCorrelationNonce: manifestNonce
+    }, null, 2), 'utf8');
+
+    const resMismatched = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--manifest', manifestPath,
+      '--scan-run-id', 'RUN-MISMATCH-02',
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resMismatched.status, 0);
+    const sarifMismatched = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifMismatched.runs[0].results[0].properties.disposition, 'DEFERRED', 'Mismatched run ID must NOT inherit nonce; must fail closed to DEFERRED');
+
+    // Scenario 3: Omitted Execution Run ID (Manifest has RUN-MATCH-01, CLI supplies no --scan-run-id)
+    const resOmitted = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--manifest', manifestPath,
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resOmitted.status, 0);
+    const sarifOmitted = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifOmitted.runs[0].results[0].properties.disposition, 'DEFERRED', 'Omitted execution run ID must NOT inherit manifest nonce; must fail closed to DEFERRED');
+
+    // Scenario 4: Positive Control: Active in-progress manifest (complete: false) + Matching execution Run ID
+    const resPositive = spawnSync(process.execPath, [
+      renderScript,
+      '--input', candidatesPath,
+      '--votes', votesPath,
+      '--manifest', manifestPath,
+      '--scan-run-id', 'RUN-MATCH-01',
+      '--output-sarif', sarifOut
+    ], { encoding: 'utf8' });
+
+    assert.equal(resPositive.status, 0);
+    const sarifPositive = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
+    assert.equal(sarifPositive.runs[0].results[0].properties.disposition, 'REPORTABLE', 'Active matching manifest run binding must inherit nonce and promote to REPORTABLE');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 
 
 
