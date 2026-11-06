@@ -6,7 +6,10 @@ import {
   validateAcpHandshake,
   resolveTransport,
   probeNativeAcpServer,
+  probeNativeAcpServerAsync,
+  connectNativeAcpTransport,
   TRANSPORT_PRIORITIES,
+  TRANSPORT_STATUS,
   ACP_PROTOCOL_VERSION,
   ACP_PROTOCOL_NAME
 } from '../scripts/adapters/acp-transport-adapter.mjs';
@@ -227,4 +230,90 @@ test('ACP Governance: probeNativeAcpServer handles binary probe failure safely u
   assert.equal(fallback.status, 'FALLBACK');
   assert.equal(fallback.transport, 'ISOLATED_STDIO');
   assert.equal(fallback.priority, 2);
+});
+
+// Gate 0 (R15-F04-01): Persistent Mock ACP Server script code
+const MOCK_PERSISTENT_SERVER_CODE = `
+process.stdin.setEncoding('utf8');
+let buffer = '';
+process.stdin.on('data', (chunk) => {
+  buffer += chunk;
+  if (buffer.includes('\\n')) {
+    const response = {
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        protocolVersion: 1,
+        agentInfo: { name: 'Antigravity ACP Persistent Server', version: '1.5.1' },
+        agentCapabilities: {
+          loadSession: true,
+          promptCapabilities: { image: true, embeddedContext: true },
+          sessionCapabilities: { resume: {}, close: {}, load: {} }
+        },
+        authMethods: [{ id: 'oauth-personal', name: 'Log in with Google' }]
+      }
+    };
+    process.stdout.write(JSON.stringify(response) + '\\n');
+    // Persistent server keeps running; does not exit
+    setInterval(() => {}, 1000000);
+  }
+});
+`;
+
+test('ACP Governance (R15-F04-01): probeNativeAcpServer succeeds with PROBE_VERIFIED on persistent daemon without requiring process exit', () => {
+  // Simulates a persistent ACP server that responds to initialize and stays alive, causing timeout on spawnSync.
+  // The probe must parse the stdout response and succeed as PROBE_VERIFIED without failing.
+  const probe = probeNativeAcpServer({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 1000,
+    allowFallback: false
+  });
+
+  assert.equal(probe.transport, 'NATIVE_ACP');
+  assert.equal(probe.priority, 1);
+  assert.equal(probe.status, TRANSPORT_STATUS.PROBE_VERIFIED);
+  assert.equal(probe.agentInfo.name, 'Antigravity ACP Persistent Server');
+  assert.equal(probe.agentInfo.version, '1.5.1');
+  assert.equal(probe.error, null);
+});
+
+test('ACP Governance (R15-F04-01): probeNativeAcpServerAsync completes non-blocking stream probe without waiting for timeout', async () => {
+  const start = Date.now();
+  const probe = await probeNativeAcpServerAsync({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+  const elapsed = Date.now() - start;
+
+  assert.ok(elapsed < 2000, `Async probe must complete quickly without waiting for timeout (took ${elapsed}ms)`);
+  assert.equal(probe.transport, 'NATIVE_ACP');
+  assert.equal(probe.priority, 1);
+  assert.equal(probe.status, TRANSPORT_STATUS.PROBE_VERIFIED);
+  assert.equal(probe.agentInfo.name, 'Antigravity ACP Persistent Server');
+  assert.equal(probe.error, null);
+});
+
+test('ACP Governance (R15-F04-01): connectNativeAcpTransport establishes persistent ACTIVE session with bidirectional channel', async () => {
+  const session = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  try {
+    assert.equal(session.transport, 'NATIVE_ACP');
+    assert.equal(session.priority, 1);
+    assert.equal(session.status, TRANSPORT_STATUS.ACTIVE);
+    assert.equal(session.agentInfo.name, 'Antigravity ACP Persistent Server');
+    assert.ok(session.process, 'Active session must retain child process reference');
+    assert.equal(typeof session.send, 'function', 'Active session must provide send function');
+    assert.equal(typeof session.close, 'function', 'Active session must provide close function');
+    assert.equal(session.error, null);
+  } finally {
+    session.close();
+  }
 });

@@ -204,13 +204,15 @@ export function validateIndependenceAuthority(taxonomyA, taxonomyB, claimedTier)
  * @returns {{ success: boolean, telemetry: object|null, rawResponse: string, error: string|null }}
  */
 export function parseStreamJsonTrace(rawNdjson, options = {}) {
-  const { exitCode = 0 } = (typeof options === 'number' ? { exitCode: options } : options) || {};
+  const { exitCode = 0, signal = null } = (typeof options === 'number' ? { exitCode: options } : options) || {};
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
     return {
       success: false,
       telemetry: null,
       rawResponse: '',
-      error: 'NDJSON trace is empty or invalid'
+      error: (signal || exitCode !== 0)
+        ? `CENSORED_EXPOSURE: ${signal ? `Process terminated by signal: ${signal}` : `Process terminated with non-zero exit code: ${exitCode}`}`
+        : 'NDJSON trace is empty or invalid'
     };
   }
 
@@ -413,15 +415,18 @@ export function parseStreamJsonTrace(rawNdjson, options = {}) {
   };
 
   // Fail-Closed Validation under Default-Deny:
-  // Gate 0 (M54-P1-F02): Triple contract verification: Exit Code 0 + Result Event + Schema Validity
-  // Non-zero exit code strictly classifies as CENSORED_EXPOSURE
-  if (exitCode !== 0) {
-    telemetry.finishedReason = telemetry.finishedReason || 'CENSORED_EXPOSURE';
+  // Gate 0 (M54-P1-F02 / R15-F02-01): Triple contract verification: Exit Code 0 + Result Event + Schema Validity
+  // Non-zero exit code or signal termination strictly and unconditionally classifies as CENSORED_EXPOSURE
+  if (signal || exitCode !== 0) {
+    telemetry.finishedReason = 'CENSORED_EXPOSURE';
+    const reasonMsg = signal
+      ? `Process terminated by signal: ${signal}`
+      : `Process terminated with non-zero exit code: ${exitCode}`;
     return {
       success: false,
       telemetry,
       rawResponse,
-      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
+      error: `CENSORED_EXPOSURE: ${reasonMsg}`
     };
   }
 

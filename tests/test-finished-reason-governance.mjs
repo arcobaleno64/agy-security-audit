@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStreamJsonTrace } from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+import { parseClaudeStreamJsonTrace } from '../scripts/run-cross-provider-benchmark.mjs';
 
 test('finished_reason lifecycle governance: omitted finished_reason on exit 0 is clean', () => {
   const normalTrace = [
@@ -232,5 +233,63 @@ test('finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM)
   assert.equal(trace.success, false);
   assert.match(trace.error, /^CENSORED_EXPOSURE: Process terminated with non-zero exit code: 137/);
   assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
+});
+
+test('finished_reason lifecycle governance: non-zero exit code unconditionally overrides pre-existing finished_reason to CENSORED_EXPOSURE', () => {
+  const stoppedTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: JSON.stringify({ candidates: [] }),
+        finished_reason: 'stop',
+        duration_seconds: 1.2
+      }
+    })
+  ].join('\n');
+
+  const trace = parseStreamJsonTrace(stoppedTrace, { exitCode: 1 });
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /^CENSORED_EXPOSURE: Process terminated with non-zero exit code: 1/);
+  assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
+});
+
+test('finished_reason lifecycle governance: signal termination (SIGTERM/SIGKILL with status null) fails closed as CENSORED_EXPOSURE', () => {
+  const normalTrace = [
+    JSON.stringify({ event: 'init', init: { tools: ['view_file'] } }),
+    JSON.stringify({
+      event: 'result',
+      result: {
+        status: 'SUCCESS',
+        response: JSON.stringify({ candidates: [] }),
+        duration_seconds: 1.2
+      }
+    })
+  ].join('\n');
+
+  // Exact R15-F02-01 counterexample: status is null, signal is SIGTERM
+  const trace = parseStreamJsonTrace(normalTrace, { exitCode: 0, signal: 'SIGTERM' });
+  assert.equal(trace.success, false);
+  assert.match(trace.error, /^CENSORED_EXPOSURE: Process terminated by signal: SIGTERM/);
+  assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
+});
+
+test('finished_reason lifecycle governance: Claude stream missing result event fails closed as CENSORED_EXPOSURE (R15-F02-02)', () => {
+  // Exact R15-F02-02 counterexample: assistant events produce text, but stream ends without result event
+  const truncatedClaudeTrace = [
+    JSON.stringify({ type: 'system', session_id: 'test-session-1' }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        model: 'claude-sonnet-5',
+        content: [{ type: 'text', text: '{"candidates":[{"ruleId":"CWE-79"}]}' }]
+      }
+    })
+  ].join('\n');
+
+  const trace = parseClaudeStreamJsonTrace(truncatedClaudeTrace, { exitCode: 0 });
+  assert.equal(trace.success, false, 'Claude trace without result event must fail closed');
+  assert.match(trace.error, /^CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event/);
 });
 

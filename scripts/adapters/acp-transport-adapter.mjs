@@ -29,6 +29,13 @@ export const TRANSPORT_PRIORITIES = Object.freeze({
   NONE: 99             // Fail-closed / Disabled
 });
 
+export const TRANSPORT_STATUS = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  PROBE_VERIFIED: 'PROBE_VERIFIED',
+  FALLBACK: 'FALLBACK',
+  FAILED: 'FAILED'
+});
+
 /**
  * Validates an ACP JSON-RPC 2.0 handshake initialization response.
  *
@@ -150,6 +157,7 @@ export function validateAcpHandshake(rawResponse, options = {}) {
  * @param {object|string} [options.probeResponse=null] - Pre-probed handshake response
  * @param {number|string} [options.expectedId] - Expected JSON-RPC request ID
  * @param {boolean} [options.allowFallback=false] - Whether fallback to isolated stdio is permitted on failure
+ * @param {boolean} [options.probeOnly=false] - Whether this is an ephemeral verification probe rather than an active session
  * @returns {{ transport: string, priority: number, protocol: string, status: string, agentInfo?: object, capabilities?: object, error: string|null }}
  */
 export function resolveTransport(options = {}) {
@@ -157,7 +165,8 @@ export function resolveTransport(options = {}) {
     enableNativeAcp = true,
     probeResponse = null,
     expectedId = undefined,
-    allowFallback = false
+    allowFallback = false,
+    probeOnly = false
   } = options;
 
   // 1. Highest Priority: Native ACP
@@ -169,7 +178,7 @@ export function resolveTransport(options = {}) {
           transport: 'NATIVE_ACP',
           priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
           protocol: ACP_PROTOCOL_NAME,
-          status: 'ACTIVE',
+          status: probeOnly ? TRANSPORT_STATUS.PROBE_VERIFIED : TRANSPORT_STATUS.ACTIVE,
           agentInfo: validation.agentInfo,
           capabilities: validation.capabilities,
           error: null
@@ -182,7 +191,7 @@ export function resolveTransport(options = {}) {
           transport: 'NONE',
           priority: TRANSPORT_PRIORITIES.NONE,
           protocol: 'UNKNOWN',
-          status: 'FAILED',
+          status: TRANSPORT_STATUS.FAILED,
           error: `Native ACP handshake failed: ${validation.error} (Fail-Closed)`
         };
       }
@@ -192,7 +201,7 @@ export function resolveTransport(options = {}) {
         transport: 'ISOLATED_STDIO',
         priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
         protocol: 'HERMETIC_STDIO_V1',
-        status: 'FALLBACK',
+        status: TRANSPORT_STATUS.FALLBACK,
         fallbackReason: validation.error,
         error: null
       };
@@ -204,7 +213,7 @@ export function resolveTransport(options = {}) {
         transport: 'NONE',
         priority: TRANSPORT_PRIORITIES.NONE,
         protocol: 'UNKNOWN',
-        status: 'FAILED',
+        status: TRANSPORT_STATUS.FAILED,
         error: 'Native ACP enabled but unverified; handshake probe required (Fail-Closed)'
       };
     }
@@ -216,7 +225,7 @@ export function resolveTransport(options = {}) {
       transport: 'ISOLATED_STDIO',
       priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
       protocol: 'HERMETIC_STDIO_V1',
-      status: 'ACTIVE',
+      status: TRANSPORT_STATUS.ACTIVE,
       error: null
     };
   }
@@ -226,7 +235,7 @@ export function resolveTransport(options = {}) {
     transport: 'NONE',
     priority: TRANSPORT_PRIORITIES.NONE,
     protocol: 'UNKNOWN',
-    status: 'FAILED',
+    status: TRANSPORT_STATUS.FAILED,
     error: 'No compliant transport available (Fail-Closed)'
   };
 }
@@ -235,12 +244,16 @@ export function resolveTransport(options = {}) {
  * Actively probes the native ACP server by spawning `agy acp --stdio`
  * and conducting a real JSON-RPC 2.0 initialize handshake.
  *
+ * Gate 0 (R15-F04-01): Decouples handshake validation from process exit code.
+ * Standard ACP servers are persistent daemons that do not terminate after initialize.
+ * Stdout is parsed first for a valid handshake response even if spawnSync timed out.
+ *
  * @param {object} [options={}]
  * @param {string} [options.agyBin] - Antigravity executable path
  * @param {string[]} [options.args] - CLI arguments (default ['acp', '--stdio'])
  * @param {number} [options.timeoutMs=5000] - Handshake timeout in ms
  * @param {boolean} [options.allowFallback=false] - Whether fallback to isolated stdio is allowed
- * @returns {object} Transport resolution object
+ * @returns {object} Transport resolution object with status 'PROBE_VERIFIED' on success
  */
 export function probeNativeAcpServer(options = {}) {
   const {
@@ -277,34 +290,307 @@ export function probeNativeAcpServer(options = {}) {
     });
   }
 
-  if (spawnRes.error || spawnRes.status !== 0 || !spawnRes.stdout?.trim()) {
-    const reason = spawnRes.error ? spawnRes.error.message : (spawnRes.stderr?.trim() || `Exit code ${spawnRes.status}`);
-    if (allowFallback) {
+  // Gate 0 (R15-F04-01): Check stdout first for valid handshake response.
+  // Persistent ACP servers do not exit after responding, resulting in timeout (ETIMEDOUT / SIGTERM).
+  // If stdout contains a valid initialize response, the probe is verified.
+  const rawStdout = spawnRes.stdout ? spawnRes.stdout.toString() : '';
+  const lines = rawStdout.trim().split(/\r?\n/).filter(Boolean);
+  const responseLine = lines.find(l => l.includes('"jsonrpc"') && (l.includes('"result"') || l.includes('"error"'))) || lines[0];
+
+  if (responseLine) {
+    const validation = validateAcpHandshake(responseLine, { expectedId: 1 });
+    if (validation.valid) {
       return {
-        transport: 'ISOLATED_STDIO',
-        priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
-        protocol: 'HERMETIC_STDIO_V1',
-        status: 'FALLBACK',
-        fallbackReason: `Native ACP probe execution failed: ${reason}`,
+        transport: 'NATIVE_ACP',
+        priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
+        protocol: ACP_PROTOCOL_NAME,
+        status: TRANSPORT_STATUS.PROBE_VERIFIED,
+        agentInfo: validation.agentInfo,
+        capabilities: validation.capabilities,
+        probeType: 'EPHEMERAL_STDIO_PROBE',
         error: null
       };
     }
+  }
+
+  // If stdout did not contain a valid handshake, handle process error or exit code under Default-Deny
+  const reason = spawnRes.error
+    ? spawnRes.error.message
+    : (spawnRes.stderr?.trim() || (spawnRes.status !== 0 ? `Exit code ${spawnRes.status}` : 'No valid handshake received'));
+
+  if (allowFallback) {
     return {
-      transport: 'NONE',
-      priority: TRANSPORT_PRIORITIES.NONE,
-      protocol: 'UNKNOWN',
-      status: 'FAILED',
-      error: `Native ACP probe execution failed: ${reason} (Fail-Closed)`
+      transport: 'ISOLATED_STDIO',
+      priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
+      protocol: 'HERMETIC_STDIO_V1',
+      status: TRANSPORT_STATUS.FALLBACK,
+      fallbackReason: `Native ACP probe execution failed: ${reason}`,
+      error: null
     };
   }
 
-  const lines = spawnRes.stdout.trim().split(/\r?\n/);
-  const responseLine = lines.find(l => l.includes('"jsonrpc"') && l.includes('"result"')) || lines[0];
+  return {
+    transport: 'NONE',
+    priority: TRANSPORT_PRIORITIES.NONE,
+    protocol: 'UNKNOWN',
+    status: TRANSPORT_STATUS.FAILED,
+    error: `Native ACP probe execution failed: ${reason} (Fail-Closed)`
+  };
+}
 
-  return resolveTransport({
-    enableNativeAcp: true,
-    probeResponse: responseLine,
-    expectedId: 1,
-    allowFallback
+/**
+ * Asynchronously probes native ACP server with non-blocking stream listening.
+ * Completes as soon as the first JSON-RPC handshake line arrives, without waiting
+ * for the server process to exit or reach timeout.
+ *
+ * @param {object} [options={}]
+ * @returns {Promise<object>} Transport resolution with status 'PROBE_VERIFIED'
+ */
+export async function probeNativeAcpServerAsync(options = {}) {
+  const {
+    agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy',
+    args = ['acp', '--stdio'],
+    timeoutMs = 5000,
+    allowFallback = false
+  } = options;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    let child = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (child && !child.killed) {
+        try { child.kill('SIGTERM'); } catch {}
+      }
+    };
+
+    const fail = (reason) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+
+      if (allowFallback) {
+        resolve({
+          transport: 'ISOLATED_STDIO',
+          priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
+          protocol: 'HERMETIC_STDIO_V1',
+          status: TRANSPORT_STATUS.FALLBACK,
+          fallbackReason: `Native ACP async probe failed: ${reason}`,
+          error: null
+        });
+      } else {
+        resolve({
+          transport: 'NONE',
+          priority: TRANSPORT_PRIORITIES.NONE,
+          protocol: 'UNKNOWN',
+          status: TRANSPORT_STATUS.FAILED,
+          error: `Native ACP async probe failed: ${reason} (Fail-Closed)`
+        });
+      }
+    };
+
+    try {
+      child = spawn(agyBin, args, {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (err) {
+      return fail(`Failed to spawn ACP binary: ${err.message}`);
+    }
+
+    timer = setTimeout(() => {
+      fail(`Handshake timed out after ${timeoutMs}ms`);
+    }, timeoutMs);
+
+    child.on('error', (err) => {
+      fail(err.message);
+    });
+
+    let buffer = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      if (settled) return;
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const validation = validateAcpHandshake(line, { expectedId: 1 });
+        if (validation.valid) {
+          settled = true;
+          cleanup();
+          return resolve({
+            transport: 'NATIVE_ACP',
+            priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
+            protocol: ACP_PROTOCOL_NAME,
+            status: TRANSPORT_STATUS.PROBE_VERIFIED,
+            agentInfo: validation.agentInfo,
+            capabilities: validation.capabilities,
+            probeType: 'NON_BLOCKING_STREAM_PROBE',
+            error: null
+          });
+        } else if (line.includes('"error"')) {
+          return fail(`Server returned error: ${validation.error}`);
+        }
+      }
+    });
+
+    child.on('exit', (code, sig) => {
+      if (!settled) {
+        fail(`ACP server exited prematurely with code ${code}, signal ${sig}`);
+      }
+    });
+
+    const initPayload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: ACP_PROTOCOL_VERSION,
+        clientInfo: { name: 'agy-security-audit', version: '1.0.0' },
+        capabilities: {}
+      }
+    }) + '\n';
+
+    try {
+      child.stdin.write(initPayload);
+    } catch (err) {
+      fail(`Failed to write initialize payload: ${err.message}`);
+    }
+  });
+}
+
+/**
+ * Asynchronously establishes a persistent, active Native ACP session.
+ * Keeps the server process running and returns an active channel for full bidirectional communication.
+ *
+ * @param {object} [options={}]
+ * @returns {Promise<object>} Active transport session with status 'ACTIVE'
+ */
+export async function connectNativeAcpTransport(options = {}) {
+  const {
+    agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy',
+    args = ['acp', '--stdio'],
+    timeoutMs = 5000,
+    allowFallback = false
+  } = options;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    let child = null;
+
+    const fail = (reason) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (child && !child.killed) {
+        try { child.kill('SIGTERM'); } catch {}
+      }
+
+      if (allowFallback) {
+        resolve({
+          transport: 'ISOLATED_STDIO',
+          priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
+          protocol: 'HERMETIC_STDIO_V1',
+          status: TRANSPORT_STATUS.FALLBACK,
+          fallbackReason: `Native ACP connection failed: ${reason}`,
+          error: null
+        });
+      } else {
+        resolve({
+          transport: 'NONE',
+          priority: TRANSPORT_PRIORITIES.NONE,
+          protocol: 'UNKNOWN',
+          status: TRANSPORT_STATUS.FAILED,
+          error: `Native ACP connection failed: ${reason} (Fail-Closed)`
+        });
+      }
+    };
+
+    try {
+      child = spawn(agyBin, args, {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (err) {
+      return fail(`Failed to spawn ACP binary: ${err.message}`);
+    }
+
+    timer = setTimeout(() => {
+      fail(`Connection handshake timed out after ${timeoutMs}ms`);
+    }, timeoutMs);
+
+    child.on('error', (err) => {
+      fail(err.message);
+    });
+
+    let buffer = '';
+    const onData = (chunk) => {
+      if (settled) return;
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const validation = validateAcpHandshake(line, { expectedId: 1 });
+        if (validation.valid) {
+          settled = true;
+          if (timer) clearTimeout(timer);
+          child.stdout.removeListener('data', onData);
+
+          return resolve({
+            transport: 'NATIVE_ACP',
+            priority: TRANSPORT_PRIORITIES.NATIVE_ACP,
+            protocol: ACP_PROTOCOL_NAME,
+            status: TRANSPORT_STATUS.ACTIVE,
+            agentInfo: validation.agentInfo,
+            capabilities: validation.capabilities,
+            process: child,
+            send: (message) => {
+              const payload = typeof message === 'string' ? message : JSON.stringify(message);
+              child.stdin.write(payload.endsWith('\n') ? payload : payload + '\n');
+            },
+            close: () => {
+              if (!child.killed) {
+                try { child.kill('SIGTERM'); } catch {}
+              }
+            },
+            error: null
+          });
+        } else if (line.includes('"error"')) {
+          child.stdout.removeListener('data', onData);
+          return fail(`Server returned error: ${validation.error}`);
+        }
+      }
+    };
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', onData);
+
+    child.on('exit', (code, sig) => {
+      if (!settled) {
+        fail(`ACP server exited prematurely with code ${code}, signal ${sig}`);
+      }
+    });
+
+    const initPayload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: ACP_PROTOCOL_VERSION,
+        clientInfo: { name: 'agy-security-audit', version: '1.0.0' },
+        capabilities: {}
+      }
+    }) + '\n';
+
+    try {
+      child.stdin.write(initPayload);
+    } catch (err) {
+      fail(`Failed to write initialize payload: ${err.message}`);
+    }
   });
 }

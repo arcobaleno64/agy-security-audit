@@ -56,7 +56,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
  * tool usage, duration, and token usage from Anthropic NDJSON stream.
  */
 export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
-  const { exitCode = 0 } =
+  const { exitCode = 0, signal = null } =
     (typeof options === 'number' ? { exitCode: options } : options) || {};
 
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
@@ -64,8 +64,8 @@ export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
       success: false,
       telemetry: null,
       rawResponse: '',
-      error: exitCode !== 0
-        ? `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
+      error: (signal || exitCode !== 0)
+        ? `CENSORED_EXPOSURE: ${signal ? `Process terminated by signal: ${signal}` : `Process terminated with non-zero exit code: ${exitCode}`}`
         : 'NDJSON trace is empty or invalid'
     };
   }
@@ -174,12 +174,25 @@ export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
     durationSeconds
   };
 
-  if (exitCode !== 0) {
+  if (signal || exitCode !== 0) {
+    const reasonMsg = signal
+      ? `Process terminated by signal: ${signal}`
+      : `Process terminated with non-zero exit code: ${exitCode}`;
     return {
       success: false,
       telemetry,
       rawResponse,
-      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
+      error: `CENSORED_EXPOSURE: ${reasonMsg}`
+    };
+  }
+
+  // Gate 0 (M54-P1-F02 / R15-F02-02): Result event is mandatory under triple contract
+  if (!hasResultEvent) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: 'CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event'
     };
   }
 
@@ -188,7 +201,7 @@ export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
   }
 
   return {
-    success: (hasResultEvent || rawResponse.length > 0) && exitCode === 0,
+    success: exitCode === 0 && !signal && hasResultEvent,
     telemetry,
     rawResponse,
     sessionId,
@@ -284,10 +297,13 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     if (res.error) {
       execError = res.error.message;
       exitCode = 1;
+    } else if (res.signal) {
+      execError = `Process terminated by signal: ${res.signal}`;
+      exitCode = 128;
     } else {
       stdout = res.stdout || '';
       stderr = res.stderr || '';
-      exitCode = res.status ?? 0;
+      exitCode = res.status ?? (res.signal ? 128 : 0);
     }
   } catch (err) {
     execError = err.message;
@@ -440,10 +456,13 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     if (res.error) {
       execError = res.error.message;
       exitCode = 1;
+    } else if (res.signal) {
+      execError = `Process terminated by signal: ${res.signal}`;
+      exitCode = 128;
     } else {
       stdout = res.stdout || '';
       stderr = res.stderr || '';
-      exitCode = res.status ?? 0;
+      exitCode = res.status ?? (res.signal ? 128 : 0);
     }
   } catch (err) {
     execError = err.message;

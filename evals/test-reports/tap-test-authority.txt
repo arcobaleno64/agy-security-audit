@@ -2,37 +2,37 @@ TAP version 13
 # Subtest: Authority Invariant [low]: raw discovery candidate with zero verifier votes strictly defaults to DEFERRED
 ok 1 - Authority Invariant [low]: raw discovery candidate with zero verifier votes strictly defaults to DEFERRED
   ---
-  duration_ms: 1.3158
+  duration_ms: 1.4031
   type: 'test'
   ...
 # Subtest: Authority Invariant [low]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
 ok 2 - Authority Invariant [low]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
   ---
-  duration_ms: 0.1301
+  duration_ms: 0.1468
   type: 'test'
   ...
 # Subtest: Authority Invariant [low]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
 ok 3 - Authority Invariant [low]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
   ---
-  duration_ms: 0.1079
+  duration_ms: 0.1174
   type: 'test'
   ...
 # Subtest: Authority Invariant [low]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
 ok 4 - Authority Invariant [low]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0967
+  duration_ms: 0.1087
   type: 'test'
   ...
 # Subtest: Authority Invariant [low]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
 ok 5 - Authority Invariant [low]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
   ---
-  duration_ms: 0.1232
+  duration_ms: 0.1275
   type: 'test'
   ...
 # Subtest: Authority Invariant [low]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
 ok 6 - Authority Invariant [low]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0912
+  duration_ms: 0.0927
   type: 'test'
   ...
 # Subtest: Authority Invariant [medium]: raw discovery candidate with zero verifier votes strictly defaults to DEFERRED
@@ -44,145 +44,145 @@ ok 7 - Authority Invariant [medium]: raw discovery candidate with zero verifier 
 # Subtest: Authority Invariant [medium]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
 ok 8 - Authority Invariant [medium]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
   ---
-  duration_ms: 0.0792
+  duration_ms: 0.0964
   type: 'test'
   ...
 # Subtest: Authority Invariant [medium]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
 ok 9 - Authority Invariant [medium]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0698
+  duration_ms: 0.0635
   type: 'test'
   ...
 # Subtest: Authority Invariant [medium]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
 ok 10 - Authority Invariant [medium]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
   ---
-  duration_ms: 0.1052
+  duration_ms: 0.108
   type: 'test'
   ...
 # Subtest: Authority Invariant [medium]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
 ok 11 - Authority Invariant [medium]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
   ---
-  duration_ms: 0.0965
+  duration_ms: 0.1018
   type: 'test'
   ...
 # Subtest: Authority Invariant [medium]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
 ok 12 - Authority Invariant [medium]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
   ---
-  duration_ms: 0.1326
+  duration_ms: 0.0992
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: raw discovery candidate with zero verifier votes strictly defaults to DEFERRED
 ok 13 - Authority Invariant [high]: raw discovery candidate with zero verifier votes strictly defaults to DEFERRED
   ---
-  duration_ms: 0.0691
+  duration_ms: 0.0838
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
 ok 14 - Authority Invariant [high]: self-asserted CONFIRMED or REPORTABLE status is strictly rejected fail-closed
   ---
-  duration_ms: 0.0379
+  duration_ms: 0.0486
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
 ok 15 - Authority Invariant [high]: 3 SUPPORTS with missing physical evidence binding cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0283
+  duration_ms: 0.0372
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
 ok 16 - Authority Invariant [high]: partial lens panel (2/3 supports) cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0524
+  duration_ms: 0.0758
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
 ok 17 - Authority Invariant [high]: non-lens ballots (legacy 2/3 supports) strictly cannot bypass 3-Lens panel to reach REPORTABLE (F03 closure)
   ---
-  duration_ms: 0.0848
+  duration_ms: 0.0916
   type: 'test'
   ...
 # Subtest: Authority Invariant [high]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
 ok 18 - Authority Invariant [high]: 3/3 non-lens supports strictly cannot transition to REPORTABLE
   ---
-  duration_ms: 0.0346
+  duration_ms: 0.044
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: EXECUTION_COMPLETE != FINDING_VERIFIED != RELEASE_AUTHORIZED
 ok 19 - Authority Promotion Gate: EXECUTION_COMPLETE != FINDING_VERIFIED != RELEASE_AUTHORIZED
   ---
-  duration_ms: 1181.673
+  duration_ms: 1297.4023
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Release Authority (RFC 0003 Section 3)
 ok 20 - Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Release Authority (RFC 0003 Section 3)
   ---
-  duration_ms: 1455.6835
+  duration_ms: 1447.727
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03 (Fail-Closed to DEFERRED)
 ok 21 - Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 0.1767
+  duration_ms: 0.1854
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Conflicting Duplicate Reviewer Counterexample R5-F03-01 (Fail-Closed to DEFERRED)
 ok 22 - Authority Promotion Gate: Conflicting Duplicate Reviewer Counterexample R5-F03-01 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 0.0801
+  duration_ms: 0.0784
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Requirement (R5-F03-02)
 ok 23 - Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Requirement (R5-F03-02)
   ---
-  duration_ms: 0.0689
+  duration_ms: 0.0653
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample R6-F03-03 (Fail-Closed to DEFERRED)
 ok 24 - Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample R6-F03-03 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 1410.7874
+  duration_ms: 1453.2133
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexample R7-F03-02 (Fail-Closed to DEFERRED)
 ok 25 - Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexample R7-F03-02 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 1918.5515
+  duration_ms: 1938.5124
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexample R7-F03-01 (Fail-Closed to DEFERRED)
 ok 26 - Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexample R7-F03-01 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 0.1772
+  duration_ms: 0.2521
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Defense Counterexample R8-F03-01 (Fail-Closed to DEFERRED)
 ok 27 - Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Defense Counterexample R8-F03-01 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 1997.9485
+  duration_ms: 2104.7793
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Missing Execution Nonce Cannot Suppress Finding Counterexample R8-F03-02 (Fail-Closed to DEFERRED)
 ok 28 - Authority Promotion Gate: Missing Execution Nonce Cannot Suppress Finding Counterexample R8-F03-02 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 0.1908
+  duration_ms: 0.1992
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce Counterexample R9-F03-01 (Fail-Closed to DEFERRED)
 ok 29 - Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce Counterexample R9-F03-01 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 1808.8903
+  duration_ms: 1967.0052
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest Nonce Counterexample R10-F03-01 (Fail-Closed to DEFERRED)
 ok 30 - Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest Nonce Counterexample R10-F03-01 (Fail-Closed to DEFERRED)
   ---
-  duration_ms: 1809.2809
+  duration_ms: 1975.8991
   type: 'test'
   ...
 # Subtest: Authority Promotion Gate: Public Renderer Canonical Parity Counterexample R11-F03-01 (renderSarif and renderMarkdown)
 ok 31 - Authority Promotion Gate: Public Renderer Canonical Parity Counterexample R11-F03-01 (renderSarif and renderMarkdown)
   ---
-  duration_ms: 3815.9873
+  duration_ms: 3918.0088
   type: 'test'
   ...
 1..31
@@ -193,4 +193,4 @@ ok 31 - Authority Promotion Gate: Public Renderer Canonical Parity Counterexampl
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 15564.4317
+# duration_ms 16308.5275
