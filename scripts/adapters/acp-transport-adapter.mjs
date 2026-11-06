@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawnSync, spawn } from 'node:child_process';
 
 export const ACP_PROTOCOL_VERSION = 1;
 export const ACP_PROTOCOL_NAME = 'ACP_STDIO_JSONRPC_V1';
@@ -32,11 +33,13 @@ export const TRANSPORT_PRIORITIES = Object.freeze({
  * Validates an ACP JSON-RPC 2.0 handshake initialization response.
  *
  * @param {object|string} rawResponse - Handshake response payload
- * @returns {{ valid: boolean, capabilities: object|null, error: string|null }}
+ * @param {object} [options={}] - Validation options
+ * @param {number|string} [options.expectedId] - Expected JSON-RPC request ID
+ * @returns {{ valid: boolean, capabilities: object|null, agentInfo: object|null, error: string|null }}
  */
-export function validateAcpHandshake(rawResponse) {
+export function validateAcpHandshake(rawResponse, options = {}) {
   if (!rawResponse) {
-    return { valid: false, capabilities: null, error: 'Empty ACP handshake response' };
+    return { valid: false, capabilities: null, agentInfo: null, error: 'Empty ACP handshake response' };
   }
 
   let parsed = rawResponse;
@@ -44,52 +47,96 @@ export function validateAcpHandshake(rawResponse) {
     try {
       parsed = JSON.parse(rawResponse.trim());
     } catch (err) {
-      return { valid: false, capabilities: null, error: `Malformed JSON-RPC handshake: ${err.message}` };
+      return { valid: false, capabilities: null, agentInfo: null, error: `Malformed JSON-RPC handshake: ${err.message}` };
     }
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    return { valid: false, capabilities: null, error: 'Invalid JSON-RPC payload: expected object' };
+    return { valid: false, capabilities: null, agentInfo: null, error: 'Invalid JSON-RPC payload: expected object' };
   }
 
   if (parsed.jsonrpc !== '2.0') {
-    return { valid: false, capabilities: null, error: `Unsupported JSON-RPC version: ${parsed.jsonrpc}` };
+    return { valid: false, capabilities: null, agentInfo: null, error: `Unsupported JSON-RPC version: ${parsed.jsonrpc}` };
+  }
+
+  if (options.expectedId !== undefined && parsed.id !== options.expectedId) {
+    return {
+      valid: false,
+      capabilities: null,
+      agentInfo: null,
+      error: `JSON-RPC response ID mismatch: expected ${options.expectedId}, got ${parsed.id}`
+    };
   }
 
   if (parsed.error) {
     const errMsg = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message || JSON.stringify(parsed.error));
-    return { valid: false, capabilities: null, error: `Server returned JSON-RPC error: ${errMsg}` };
+    return { valid: false, capabilities: null, agentInfo: null, error: `Server returned JSON-RPC error: ${errMsg}` };
   }
 
   const result = parsed.result;
   if (!result || typeof result !== 'object') {
-    return { valid: false, capabilities: null, error: 'Missing result object in initialize response' };
+    return { valid: false, capabilities: null, agentInfo: null, error: 'Missing result object in initialize response' };
   }
 
   if (result.protocolVersion !== ACP_PROTOCOL_VERSION) {
     return {
       valid: false,
       capabilities: null,
+      agentInfo: null,
       error: `Protocol version mismatch: expected ${ACP_PROTOCOL_VERSION}, got ${result.protocolVersion}`
+    };
+  }
+
+  // Gate 0 (R14-F04-02): Strict Server Identity Verification
+  // agentInfo with non-empty string name and version is required under Default-Deny
+  const agentInfo = result.agentInfo;
+  if (
+    !agentInfo ||
+    typeof agentInfo !== 'object' ||
+    typeof agentInfo.name !== 'string' ||
+    !agentInfo.name.trim() ||
+    typeof agentInfo.version !== 'string' ||
+    !agentInfo.version.trim()
+  ) {
+    return {
+      valid: false,
+      capabilities: null,
+      agentInfo: null,
+      error: 'Missing or invalid agentInfo in initialize result: non-empty name and version are strictly required'
     };
   }
 
   const caps = result.agentCapabilities;
   if (!caps || typeof caps !== 'object') {
-    return { valid: false, capabilities: null, error: 'Missing agentCapabilities in initialize result' };
+    return { valid: false, capabilities: null, agentInfo: null, error: 'Missing agentCapabilities in initialize result' };
   }
 
-  // Verify core native capabilities (session management and prompt capabilities)
-  const hasPromptCaps = Boolean(caps.promptCapabilities && typeof caps.promptCapabilities === 'object');
-  const hasSessionCaps = Boolean(caps.sessionCapabilities || caps.session_capabilities);
-  if (!hasPromptCaps || !hasSessionCaps) {
-    return { valid: false, capabilities: null, error: 'Incomplete native ACP capabilities profile' };
+  // Gate 0 (R14-F04-02): Verify core native capabilities (non-empty prompt and session capabilities)
+  const promptCaps = caps.promptCapabilities;
+  const sessionCaps = caps.sessionCapabilities || caps.session_capabilities;
+
+  if (!promptCaps || typeof promptCaps !== 'object' || Object.keys(promptCaps).length === 0) {
+    return {
+      valid: false,
+      capabilities: null,
+      agentInfo: null,
+      error: 'Incomplete native ACP capabilities profile: promptCapabilities must declare active capabilities'
+    };
+  }
+
+  if (!sessionCaps || typeof sessionCaps !== 'object' || Object.keys(sessionCaps).length === 0) {
+    return {
+      valid: false,
+      capabilities: null,
+      agentInfo: null,
+      error: 'Incomplete native ACP capabilities profile: sessionCapabilities must declare active capabilities'
+    };
   }
 
   return {
     valid: true,
     capabilities: caps,
-    agentInfo: result.agentInfo || null,
+    agentInfo,
     authMethods: result.authMethods || [],
     error: null
   };
@@ -101,20 +148,22 @@ export function validateAcpHandshake(rawResponse) {
  * @param {object} [options={}]
  * @param {boolean} [options.enableNativeAcp=true] - Whether native ACP is enabled
  * @param {object|string} [options.probeResponse=null] - Pre-probed handshake response
+ * @param {number|string} [options.expectedId] - Expected JSON-RPC request ID
  * @param {boolean} [options.allowFallback=false] - Whether fallback to isolated stdio is permitted on failure
- * @returns {{ transport: string, priority: number, protocol: string, status: string, error: string|null }}
+ * @returns {{ transport: string, priority: number, protocol: string, status: string, agentInfo?: object, capabilities?: object, error: string|null }}
  */
 export function resolveTransport(options = {}) {
   const {
     enableNativeAcp = true,
     probeResponse = null,
+    expectedId = undefined,
     allowFallback = false
   } = options;
 
   // 1. Highest Priority: Native ACP
   if (enableNativeAcp) {
     if (probeResponse) {
-      const validation = validateAcpHandshake(probeResponse);
+      const validation = validateAcpHandshake(probeResponse, { expectedId });
       if (validation.valid) {
         return {
           transport: 'NATIVE_ACP',
@@ -180,4 +229,82 @@ export function resolveTransport(options = {}) {
     status: 'FAILED',
     error: 'No compliant transport available (Fail-Closed)'
   };
+}
+
+/**
+ * Actively probes the native ACP server by spawning `agy acp --stdio`
+ * and conducting a real JSON-RPC 2.0 initialize handshake.
+ *
+ * @param {object} [options={}]
+ * @param {string} [options.agyBin] - Antigravity executable path
+ * @param {string[]} [options.args] - CLI arguments (default ['acp', '--stdio'])
+ * @param {number} [options.timeoutMs=5000] - Handshake timeout in ms
+ * @param {boolean} [options.allowFallback=false] - Whether fallback to isolated stdio is allowed
+ * @returns {object} Transport resolution object
+ */
+export function probeNativeAcpServer(options = {}) {
+  const {
+    agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy',
+    args = ['acp', '--stdio'],
+    timeoutMs = 5000,
+    allowFallback = false
+  } = options;
+
+  const initPayload = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: ACP_PROTOCOL_VERSION,
+      clientInfo: { name: 'agy-security-audit', version: '1.0.0' },
+      capabilities: {}
+    }
+  }) + '\n';
+
+  let spawnRes;
+  try {
+    spawnRes = spawnSync(agyBin, args, {
+      input: initPayload,
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  } catch (err) {
+    return resolveTransport({
+      enableNativeAcp: false,
+      allowFallback,
+      error: `Failed to spawn ACP binary: ${err.message}`
+    });
+  }
+
+  if (spawnRes.error || spawnRes.status !== 0 || !spawnRes.stdout?.trim()) {
+    const reason = spawnRes.error ? spawnRes.error.message : (spawnRes.stderr?.trim() || `Exit code ${spawnRes.status}`);
+    if (allowFallback) {
+      return {
+        transport: 'ISOLATED_STDIO',
+        priority: TRANSPORT_PRIORITIES.ISOLATED_STDIO,
+        protocol: 'HERMETIC_STDIO_V1',
+        status: 'FALLBACK',
+        fallbackReason: `Native ACP probe execution failed: ${reason}`,
+        error: null
+      };
+    }
+    return {
+      transport: 'NONE',
+      priority: TRANSPORT_PRIORITIES.NONE,
+      protocol: 'UNKNOWN',
+      status: 'FAILED',
+      error: `Native ACP probe execution failed: ${reason} (Fail-Closed)`
+    };
+  }
+
+  const lines = spawnRes.stdout.trim().split(/\r?\n/);
+  const responseLine = lines.find(l => l.includes('"jsonrpc"') && l.includes('"result"')) || lines[0];
+
+  return resolveTransport({
+    enableNativeAcp: true,
+    probeResponse: responseLine,
+    expectedId: 1,
+    allowFallback
+  });
 }

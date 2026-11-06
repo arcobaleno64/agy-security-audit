@@ -657,7 +657,8 @@ export function executeLiveCoordinatorAudit({
   const stdout = proc.stdout || '';
   const stderr = proc.stderr || '';
 
-  console.log(`[E2E-COORDINATOR] Process completed with exit code ${proc.status ?? (proc.error ? 1 : 0)} in ${durationSeconds.toFixed(1)}s`);
+  const procExitCode = proc.status ?? (proc.error ? 1 : 0);
+  console.log(`[E2E-COORDINATOR] Process completed with exit code ${procExitCode} in ${durationSeconds.toFixed(1)}s`);
 
   // Detect candidates from scratch if available
   let candidateCount = null;
@@ -669,8 +670,8 @@ export function executeLiveCoordinatorAudit({
     } catch {}
   }
 
-  // Parse telemetry
-  const parsedTrace = parseStreamJsonTrace(stdout);
+  // Parse telemetry with explicit Exit Code triple contract governance
+  const parsedTrace = parseStreamJsonTrace(stdout, { exitCode: procExitCode });
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
   const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot, {
     invocationStartTime: startTs,

@@ -844,7 +844,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let schemaError = null;
     let executionTelemetry = null;
 
-    const trace = parseStreamJsonTrace(stdout);
+    const trace = parseStreamJsonTrace(stdout, { exitCode });
     if (trace.success) {
       executionTelemetry = trace.telemetry;
       const rawText = trace.rawResponse.trim();

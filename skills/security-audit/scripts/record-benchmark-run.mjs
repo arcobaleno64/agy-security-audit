@@ -414,12 +414,14 @@ export function parseStreamJsonTrace(rawNdjson, options = {}) {
 
   // Fail-Closed Validation under Default-Deny:
   // Gate 0 (M54-P1-F02): Triple contract verification: Exit Code 0 + Result Event + Schema Validity
+  // Non-zero exit code strictly classifies as CENSORED_EXPOSURE
   if (exitCode !== 0) {
+    telemetry.finishedReason = telemetry.finishedReason || 'CENSORED_EXPOSURE';
     return {
       success: false,
       telemetry,
       rawResponse,
-      error: `Process terminated with non-zero exit code: ${exitCode}`
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
     };
   }
 

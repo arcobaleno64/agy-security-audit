@@ -55,13 +55,18 @@ const REPO_ROOT = path.resolve(__dirname, '..');
  * Extracts conversation/session ID, model identifier, text deltas, result object,
  * tool usage, duration, and token usage from Anthropic NDJSON stream.
  */
-export function parseClaudeStreamJsonTrace(rawNdjson) {
+export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
+  const { exitCode = 0 } =
+    (typeof options === 'number' ? { exitCode: options } : options) || {};
+
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
     return {
       success: false,
       telemetry: null,
       rawResponse: '',
-      error: 'NDJSON trace is empty or invalid'
+      error: exitCode !== 0
+        ? `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
+        : 'NDJSON trace is empty or invalid'
     };
   }
 
@@ -169,12 +174,21 @@ export function parseClaudeStreamJsonTrace(rawNdjson) {
     durationSeconds
   };
 
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`
+    };
+  }
+
   if (resultError) {
     return { success: false, telemetry, rawResponse, error: resultError };
   }
 
   return {
-    success: hasResultEvent || rawResponse.length > 0,
+    success: (hasResultEvent || rawResponse.length > 0) && exitCode === 0,
     telemetry,
     rawResponse,
     sessionId,
@@ -298,6 +312,21 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     };
   }
 
+  // Gate 0 (M54-P1-F02 / R14-F02-01): Non-zero exit code strictly fails closed as CENSORED_EXPOSURE
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      censored: true,
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`,
+      durationMs,
+      stdout,
+      stderr,
+      candidates: [],
+      identityAttested: false,
+      telemetry: null
+    };
+  }
+
   if (!stdout.trim()) {
     return {
       success: false,
@@ -312,7 +341,7 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     };
   }
 
-  const trace = parseStreamJsonTrace(stdout);
+  const trace = parseStreamJsonTrace(stdout, { exitCode });
   let parsedRaw = [];
   let parseError = null;
 
@@ -357,11 +386,12 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
   }
 
   const identityAttested = Boolean(trace.telemetry?.conversationId);
+  const isExecutionValid = exitCode === 0 && Boolean(trace.success);
 
   return {
-    success: true,
-    censored: false,
-    error: null,
+    success: isExecutionValid,
+    censored: !isExecutionValid,
+    error: isExecutionValid ? null : (trace.error || `Process exit code ${exitCode}`),
     durationMs,
     stdout,
     stderr,
@@ -438,6 +468,21 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     };
   }
 
+  // Gate 0 (M54-P1-F02 / R14-F02-01): Non-zero exit code strictly fails closed as CENSORED_EXPOSURE
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      censored: true,
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`,
+      durationMs,
+      stdout,
+      stderr,
+      candidates: [],
+      identityAttested: false,
+      telemetry: null
+    };
+  }
+
   if (!stdout.trim()) {
     return {
       success: false,
@@ -452,7 +497,7 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     };
   }
 
-  const trace = parseClaudeStreamJsonTrace(stdout);
+  const trace = parseClaudeStreamJsonTrace(stdout, { exitCode });
   let parsedRaw = [];
   let parseError = null;
 
@@ -487,11 +532,12 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
   }
 
   const identityAttested = Boolean(trace.sessionId && trace.modelName);
+  const isExecutionValid = exitCode === 0 && Boolean(trace.success);
 
   return {
-    success: true,
-    censored: false,
-    error: null,
+    success: isExecutionValid,
+    censored: !isExecutionValid,
+    error: isExecutionValid ? null : (trace.error || `Process exit code ${exitCode}`),
     durationMs,
     stdout,
     stderr,

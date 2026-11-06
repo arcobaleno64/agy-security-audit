@@ -211,7 +211,8 @@ test('finished_reason lifecycle governance: non-zero exit code 1 fails closed (E
 
   const trace = parseStreamJsonTrace(normalTrace, { exitCode: 1 });
   assert.equal(trace.success, false);
-  assert.match(trace.error, /Process terminated with non-zero exit code: 1/);
+  assert.match(trace.error, /^CENSORED_EXPOSURE: Process terminated with non-zero exit code: 1/);
+  assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
 });
 
 test('finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM) fails closed', () => {
@@ -229,6 +230,7 @@ test('finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM)
 
   const trace = parseStreamJsonTrace(normalTrace, 137);
   assert.equal(trace.success, false);
-  assert.match(trace.error, /Process terminated with non-zero exit code: 137/);
+  assert.match(trace.error, /^CENSORED_EXPOSURE: Process terminated with non-zero exit code: 137/);
+  assert.equal(trace.telemetry.finishedReason, 'CENSORED_EXPOSURE');
 });
 

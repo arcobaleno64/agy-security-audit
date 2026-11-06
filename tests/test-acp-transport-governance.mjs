@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   validateAcpHandshake,
   resolveTransport,
+  probeNativeAcpServer,
   TRANSPORT_PRIORITIES,
   ACP_PROTOCOL_VERSION,
   ACP_PROTOCOL_NAME
@@ -86,6 +87,65 @@ test('ACP Governance: Incomplete agentCapabilities fails closed under Default-De
   assert.match(val.error, /Incomplete native ACP capabilities profile/);
 });
 
+test('ACP Governance: R14-F04-02 counterexample missing agentInfo and empty capabilities fails closed', () => {
+  // Exact counterexample provided by ChatGPT reviewer in R14
+  const counterexample = {
+    jsonrpc: '2.0',
+    id: 999,
+    result: {
+      protocolVersion: 1,
+      agentCapabilities: {
+        promptCapabilities: {},
+        sessionCapabilities: {}
+      }
+    }
+  };
+
+  const val = validateAcpHandshake(counterexample);
+  assert.equal(val.valid, false, 'Counterexample must fail validation');
+  assert.match(val.error, /agentInfo|capabilities/i);
+
+  const resolution = resolveTransport({
+    enableNativeAcp: true,
+    probeResponse: counterexample,
+    allowFallback: false
+  });
+  assert.equal(resolution.status, 'FAILED');
+  assert.equal(resolution.transport, 'NONE');
+});
+
+test('ACP Governance: Response ID mismatch fails closed under Default-Deny', () => {
+  const mismatchedId = JSON.parse(JSON.stringify(VALID_HANDSHAKE_RESPONSE));
+  mismatchedId.id = 999;
+
+  const val = validateAcpHandshake(mismatchedId, { expectedId: 1 });
+  assert.equal(val.valid, false);
+  assert.match(val.error, /JSON-RPC response ID mismatch/);
+
+  const resolution = resolveTransport({
+    enableNativeAcp: true,
+    probeResponse: mismatchedId,
+    expectedId: 1,
+    allowFallback: false
+  });
+  assert.equal(resolution.status, 'FAILED');
+  assert.equal(resolution.transport, 'NONE');
+});
+
+test('ACP Governance: Missing agentInfo name or version fails closed', () => {
+  const noName = JSON.parse(JSON.stringify(VALID_HANDSHAKE_RESPONSE));
+  delete noName.result.agentInfo.name;
+  const val1 = validateAcpHandshake(noName);
+  assert.equal(val1.valid, false);
+  assert.match(val1.error, /agentInfo/);
+
+  const emptyVersion = JSON.parse(JSON.stringify(VALID_HANDSHAKE_RESPONSE));
+  emptyVersion.result.agentInfo.version = '  ';
+  const val2 = validateAcpHandshake(emptyVersion);
+  assert.equal(val2.valid, false);
+  assert.match(val2.error, /agentInfo/);
+});
+
 test('ACP Governance: Handshake failure with allowFallback false strictly terminates fail-closed', () => {
   const errorHandshake = {
     jsonrpc: '2.0',
@@ -149,4 +209,22 @@ test('ACP Governance: Physical probe record evals/protocols/acp-stdio-probe-reco
   assert.equal(resolution.status, 'ACTIVE');
   assert.equal(resolution.transport, 'NATIVE_ACP');
   assert.equal(resolution.priority, 1);
+});
+
+test('ACP Governance: probeNativeAcpServer handles binary probe failure safely under Default-Deny', () => {
+  // Test with non-existent binary to verify fail-closed and fallback transitions
+  const failClosed = probeNativeAcpServer({
+    agyBin: 'non_existent_binary_xyz_12345',
+    allowFallback: false
+  });
+  assert.equal(failClosed.status, 'FAILED');
+  assert.equal(failClosed.transport, 'NONE');
+
+  const fallback = probeNativeAcpServer({
+    agyBin: 'non_existent_binary_xyz_12345',
+    allowFallback: true
+  });
+  assert.equal(fallback.status, 'FALLBACK');
+  assert.equal(fallback.transport, 'ISOLATED_STDIO');
+  assert.equal(fallback.priority, 2);
 });
