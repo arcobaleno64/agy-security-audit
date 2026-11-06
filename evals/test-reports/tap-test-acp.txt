@@ -2,115 +2,115 @@ TAP version 13
 # Subtest: ACP Governance: Native ACP is assigned Priority 1 (Highest)
 ok 1 - ACP Governance: Native ACP is assigned Priority 1 (Highest)
   ---
-  duration_ms: 0.6573
+  duration_ms: 1.004
   type: 'test'
   ...
 # Subtest: ACP Governance: Valid ACP JSON-RPC handshake resolves to NATIVE_ACP transport
 ok 2 - ACP Governance: Valid ACP JSON-RPC handshake resolves to NATIVE_ACP transport
   ---
-  duration_ms: 0.2315
+  duration_ms: 0.5244
   type: 'test'
   ...
 # Subtest: ACP Governance: Corrupt or malformed JSON-RPC payload fails closed
 ok 3 - ACP Governance: Corrupt or malformed JSON-RPC payload fails closed
   ---
-  duration_ms: 0.8532
+  duration_ms: 1.671
   type: 'test'
   ...
 # Subtest: ACP Governance: Protocol version mismatch fails closed under Default-Deny
 ok 4 - ACP Governance: Protocol version mismatch fails closed under Default-Deny
   ---
-  duration_ms: 0.1989
+  duration_ms: 0.3202
   type: 'test'
   ...
 # Subtest: ACP Governance: Incomplete agentCapabilities fails closed under Default-Deny
 ok 5 - ACP Governance: Incomplete agentCapabilities fails closed under Default-Deny
   ---
-  duration_ms: 0.1329
+  duration_ms: 0.2566
   type: 'test'
   ...
 # Subtest: ACP Governance: R14-F04-02 counterexample missing agentInfo and empty capabilities fails closed
 ok 6 - ACP Governance: R14-F04-02 counterexample missing agentInfo and empty capabilities fails closed
   ---
-  duration_ms: 0.1216
+  duration_ms: 0.153
   type: 'test'
   ...
 # Subtest: ACP Governance: Response ID mismatch fails closed under Default-Deny
 ok 7 - ACP Governance: Response ID mismatch fails closed under Default-Deny
   ---
-  duration_ms: 0.1084
+  duration_ms: 0.1311
   type: 'test'
   ...
 # Subtest: ACP Governance: Missing agentInfo name or version fails closed
 ok 8 - ACP Governance: Missing agentInfo name or version fails closed
   ---
-  duration_ms: 0.0919
+  duration_ms: 0.1128
   type: 'test'
   ...
 # Subtest: ACP Governance: Handshake failure with allowFallback false strictly terminates fail-closed
 ok 9 - ACP Governance: Handshake failure with allowFallback false strictly terminates fail-closed
   ---
-  duration_ms: 0.1408
+  duration_ms: 0.1684
   type: 'test'
   ...
 # Subtest: ACP Governance: Handshake failure with allowFallback true transitions safely to ISOLATED_STDIO
 ok 10 - ACP Governance: Handshake failure with allowFallback true transitions safely to ISOLATED_STDIO
   ---
-  duration_ms: 0.1319
+  duration_ms: 0.1734
   type: 'test'
   ...
 # Subtest: ACP Governance: Physical probe record evals/protocols/acp-stdio-probe-record.json replay verification
 ok 11 - ACP Governance: Physical probe record evals/protocols/acp-stdio-probe-record.json replay verification
   ---
-  duration_ms: 0.7225
+  duration_ms: 0.693
   type: 'test'
   ...
 # Subtest: ACP Governance: probeNativeAcpServer handles binary probe failure safely under Default-Deny
 ok 12 - ACP Governance: probeNativeAcpServer handles binary probe failure safely under Default-Deny
   ---
-  duration_ms: 6.0005
+  duration_ms: 8.4098
   type: 'test'
   ...
 # Subtest: ACP Governance (R15-F04-01): probeNativeAcpServer succeeds with PROBE_VERIFIED on persistent daemon without requiring process exit
 ok 13 - ACP Governance (R15-F04-01): probeNativeAcpServer succeeds with PROBE_VERIFIED on persistent daemon without requiring process exit
   ---
-  duration_ms: 1009.615
+  duration_ms: 1023.0539
   type: 'test'
   ...
 # Subtest: ACP Governance (R15-F04-01): probeNativeAcpServerAsync completes non-blocking stream probe without waiting for timeout
 ok 14 - ACP Governance (R15-F04-01): probeNativeAcpServerAsync completes non-blocking stream probe without waiting for timeout
   ---
-  duration_ms: 83.5888
+  duration_ms: 56.3456
   type: 'test'
   ...
 # Subtest: ACP Governance (R15-F04-01): connectNativeAcpTransport establishes persistent ACTIVE session with bidirectional channel
 ok 15 - ACP Governance (R15-F04-01): connectNativeAcpTransport establishes persistent ACTIVE session with bidirectional channel
   ---
-  duration_ms: 70.1391
+  duration_ms: 89.0037
   type: 'test'
   ...
 # Subtest: ACP Governance (R16-F04-01): Active session successfully executes subsequent JSON-RPC request-response exchange
 ok 16 - ACP Governance (R16-F04-01): Active session successfully executes subsequent JSON-RPC request-response exchange
   ---
-  duration_ms: 192.5939
+  duration_ms: 74.2829
   type: 'test'
   ...
 # Subtest: ACP Governance (R16-F04-01): Server exit immediately invalidates ACTIVE session to TERMINATED and fails subsequent requests fail-closed
 ok 17 - ACP Governance (R16-F04-01): Server exit immediately invalidates ACTIVE session to TERMINATED and fails subsequent requests fail-closed
   ---
-  duration_ms: 87.763
+  duration_ms: 90.5277
   type: 'test'
   ...
 # Subtest: ACP Governance (R17-F04-01): Active session response dispatcher strictly rejects non-JSON-RPC 2.0 payloads and wrong protocol versions
 ok 18 - ACP Governance (R17-F04-01): Active session response dispatcher strictly rejects non-JSON-RPC 2.0 payloads and wrong protocol versions
   ---
-  duration_ms: 206.4494
+  duration_ms: 79.6385
   type: 'test'
   ...
 # Subtest: ACP Governance (R17-F04-02): onClose listeners receive consistent at-most-once notification across all termination pathways
 ok 19 - ACP Governance (R17-F04-02): onClose listeners receive consistent at-most-once notification across all termination pathways
   ---
-  duration_ms: 406.4342
+  duration_ms: 421.0151
   type: 'test'
   ...
 1..19
@@ -121,4 +121,4 @@ ok 19 - ACP Governance (R17-F04-02): onClose listeners receive consistent at-mos
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2271.174
+# duration_ms 1956.4782

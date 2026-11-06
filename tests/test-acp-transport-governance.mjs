@@ -474,4 +474,32 @@ test('ACP Governance (R17-F04-02): onClose listeners receive consistent at-most-
   assert.equal(closeCount2, 1, 'Server exit must trigger onClose exactly once');
   assert.equal(closeEvent2.origin, 'exit');
   assert.equal(session2.status, TRANSPORT_STATUS.TERMINATED);
+
+  // Pathway 3 (R18-F04-02): Process error event
+  const session3 = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  try {
+    let closeCount3 = 0;
+    let closeEvent3 = null;
+    session3.onClose((evt) => {
+      closeCount3++;
+      closeEvent3 = evt;
+    });
+
+    // Synthetically emit error on child process
+    session3.process.emit('error', new Error('synthetic channel failure'));
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.equal(closeCount3, 1, 'Process error must trigger onClose exactly once');
+    assert.equal(closeEvent3.origin, 'error');
+    assert.equal(session3.status, TRANSPORT_STATUS.TERMINATED);
+    assert.equal(session3.isActive(), false);
+  } finally {
+    session3.close();
+  }
 });
