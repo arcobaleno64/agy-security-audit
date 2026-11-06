@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { isRealPathContained, isPathContained } from '../skills/security-audit/scripts/path-containment.mjs';
+import { isRealPathContained, isPathContained } from '../skills/3lens/scripts/path-containment.mjs';
 
 export const READ_TOOLS = new Set(['view_file', 'grep_search', 'list_dir', 'find_by_name']);
 export const NETWORK_TOOLS = new Set(['search_web', 'read_url_content', 'read_browser_page', 'call_mcp_tool']);

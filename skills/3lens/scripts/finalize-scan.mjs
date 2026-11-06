@@ -4783,27 +4783,27 @@ export function runDispositionCanaries(repoRoot = process.cwd()) {
     id: 'CANARY-SAFE',
     ruleId: 'CWE-89',
     title: 'Canary Safe Control',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const safeVotes = [
     {
       findingId: 'CANARY-SAFE',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }],
-      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:1'
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'guard' }],
+      mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:1'
     },
     {
       findingId: 'CANARY-SAFE',
       lens: 'REACHABILITY',
       decision: 'REFUTES',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'guard' }]
     },
     {
       findingId: 'CANARY-SAFE',
       lens: 'IMPACT',
       decision: 'REFUTES',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'guard' }]
     }
   ];
   const safeDisp = deriveFinalDisposition(safeCandidate, safeVotes, { score: 0.9 }, repoRoot);
@@ -4818,26 +4818,26 @@ export function runDispositionCanaries(repoRoot = process.cwd()) {
     id: 'CANARY-POS',
     ruleId: 'CWE-89',
     title: 'Canary Known Positive',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const positiveVotes = [
     {
       findingId: 'CANARY-POS',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'entrypoint' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'entrypoint' }]
     },
     {
       findingId: 'CANARY-POS',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'guard' }]
     },
     {
       findingId: 'CANARY-POS',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'sink' }]
     }
   ];
   const positiveDisp = deriveFinalDisposition(positiveCandidate, positiveVotes, { score: 0.9 }, repoRoot);
@@ -4852,14 +4852,14 @@ export function runDispositionCanaries(repoRoot = process.cwd()) {
     id: 'CANARY-AMB',
     ruleId: 'CWE-89',
     title: 'Canary Ambiguous',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const ambiguousVotes = [
     {
       findingId: 'CANARY-AMB',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'entrypoint' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'entrypoint' }]
     }
   ];
   const ambDisp = deriveFinalDisposition(ambiguousCandidate, ambiguousVotes, { score: 0.5 }, repoRoot);
@@ -4988,7 +4988,7 @@ if (isDirectExecution) {
   const showHelp = args.includes('--help') || args.includes('-h');
 
   if (showHelp) {
-    console.log('Usage: node skills/security-audit/scripts/finalize-scan.mjs [options]');
+    console.log('Usage: node skills/3lens/scripts/finalize-scan.mjs [options]');
     console.log('');
     console.log('Options:');
     console.log('  --candidates <path>           Candidate findings JSON file');

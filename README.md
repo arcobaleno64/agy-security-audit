@@ -105,7 +105,7 @@ agy --sandbox "audit this repository for security vulnerabilities"
 ```
 
 The role permissions defined in `recommended-security-audit-permissions.json` enforce:
-- **`coordinator`**: Allowed orchestration tools (`invoke_subagent`, `send_message`, `run_command:node skills/security-audit/scripts/*`); asked on `run_command:git *`; strictly denied network egress (`read_url_content`, `search_web`, `curl`, `wget`) and write operations.
+- **`coordinator`**: Allowed orchestration tools (`invoke_subagent`, `send_message`, `run_command:node skills/3lens/scripts/*`); asked on `run_command:git *`; strictly denied network egress (`read_url_content`, `search_web`, `curl`, `wget`) and write operations.
 - **`discovery`**: Read-only exploration (`view_file`, `list_dir`, `grep_search`, `find_by_name`); strictly denied all write tools, network tools, and command executions.
 - **`verifiers`**: Read-only 3-Lens verification panel; strictly denied all write tools, command executions, and network access.
 - **`remediation`**: Surgical patch generation in isolated scratch workspaces; asked on `write_to_file`; strictly denied CI/CD manifests (`.github/*`), git metadata (`.git/*`), remote pushing (`git push`), and network egress.

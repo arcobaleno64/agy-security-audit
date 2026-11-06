@@ -15,16 +15,16 @@ import {
   createBenchmarkRunEnvelope,
   validateBenchmarkRunEnvelope,
   probeEnvironment
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import {
   finalizeScan,
   computeLineageFingerprint
-} from '../skills/security-audit/scripts/finalize-scan.mjs';
-import { prepareReviewContext } from '../skills/security-audit/scripts/prepare-review-context.mjs';
+} from '../skills/3lens/scripts/finalize-scan.mjs';
+import { prepareReviewContext } from '../skills/3lens/scripts/prepare-review-context.mjs';
 import {
   evaluateStability,
   runStabilityEval
-} from '../skills/security-audit/scripts/run-stability-eval.mjs';
+} from '../skills/3lens/scripts/run-stability-eval.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

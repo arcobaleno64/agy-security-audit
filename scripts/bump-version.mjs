@@ -11,7 +11,7 @@ import path from "node:path";
 import process from "node:process";
 
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const TOOL_VERSION_FILE = "skills/security-audit/scripts/finalize-scan.mjs";
+const TOOL_VERSION_FILE = "skills/3lens/scripts/finalize-scan.mjs";
 const TOOL_VERSION_PATTERN = /^export const TOOL_VERSION = '[^']*';$/m;
 
 const JSON_TARGETS = [
@@ -20,7 +20,11 @@ const JSON_TARGETS = [
     values: [{ label: "version", get: (json) => json.version, set: (json, version) => { json.version = version; } }]
   },
   {
-    file: "skills/security-audit/tool-integrity-manifest.json",
+    file: "plugin.json",
+    values: [{ label: "version", get: (json) => json.version, set: (json, version) => { json.version = version; } }]
+  },
+  {
+    file: "skills/3lens/tool-integrity-manifest.json",
     values: [{ label: "toolVersion", get: (json) => json.toolVersion, set: (json, version) => { json.toolVersion = version; } }]
   },
   {
@@ -198,7 +202,7 @@ function checkChangelogEntry(root, expectedVersion) {
   if (!fs.existsSync(file)) return null;
   const headings = fs.readFileSync(file, "utf8").split(/\r?\n/).filter((line) => line.startsWith("## "));
   const found = headings.some((line) => {
-    const token = line.split(/\s+/)[1];
+    const token = line.split(/\s+/)[1]?.replace(/^\[/, '').replace(/\]$/, '');
     return token === expectedVersion || token === `v${expectedVersion}`;
   });
   if (found) return null;

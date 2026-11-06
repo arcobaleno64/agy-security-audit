@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseStreamJsonTrace } from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+import { parseStreamJsonTrace } from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import { parseClaudeStreamJsonTrace } from '../scripts/run-cross-provider-benchmark.mjs';
 
 test('finished_reason lifecycle governance: omitted finished_reason on exit 0 is clean', () => {

@@ -105,7 +105,7 @@ agy --sandbox "audit this repository for security vulnerabilities"
 ```
 
 `recommended-security-audit-permissions.json` 所定義的角色權限邊界：
-- **`coordinator`** (主協調代理)：允許協調工具 (`invoke_subagent`、`send_message`、`run_command:node skills/security-audit/scripts/*`)；詢問 `run_command:git *`；嚴格拒絕網路外聯 (`read_url_content`、`search_web`、`curl`、`wget`) 與寫入操作。
+- **`coordinator`** (主協調代理)：允許協調工具 (`invoke_subagent`、`send_message`、`run_command:node skills/3lens/scripts/*`)；詢問 `run_command:git *`；嚴格拒絕網路外聯 (`read_url_content`、`search_web`、`curl`、`wget`) 與寫入操作。
 - **`discovery`** (漏洞發現代理)：僅唯讀探索 (`view_file`、`list_dir`、`grep_search`、`find_by_name`)；嚴格拒絕所有寫入、網路與命令執行。
 - **`verifiers`** (3-Lens 驗證群)：僅唯讀檢驗；嚴格拒絕所有寫入、命令執行與網路存取。
 - **`remediation`** (修復代理)：於隔離 scratch 工作區生成外科手術式最小修復；詢問 `write_to_file`；嚴格拒絕 CI/CD 清單 (`.github/*`)、Git 元資料 (`.git/*`)、遠端推送 (`git push`) 與網路外聯。

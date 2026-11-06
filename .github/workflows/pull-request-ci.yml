@@ -9,7 +9,7 @@ jobs:
   ci:
     # Windows and Linux both carry assertions the other cannot: safe-git.mjs
     # isolates the git config path with NUL on Windows and /dev/null elsewhere
-    # (skills/security-audit/scripts/safe-git.mjs:13-32), so a Linux-only runner
+    # (skills/3lens/scripts/safe-git.mjs:13-32), so a Linux-only runner
     # would never execute the Windows branch and vice versa. macOS is included
     # for parity with the sibling agy-plugin-cc project even though no branch is
     # macOS-specific today.

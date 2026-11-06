@@ -39,11 +39,11 @@ import {
   validateCandidateSet,
   parseStreamJsonTrace,
   normalizeModelTaxonomy
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import {
   computeLineageFingerprint,
   getToolProvenance
-} from '../skills/security-audit/scripts/finalize-scan.mjs';
+} from '../skills/3lens/scripts/finalize-scan.mjs';
 import { loadAndValidateProtocol } from './compare-model-benchmarks.mjs';
 
 const __filename = fileURLToPath(import.meta.url);

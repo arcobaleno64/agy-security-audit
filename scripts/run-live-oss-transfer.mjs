@@ -27,11 +27,11 @@ import {
   validateBenchmarkRunEnvelope,
   validateCandidateSet,
   probeEnvironment
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import {
   computeLineageFingerprint
-} from '../skills/security-audit/scripts/finalize-scan.mjs';
-import { getHardenedGitProvenance } from '../skills/security-audit/scripts/safe-git.mjs';
+} from '../skills/3lens/scripts/finalize-scan.mjs';
+import { getHardenedGitProvenance } from '../skills/3lens/scripts/safe-git.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(__filename), '..');

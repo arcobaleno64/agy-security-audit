@@ -268,7 +268,7 @@ export function executeTier1Reproduction(options = {}) {
   });
 
   // Step 6: Section 24 Release Invariants Gate
-  const releaseRes = runScript(path.join(repoRoot, 'skills', 'security-audit', 'scripts', 'check-release-invariants.mjs'), [], { cwd: repoRoot });
+  const releaseRes = runScript(path.join(repoRoot, 'skills', '3lens', 'scripts', 'check-release-invariants.mjs'), [], { cwd: repoRoot });
   steps.push({
     id: 'section-24-release-gate',
     name: 'Section 24 Release Invariants Gate',
@@ -278,7 +278,7 @@ export function executeTier1Reproduction(options = {}) {
   });
 
   // Step 7: Automated Invariant Test Suite (121/121)
-  const sarifRes = runScript(path.join(repoRoot, 'skills', 'security-audit', 'scripts', 'render-sarif.mjs'), [], { cwd: repoRoot });
+  const sarifRes = runScript(path.join(repoRoot, 'skills', '3lens', 'scripts', 'render-sarif.mjs'), [], { cwd: repoRoot });
   steps.push({
     id: 'section-24-invariant-suite',
     name: 'Section 24 Global Security Invariant Suite',

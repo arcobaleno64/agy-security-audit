@@ -217,7 +217,7 @@ function createTestGitFixture() {
     const file1 = path.join(tmpDir, 'file1.txt');
     const fileToDelete = path.join(tmpDir, 'deleted.txt');
     const pkgJson = path.join(tmpDir, 'package.json');
-    const scriptDir = path.join(tmpDir, 'skills', 'security-audit', 'scripts');
+    const scriptDir = path.join(tmpDir, 'skills', '3lens', 'scripts');
     fs.mkdirSync(scriptDir, { recursive: true });
     fs.writeFileSync(path.join(scriptDir, 'safe-git.mjs'), '// Mock safe git script for fixture\n');
     fs.writeFileSync(file1, 'Initial content line 1\nline 2\n');
@@ -365,7 +365,7 @@ export function runTests() {
         severity: 'CRITICAL'
       },
       location: {
-        uri: 'skills/security-audit/scripts/safe-git.mjs',
+        uri: 'skills/3lens/scripts/safe-git.mjs',
         startLine: 42,
         endLine: 44,
         lineSnippet: 'const query = `SELECT * FROM users WHERE name = "${input}"`;'
@@ -382,8 +382,8 @@ export function runTests() {
       decision: 'CONFIRMED',
       nonce: 'NONCE-SARIF-001',
       evidence: [
-        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'source' },
-        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }
+        { path: 'skills/3lens/scripts/safe-git.mjs', line: 42, role: 'source' },
+        { path: 'skills/3lens/scripts/safe-git.mjs', line: 44, role: 'sink' }
       ]
     },
     {
@@ -392,7 +392,7 @@ export function runTests() {
       lens: 'DEFENSES',
       decision: 'CONFIRMED',
       nonce: 'NONCE-SARIF-001',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 42, role: 'control' }]
     },
     {
       findingId: 'SEC-001',
@@ -400,7 +400,7 @@ export function runTests() {
       lens: 'IMPACT',
       decision: 'CONFIRMED',
       nonce: 'NONCE-SARIF-001',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 44, role: 'sink' }]
     }
   ];
 
@@ -732,7 +732,7 @@ export function runTests() {
     title: 'Command Injection in Worker',
     ruleId: 'CWE-078',
     severity: 'HIGH',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 25 },
     dataflowVerified: true
   };
   const threeLensVotes = [
@@ -740,22 +740,22 @@ export function runTests() {
       findingId: 'SEC-3LENS',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      source: 'skills/security-audit/scripts/safe-git.mjs:25',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:36',
+      source: 'skills/3lens/scripts/safe-git.mjs:25',
+      sink: 'skills/3lens/scripts/safe-git.mjs:36',
       reason: 'Unsanitized argument flows directly to spawn'
     },
     {
       findingId: 'SEC-3LENS',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }],
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'control' }],
       reason: 'No escaping or allowlist barrier present'
     },
     {
       findingId: 'SEC-3LENS',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:36',
+      sink: 'skills/3lens/scripts/safe-git.mjs:36',
       reason: 'Arbitrary host command execution'
     }
   ];
@@ -776,7 +776,7 @@ export function runTests() {
     title: 'Theoretical Query Injection in Dead Code',
     ruleId: 'CWE-089',
     severity: 'HIGH',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 30 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 30 }
   };
   const reachabilityRefuteVotes = [
     {
@@ -784,7 +784,7 @@ export function runTests() {
       lens: 'REACHABILITY',
       decision: 'REFUTES',
       reason: 'Function is unreachable from any external route or entrypoint',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 30, role: 'dead-path' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 30, role: 'dead-path' }]
     },
     { findingId: 'SEC-UNREACH', lens: 'DEFENSES', decision: 'SUPPORTS', reason: 'No internal sanitizer' },
     { findingId: 'SEC-UNREACH', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read' }
@@ -801,11 +801,11 @@ export function runTests() {
     title: 'SQL Injection in User Search',
     ruleId: 'CWE-089',
     severity: 'HIGH',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 35 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 35 }
   };
   const defensesRefuteVotes = [
     { findingId: 'SEC-MITIGATED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Public API endpoint reachable' },
-    { findingId: 'SEC-MITIGATED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20', mitigationReason: 'Parameterized query barrier prevents injection' },
+    { findingId: 'SEC-MITIGATED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:20', mitigationReason: 'Parameterized query barrier prevents injection' },
     { findingId: 'SEC-MITIGATED', lens: 'IMPACT', decision: 'SUPPORTS', reason: 'Database read impact' }
   ];
   const dispMitigated = deriveFinalDisposition(mitigatedCandidate, defensesRefuteVotes, { score: 0.85 });
@@ -829,11 +829,11 @@ export function runTests() {
   // 29. P2 (0.11.0): Section 21 Attack Path Schema Validation
   const validAttackPath = {
     attackPathId: 'AP-01',
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'User controllable argument' },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'User controllable argument' },
     steps: [
-      { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Command string concatenation' }
+      { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Command string concatenation' }
     ],
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 40, description: 'Child process invocation' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 40, description: 'Child process invocation' },
     preconditions: ['Local operator execution'],
     exploitabilityPrerequisites: ['Unvalidated input parameters'],
     unmitigatedInvariant: 'No shell escape routine applied'
@@ -854,11 +854,11 @@ export function runTests() {
 
   // 30. P2 (0.11.0): Proof-Gap Detection
   const gappyPath = {
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10 },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10 },
     steps: [
-      { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 20, description: 'assumed data propagation' }
+      { uri: 'skills/3lens/scripts/safe-git.mjs', line: 20, description: 'assumed data propagation' }
     ],
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 30, description: 'sink' }
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 30, description: 'sink' }
   };
   const gaps = detectProofGaps(gappyPath);
   if (!gaps.hasGaps || gaps.proofGaps.length < 2) {
@@ -890,7 +890,7 @@ export function runTests() {
     id: 'SEC-GAP-01',
     ruleId: 'CWE-89',
     title: 'Candidate with Gap',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 },
     proofGaps: [{ stepIndex: 1, unprovenProperty: 'Control flow branch cannot be proven reachable' }]
   };
   const threeLensVotesWithGaps = [
@@ -917,13 +917,13 @@ export function runTests() {
     id: 'SEC-AUTO-GAP',
     ruleId: 'CWE-89',
     title: 'SQLi Candidate with Unverified Hop',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 15 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 15 },
     attackPath: {
-      source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Incoming query parameter' },
+      source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Incoming query parameter' },
       steps: [
-        { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 12, description: 'assumed unvalidated string concatenation' }
+        { uri: 'skills/3lens/scripts/safe-git.mjs', line: 12, description: 'assumed unvalidated string concatenation' }
       ],
-      sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, description: 'Executed SQL query' },
+      sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 15, description: 'Executed SQL query' },
       unmitigatedInvariant: 'No parameterized query'
     }
   };
@@ -947,8 +947,8 @@ export function runTests() {
   console.log('✔ 34. P2 Invariant: finalizeScan automatically detects proof gaps and enforces DEFERRED under Default-Deny.');
 
   // 35. P2 (0.12.0): Unified Diff Patch Syntax & Traversal Defense
-  const validPatch = `--- a/skills/security-audit/scripts/safe-git.mjs
-+++ b/skills/security-audit/scripts/safe-git.mjs
+  const validPatch = `--- a/skills/3lens/scripts/safe-git.mjs
++++ b/skills/3lens/scripts/safe-git.mjs
 @@ -10,2 +10,3 @@
  const hardened = true;
 +const verified = true;
@@ -969,7 +969,7 @@ export function runTests() {
   console.log('✔ 35. P2 Invariant: Patch syntax validated fail-closed against directory traversal.');
 
   // 36. P2 (0.12.0): Stale Baseline Detection
-  const staleCheck = detectStalePatch(gitFixture.repoPath, ['skills/security-audit/scripts/safe-git.mjs'], 'HEAD');
+  const staleCheck = detectStalePatch(gitFixture.repoPath, ['skills/3lens/scripts/safe-git.mjs'], 'HEAD');
   if (staleCheck.stale !== false) {
     throw new Error('P2 VIOLATION: Clean baseline falsely marked as stale');
   }
@@ -979,12 +979,12 @@ export function runTests() {
   const findingToVerify = {
     id: 'SEC-REMED',
     ruleId: 'CWE-89',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 25 }
   };
 
   // 37.1 1 DEFENSES only -> REJECTED
   const defensesOnlyVotes = [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' }
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' }
   ];
   const defOnlyResult = verifyRemediation(findingToVerify, defensesOnlyVotes, process.cwd());
   if (defOnlyResult.verified) {
@@ -993,8 +993,8 @@ export function runTests() {
 
   // 37.2 DEFENSES + REACHABILITY only -> REJECTED
   const defAndReachVotes = [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
-    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'dead-path' }] }
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Exploit path blocked', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'dead-path' }] }
   ];
   const defAndReachResult = verifyRemediation(findingToVerify, defAndReachVotes, process.cwd());
   if (defAndReachResult.verified) {
@@ -1007,23 +1007,23 @@ export function runTests() {
       findingId: 'SEC-REMED',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25',
+      mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:25',
       mitigationReason: 'Parameterized query barrier added',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'guard' }]
     },
     {
       findingId: 'SEC-REMED',
       lens: 'REACHABILITY',
       decision: 'REFUTES',
       reason: 'Exploit path blocked',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'dead-path' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'dead-path' }]
     },
     {
       findingId: 'SEC-REMED',
       lens: 'IMPACT',
       decision: 'REFUTES',
       reason: 'Impact neutralized',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'impact-boundary' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'impact-boundary' }]
     }
   ];
   const remediationResult = verifyRemediation(findingToVerify, allThreeVotes, process.cwd());
@@ -1033,7 +1033,7 @@ export function runTests() {
 
   // 37.4 Unresolved reachability / impact evidence (e.g. REACHABILITY SUPPORTS) -> REJECTED
   const unverifiedResult = verifyRemediation(findingToVerify, [
-    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
+    { findingId: 'SEC-REMED', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:25', mitigationReason: 'Parameterized query barrier added' },
     { findingId: 'SEC-REMED', lens: 'REACHABILITY', decision: 'SUPPORTS', reason: 'Bypass found' },
     { findingId: 'SEC-REMED', lens: 'IMPACT', decision: 'REFUTES', reason: 'Impact neutralized' }
   ], process.cwd());
@@ -1043,8 +1043,8 @@ export function runTests() {
   console.log('✔ 37. P1-03 Invariant: Remediation verification strictly requires complete 3-Lens panel under Default-Deny.');
 
   // 38. P2 (0.12.0): Patch Jail Security Rules (Bidi, CI/CD, Multi-file)
-  const bidiPatch = `--- a/skills/security-audit/scripts/safe-git.mjs
-+++ b/skills/security-audit/scripts/safe-git.mjs
+  const bidiPatch = `--- a/skills/3lens/scripts/safe-git.mjs
++++ b/skills/3lens/scripts/safe-git.mjs
 @@ -10,1 +10,1 @@
 -const access = false;
 +const access = true; \u202E /* hidden override */
@@ -1066,7 +1066,7 @@ export function runTests() {
   console.log('✔ 38. P2 Invariant: Patch Jail strictly rejects Unicode Bidi and CI/CD modifications.');
 
   // 39. P2 (0.12.0): Option Injection Defense in detectStalePatch
-  const optionInjectionCheck = detectStalePatch(gitFixture.repoPath, ['skills/security-audit/scripts/safe-git.mjs'], '--output=/tmp/evil');
+  const optionInjectionCheck = detectStalePatch(gitFixture.repoPath, ['skills/3lens/scripts/safe-git.mjs'], '--output=/tmp/evil');
   if (!optionInjectionCheck.stale || !optionInjectionCheck.error) {
     throw new Error('P2 VIOLATION: Unsafe baseRevision option injection was not rejected fail-closed!');
   }
@@ -1074,30 +1074,30 @@ export function runTests() {
 
 
   // 40. P2 (0.12.0) & P1-03: 3-Lens Finding ID Binding and Unresolved Reachability / Impact Evidence
-  const candidateA = { id: 'SEC-100', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
-  const candidateB = { id: 'SEC-200', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 } };
+  const candidateA = { id: 'SEC-100', location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 20 } };
+  const candidateB = { id: 'SEC-200', location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 20 } };
   const votesForA = [
     {
       findingId: 'SEC-100',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20',
+      mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:20',
       mitigationReason: 'Sanitizer installed',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'guard' }]
     },
     {
       findingId: 'SEC-100',
       lens: 'REACHABILITY',
       decision: 'REFUTES',
       reason: 'Unreachable',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'dead-path' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'dead-path' }]
     },
     {
       findingId: 'SEC-100',
       lens: 'IMPACT',
       decision: 'REFUTES',
       reason: 'Zero harm',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'impact-boundary' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'impact-boundary' }]
     }
   ];
   // Ballots for A must verify candidate A
@@ -1117,9 +1117,9 @@ export function runTests() {
       findingId: 'SEC-100',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:20',
+      mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:20',
       mitigationReason: 'Sanitizer installed',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'guard' }]
     },
     { findingId: 'SEC-100', lens: 'REACHABILITY', decision: 'SUPPORTS', justification: 'Bypass found' },
     { findingId: 'SEC-100', lens: 'IMPACT', decision: 'SUPPORTS', justification: 'Critical data loss' }
@@ -1169,7 +1169,7 @@ export function runTests() {
   // 43. P0-01 Hardening: Real task-bound ballots required for REPORTABLE
   const realBallotCandidate = {
     id: 'C-REAL-BALLOTS',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 }
   };
   const realBallots = [
     {
@@ -1177,15 +1177,15 @@ export function runTests() {
       reviewerId: 'rev-1',
       decision: 'CONFIRMED',
       evidence: [
-        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' },
-        { path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }
+        { path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' },
+        { path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }
       ]
     },
     {
       findingId: 'C-REAL-BALLOTS',
       reviewerId: 'rev-2',
       decision: 'CONFIRMED',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     }
   ];
   const realResult = deriveFinalDisposition(realBallotCandidate, realBallots, { score: 0.85 }, process.cwd());
@@ -1328,7 +1328,7 @@ export function runTests() {
       title: 'Pre-finalized SQLi',
       severity: 'CRITICAL',
       cvssV4: { vector: validVector, score: 9.3, severity: 'CRITICAL' },
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 42, endLine: 44, lineSnippet: 'SELECT' },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 42, endLine: 44, lineSnippet: 'SELECT' },
       consensus: { supports: 2, total: 2, unanimous: true },
       rigor: { score: 0.85, assuranceLevel: 'HIGH_RIGOR' },
       disposition: 'REPORTABLE',
@@ -1446,7 +1446,7 @@ export function runTests() {
     title: 'Candidate for Evidence Binding Check',
     ruleId: 'CWE-89',
     severity: 'HIGH',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 20 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 20 }
   };
 
   // 57.1 REACHABILITY REFUTES without evidence -> DEFERRED
@@ -1483,7 +1483,7 @@ export function runTests() {
   }
 
   // 57.4 Wrong findingId evidence rejected
-  const wrongIdVote = { findingId: 'WRONG-ID', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20 }] };
+  const wrongIdVote = { findingId: 'WRONG-ID', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20 }] };
   const wrongIdRes = validateVoteEvidence(wrongIdVote, testCandidate, process.cwd());
   if (wrongIdRes.valid) {
     throw new Error('P1-02 VIOLATION: Wrong findingId evidence was accepted');
@@ -1497,12 +1497,12 @@ export function runTests() {
   }
 
   // 57.6 Invalid line rejected (line 0, line -5, line beyond EOF)
-  const line0Vote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 0 }] };
+  const line0Vote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 0 }] };
   const line0Res = validateVoteEvidence(line0Vote, testCandidate, process.cwd());
   if (line0Res.valid) {
     throw new Error('P1-02 VIOLATION: Evidence with line 0 was accepted');
   }
-  const lineBeyondEofVote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 999999 }] };
+  const lineBeyondEofVote = { findingId: 'SEC-EV-TEST', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 999999 }] };
   const lineBeyondRes = validateVoteEvidence(lineBeyondEofVote, testCandidate, process.cwd());
   if (lineBeyondRes.valid) {
     throw new Error('P1-02 VIOLATION: Evidence line beyond EOF was accepted');
@@ -1514,20 +1514,20 @@ export function runTests() {
       findingId: 'SEC-EV-TEST',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      source: 'skills/security-audit/scripts/safe-git.mjs:20',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:25'
+      source: 'skills/3lens/scripts/safe-git.mjs:20',
+      sink: 'skills/3lens/scripts/safe-git.mjs:25'
     },
     {
       findingId: 'SEC-EV-TEST',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'guard' }]
     },
     {
       findingId: 'SEC-EV-TEST',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:25'
+      sink: 'skills/3lens/scripts/safe-git.mjs:25'
     }
   ];
   const validEvRes = deriveFinalDisposition(testCandidate, validEvVotes, { score: 0.8 }, process.cwd());
@@ -1538,25 +1538,25 @@ export function runTests() {
 
 
   // 58. P1-04 Invariant: Orchestration consistency & unified Fixed 3-Lens verification
-  const skillFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/SKILL.md'), 'utf8');
+  const skillFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/3lens/SKILL.md'), 'utf8');
   if (skillFile.includes('--workers')) {
     throw new Error('P1-04 VIOLATION: SKILL.md still references legacy --workers flag instead of --concurrency');
   }
   if (!skillFile.includes('Fixed 3-Lens Consensus Verification')) {
     throw new Error('P1-04 VIOLATION: SKILL.md Stage 3 not aligned with Fixed 3-Lens verification');
   }
-  const verifierProtocolFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/references/verifier-protocol.md'), 'utf8');
+  const verifierProtocolFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/3lens/references/verifier-protocol.md'), 'utf8');
   if (!verifierProtocolFile.includes('Fixed 3-Lens Verification Panel')) {
     throw new Error('P1-04 VIOLATION: verifier-protocol.md not aligned with Fixed 3-Lens Verification Panel');
   }
-  const swarmConsensusFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/references/swarm-consensus.md'), 'utf8');
+  const swarmConsensusFile = fs.readFileSync(path.resolve(process.cwd(), 'skills/3lens/references/swarm-consensus.md'), 'utf8');
   if (!swarmConsensusFile.includes('Fixed 3-Lens Verification Panel')) {
     throw new Error('P1-04 VIOLATION: swarm-consensus.md not aligned with Fixed 3-Lens Verification Panel');
   }
   // 58.2 Incomplete 3-Lens panel (missing 1 lens) strictly fails closed to DEFERRED
   const partialLensCandidate = {
     id: 'SEC-PARTIAL-LENS',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 }
   };
   const partialLensVotes = [
     { findingId: 'SEC-PARTIAL-LENS', lens: 'REACHABILITY', decision: 'SUPPORTS' },
@@ -1588,7 +1588,7 @@ export function runTests() {
       }
 
       // Execute render-sarif.mjs --test inside the cleanExtractDir
-      const testScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'render-sarif.mjs');
+      const testScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'render-sarif.mjs');
       const testOut = execFileSync(process.execPath, [testScriptInClean, '--test'], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1599,7 +1599,7 @@ export function runTests() {
       }
 
       // Execute run-evals.mjs inside the cleanExtractDir
-      const evalsScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-evals.mjs');
+      const evalsScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'run-evals.mjs');
       const evalsOut = execFileSync(process.execPath, [evalsScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1610,7 +1610,7 @@ export function runTests() {
       }
 
       // Execute run-semantic-eval.mjs inside cleanExtractDir (R1-P2-01 / R2-P0-08)
-      const semanticScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-semantic-eval.mjs');
+      const semanticScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'run-semantic-eval.mjs');
       const semanticOut = execFileSync(process.execPath, [semanticScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1621,7 +1621,7 @@ export function runTests() {
       }
 
       // Execute run-discovery-eval.mjs inside cleanExtractDir (R2-P0-08)
-      const discoveryScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-discovery-eval.mjs');
+      const discoveryScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'run-discovery-eval.mjs');
       const discoveryOut = execFileSync(process.execPath, [discoveryScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1632,7 +1632,7 @@ export function runTests() {
       }
 
       // Execute run-stability-eval.mjs inside cleanExtractDir (R2-P0-08)
-      const stabilityScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'run-stability-eval.mjs');
+      const stabilityScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'run-stability-eval.mjs');
       const stabilityOut = execFileSync(process.execPath, [stabilityScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1643,7 +1643,7 @@ export function runTests() {
       }
 
       // Execute check-release-invariants.mjs inside the cleanExtractDir
-      const releaseScriptInClean = path.join(cleanExtractDir, 'skills', 'security-audit', 'scripts', 'check-release-invariants.mjs');
+      const releaseScriptInClean = path.join(cleanExtractDir, 'skills', '3lens', 'scripts', 'check-release-invariants.mjs');
       const releaseOut = execFileSync(process.execPath, [releaseScriptInClean], {
         cwd: cleanExtractDir,
         encoding: 'utf8',
@@ -1667,7 +1667,7 @@ export function runTests() {
     ruleId: 'CWE-89',
     title: 'SQL Injection in Safe Git Helper',
     severity: 'HIGH',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 25 },
     rigorMetrics: {
       sinkVerified: true,
       sourceVerified: true,
@@ -1690,9 +1690,9 @@ export function runTests() {
 
   // Case 2: 3 SUPPORTS + fake rigorMetrics (no source/sink evidence in votes) -> DEFERRED
   const votesArbitraryEv = [
-    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'general' }] },
-    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'general' }] }
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'general' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'general' }] }
   ];
   const resFakeRigor = deriveFinalDisposition(r1Candidate, votesArbitraryEv, { score: 0.95 }, process.cwd());
   if (resFakeRigor.disposition !== 'DEFERRED' || resFakeRigor.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
@@ -1701,9 +1701,9 @@ export function runTests() {
 
   // Case 3: 3 SUPPORTS + missing source evidence -> DEFERRED
   const votesMissingSource = [
-    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
-    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
-    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/3lens/scripts/safe-git.mjs:25' }
   ];
   const resMissingSource = deriveFinalDisposition(r1Candidate, votesMissingSource, { score: 0.85 }, process.cwd());
   if (resMissingSource.disposition !== 'DEFERRED' || !resMissingSource.reason.includes('source/entrypoint')) {
@@ -1712,20 +1712,20 @@ export function runTests() {
 
   // Case 4: 3 SUPPORTS + missing sink/root-control evidence -> DEFERRED
   const votesMissingSink = [
-    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'control' }] },
-    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
   ];
-  const resMissingSink = deriveFinalDisposition({ ...r1Candidate, location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 } }, votesMissingSink, { score: 0.85 }, process.cwd());
+  const resMissingSink = deriveFinalDisposition({ ...r1Candidate, location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 } }, votesMissingSink, { score: 0.85 }, process.cwd());
   if (resMissingSink.disposition !== 'DEFERRED' || !resMissingSink.reason.includes('sink/root-control')) {
     throw new Error(`R1-P0-01 VIOLATION: Missing sink evidence was not DEFERRED: ${JSON.stringify(resMissingSink)}`);
   }
 
   // Case 5: 3 SUPPORTS + nonexistent evidence file -> DEFERRED
   const votesNonexistentFile = [
-    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'nonexistent-file.js:1', sink: 'skills/security-audit/scripts/safe-git.mjs:25' },
-    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
-    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'nonexistent-file.js:1', sink: 'skills/3lens/scripts/safe-git.mjs:25' },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/3lens/scripts/safe-git.mjs:25' }
   ];
   const resNonexistent = deriveFinalDisposition(r1Candidate, votesNonexistentFile, { score: 0.85 }, process.cwd());
   if (resNonexistent.disposition !== 'DEFERRED' || !resNonexistent.reason.includes('does not exist')) {
@@ -1734,9 +1734,9 @@ export function runTests() {
 
   // Case 6: 3 SUPPORTS + line beyond EOF -> DEFERRED
   const votesBeyondEof = [
-    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'skills/security-audit/scripts/safe-git.mjs:999999', sink: 'skills/security-audit/scripts/safe-git.mjs:25' },
-    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }] },
-    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/security-audit/scripts/safe-git.mjs:25' }
+    { findingId: 'SEC-R1-01', lens: 'REACHABILITY', decision: 'SUPPORTS', source: 'skills/3lens/scripts/safe-git.mjs:999999', sink: 'skills/3lens/scripts/safe-git.mjs:25' },
+    { findingId: 'SEC-R1-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'control' }] },
+    { findingId: 'SEC-R1-01', lens: 'IMPACT', decision: 'SUPPORTS', sink: 'skills/3lens/scripts/safe-git.mjs:25' }
   ];
   const resBeyondEof = deriveFinalDisposition(r1Candidate, votesBeyondEof, { score: 0.85 }, process.cwd());
   if (resBeyondEof.disposition !== 'DEFERRED' || !resBeyondEof.reason.includes('exceeds file length')) {
@@ -1749,22 +1749,22 @@ export function runTests() {
       findingId: 'SEC-R1-01',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      source: 'skills/security-audit/scripts/safe-git.mjs:10',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:25',
+      source: 'skills/3lens/scripts/safe-git.mjs:10',
+      sink: 'skills/3lens/scripts/safe-git.mjs:25',
       reason: 'Reachable from safe-git argument'
     },
     {
       findingId: 'SEC-R1-01',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'control' }],
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'control' }],
       reason: 'No argument sanitization'
     },
     {
       findingId: 'SEC-R1-01',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      sink: 'skills/security-audit/scripts/safe-git.mjs:25',
+      sink: 'skills/3lens/scripts/safe-git.mjs:25',
       reason: 'Arbitrary execution'
     }
   ];
@@ -1781,14 +1781,14 @@ export function runTests() {
   const remCandidate = {
     id: 'SEC-REMED-R1',
     ruleId: 'CWE-89',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 }
   };
 
   // Case 0: repoRoot null / omitted -> NOT VERIFIED
   const resNoRepoRoot = verifyRemediation(remCandidate, [
-    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }] },
-    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
-    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10', mitigationReason: 'Guard added', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'guard' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
   ], null);
   if (resNoRepoRoot.verified || !resNoRepoRoot.reason.includes('concrete repository root')) {
     throw new Error(`R1-P0-02 VIOLATION: Null repoRoot was not rejected fail-closed: ${JSON.stringify(resNoRepoRoot)}`);
@@ -1807,9 +1807,9 @@ export function runTests() {
 
   // Case 2: REACHABILITY REFUTES without evidence -> NOT VERIFIED
   const votesNoReachEv = [
-    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
     { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unreachable' },
-    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
   ];
   const resNoReachEv = verifyRemediation(remCandidate, votesNoReachEv, process.cwd());
   if (resNoReachEv.verified || !resNoReachEv.reason.includes('REACHABILITY')) {
@@ -1818,8 +1818,8 @@ export function runTests() {
 
   // Case 3: IMPACT REFUTES without evidence -> NOT VERIFIED
   const votesNoImpactEv = [
-    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
-    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10', mitigationReason: 'Guard added' },
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
     { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', reason: 'Zero harm' }
   ];
   const resNoImpactEv = verifyRemediation(remCandidate, votesNoImpactEv, process.cwd());
@@ -1830,8 +1830,8 @@ export function runTests() {
   // Case 4: DEFENSES proof path nonexistent -> NOT VERIFIED
   const votesNoDefProof = [
     { findingId: 'SEC-REMED-R1', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'nonexistent/defenses.js:10', mitigationReason: 'Guard added' },
-    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
-    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
+    { findingId: 'SEC-REMED-R1', lens: 'REACHABILITY', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] },
+    { findingId: 'SEC-REMED-R1', lens: 'IMPACT', decision: 'REFUTES', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }] }
   ];
   const resNoDefProof = verifyRemediation(remCandidate, votesNoDefProof, process.cwd());
   if (resNoDefProof.verified || !resNoDefProof.reason.includes('DEFENSES')) {
@@ -1841,8 +1841,8 @@ export function runTests() {
   // Case 5: Evidence points to original tree instead of patched scratch tree -> NOT VERIFIED
   const scratchPatchedTree = fs.mkdtempSync(path.join(os.tmpdir(), 'sec-patch-scratch-'));
   try {
-    fs.mkdirSync(path.join(scratchPatchedTree, 'skills/security-audit/scripts'), { recursive: true });
-    fs.writeFileSync(path.join(scratchPatchedTree, 'skills/security-audit/scripts/safe-git.mjs'), 'const patched = true;\n// line 2\n');
+    fs.mkdirSync(path.join(scratchPatchedTree, 'skills/3lens/scripts'), { recursive: true });
+    fs.writeFileSync(path.join(scratchPatchedTree, 'skills/3lens/scripts/safe-git.mjs'), 'const patched = true;\n// line 2\n');
 
     // Passing original working tree as repoRoot when scratchTree is required -> REJECTED
     const resOrigTree = verifyRemediation(remCandidate, [
@@ -1850,23 +1850,23 @@ export function runTests() {
         findingId: 'SEC-REMED-R1',
         lens: 'DEFENSES',
         decision: 'REFUTES',
-        mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10',
+        mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10',
         mitigationReason: 'Sanitization barrier installed in patch',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'guard' }]
       },
       {
         findingId: 'SEC-REMED-R1',
         lens: 'REACHABILITY',
         decision: 'REFUTES',
         reason: 'Path blocked in scratch tree',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
       },
       {
         findingId: 'SEC-REMED-R1',
         lens: 'IMPACT',
         decision: 'REFUTES',
         reason: 'Zero consequence in scratch tree',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
       }
     ], process.cwd(), {
       scratchTree: scratchPatchedTree,
@@ -1882,23 +1882,23 @@ export function runTests() {
         findingId: 'SEC-REMED-R1',
         lens: 'DEFENSES',
         decision: 'REFUTES',
-        mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:1',
+        mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:1',
         mitigationReason: 'Sanitization barrier installed in patch',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'guard' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'guard' }]
       },
       {
         findingId: 'SEC-REMED-R1',
         lens: 'REACHABILITY',
         decision: 'REFUTES',
         reason: 'Path blocked in scratch tree',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'dead-path' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'dead-path' }]
       },
       {
         findingId: 'SEC-REMED-R1',
         lens: 'IMPACT',
         decision: 'REFUTES',
         reason: 'Zero consequence in scratch tree',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'impact-boundary' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'impact-boundary' }]
       }
     ];
     const resScratchValid = verifyRemediation(remCandidate, scratchVotes, scratchPatchedTree, {
@@ -1948,23 +1948,23 @@ export function runTests() {
       findingId: 'SEC-REMED-R1',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10',
+      mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10',
       mitigationReason: 'Sanitization barrier installed',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'guard' }]
     },
     {
       findingId: 'SEC-REMED-R1',
       lens: 'REACHABILITY',
       decision: 'REFUTES',
       reason: 'Path blocked',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }]
     },
     {
       findingId: 'SEC-REMED-R1',
       lens: 'IMPACT',
       decision: 'REFUTES',
       reason: 'Zero impact',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'impact-boundary' }]
     }
   ];
   const resValidThree = verifyRemediation(remCandidate, votesValidThree, process.cwd());
@@ -1978,7 +1978,7 @@ export function runTests() {
   const apNonexistentSource = {
     attackPathId: 'AP-FAIL-1',
     source: { uri: 'nope-source.js', line: 999, description: 'HTTP user input' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'executes command' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'executes command' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -1990,8 +1990,8 @@ export function runTests() {
   // Case 2: Line beyond EOF in sink -> REJECTED
   const apBeyondEof = {
     attackPathId: 'AP-FAIL-2',
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Input' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 999999, description: 'Sink' },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Input' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 999999, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2003,8 +2003,8 @@ export function runTests() {
   // Case 3: Target is directory, not regular file -> REJECTED
   const apTargetDir = {
     attackPathId: 'AP-FAIL-3',
-    source: { uri: 'skills/security-audit/scripts', line: 1, description: 'Directory as file' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    source: { uri: 'skills/3lens/scripts', line: 1, description: 'Directory as file' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2023,7 +2023,7 @@ export function runTests() {
       locationType: 'baseline-preimage',
       preimageContent: 'line1\nline2\nline3\nline4\nline5\nline6\n'
     },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2041,7 +2041,7 @@ export function runTests() {
       description: 'Historical deleted source',
       locationType: 'baseline-preimage'
     },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2060,7 +2060,7 @@ export function runTests() {
       locationType: 'baseline-preimage',
       preimageContent: 'line1\nline2\n'
     },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2077,7 +2077,7 @@ export function runTests() {
       line: 1,
       locationType: 'generated-validation-artifact'
     },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2089,8 +2089,8 @@ export function runTests() {
   // Case 4e: Float line number -> REJECTED
   const apFloatLine = {
     attackPathId: 'AP-FAIL-FLOAT',
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1.5, description: 'Float line' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 1.5, description: 'Float line' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2102,8 +2102,8 @@ export function runTests() {
   // Case 4f: Nonexistent step file -> REJECTED
   const apNonexistentStep = {
     attackPathId: 'AP-FAIL-STEP',
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Input' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Sink' },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Input' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Sink' },
     steps: [{ uri: 'nonexistent/step.js', line: 1, description: 'Hop' }],
     unmitigatedInvariant: 'No sanitizer exists'
   };
@@ -2115,9 +2115,9 @@ export function runTests() {
   // Case 5: Valid current-tree attack path -> VALID
   const apValid = {
     attackPathId: 'AP-PASS-VALID',
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Controllable input' },
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 25, description: 'Process execution' },
-    steps: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 20, description: 'Step' }],
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Controllable input' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 25, description: 'Process execution' },
+    steps: [{ uri: 'skills/3lens/scripts/safe-git.mjs', line: 20, description: 'Step' }],
     unmitigatedInvariant: 'No sanitizer exists'
   };
   const resApValid = validateAttackPath(apValid, process.cwd());
@@ -2235,7 +2235,7 @@ export function runTests() {
       ruleId: 'CWE-798',
       title: `Hardcoded Key ${rawSecretAws}`,
       description: `Discovered GitHub token ${rawSecretGhp} in config`,
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, lineSnippet: `const k = "${rawSecretGhp}";` },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1, lineSnippet: `const k = "${rawSecretGhp}";` },
       disposition: 'DEFERRED',
       verdict: 'NEEDS_MANUAL_REVIEW'
     }
@@ -2261,7 +2261,7 @@ export function runTests() {
       ruleId: 'CWE-89',
       title: 'Fabricated Confirmed SQLi',
       description: 'Pretends to be confirmed without votes',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 },
       disposition: 'REPORTABLE',
       verdict: 'CONFIRMED',
       consensus: { supports: 0, totalVotes: 0 },
@@ -2301,7 +2301,7 @@ export function runTests() {
       id: 'SEC-SPLIT',
       ruleId: 'CWE-89',
       title: 'Split Vote SQLi',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 },
       disposition: 'REPORTABLE',
       verdict: 'CONFIRMED',
       consensus: { supports: 2, refutes: 5, totalVotes: 7 },
@@ -2406,7 +2406,7 @@ export function runTests() {
       id: 'SEC-CANON-BAD-CVSS',
       ruleId: 'CWE-89',
       title: 'Canonical Finding with Inconsistent CVSS',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
       cvssV4: {
         vector: 'CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N',
         score: 10.0,
@@ -2427,7 +2427,7 @@ export function runTests() {
     findingId: 'SEC-NONCE-1',
     lens: 'REACHABILITY',
     decision: 'SUPPORTS',
-    evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
+    evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
   };
   const resNoNonce = validateBallot(ballotMissingNonce, { id: 'SEC-NONCE-1', nonce: 'X-NONCE-CORRECT' });
   if (resNoNonce.valid || !resNoNonce.reason.includes('Missing required task-correlation nonce')) {
@@ -2460,7 +2460,7 @@ export function runTests() {
     ruleId: 'CWE-89',
     title: 'Nonce Protected Finding',
     nonce: 'X-NONCE-CORRECT',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 }
   };
   const spoofedVotes = [
     {
@@ -2468,21 +2468,21 @@ export function runTests() {
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
       nonce: 'X-NONCE-ATTACKER',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'entrypoint' }]
     },
     {
       findingId: 'SEC-NONCE-1',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
       nonce: 'X-NONCE-ATTACKER',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'guard' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'guard' }]
     },
     {
       findingId: 'SEC-NONCE-1',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
       nonce: 'X-NONCE-ATTACKER',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'sink' }]
     }
   ];
   const dispNonce = deriveFinalDisposition(candidateWithNonce, spoofedVotes, { score: 1.0 }, process.cwd());
@@ -2509,7 +2509,7 @@ export function runTests() {
     title: 'Nonce Integrity Candidate',
     severity: 'MEDIUM',
     nonce: 'X-NONCE-VALID-IMP',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const spoofedImpactVote = {
     findingId: 'SEC-NONCE-IMP',
@@ -2518,7 +2518,7 @@ export function runTests() {
     nonce: 'X-NONCE-SPOOFED',
     calibratedSeverity: 'CRITICAL',
     cvssV4Vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N',
-    evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'sink' }]
+    evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'sink' }]
   };
   const finalScanRes = finalizeScan({ candidates: [nonceCandidate], votes: [spoofedImpactVote], repoRoot: process.cwd() });
   if (finalScanRes.canonicalFindings[0].severity === 'CRITICAL' || finalScanRes.canonicalFindings[0].cvssV4 !== null) {
@@ -2546,7 +2546,7 @@ export function runTests() {
     component: 'Auth',
     family: 'auth/authz/tenancy',
     status: 'REVIEWED_NO_CANDIDATE',
-    reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }],
+    reviewedEvidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1 }],
     notes: 'Auth guards inspected, zero unmitigated vulnerabilities found.'
   };
   const cellRes1 = validateDiscoveryCell(validCell, process.cwd());
@@ -2584,7 +2584,7 @@ export function runTests() {
     component: 'Auth',
     family: 'auth/authz/tenancy',
     status: 'COMPLETELY_SAFE',
-    reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }]
+    reviewedEvidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1 }]
   };
   const cellRes4 = validateDiscoveryCell(invalidStatusCell, process.cwd());
   if (cellRes4.valid) {
@@ -2735,7 +2735,7 @@ export function runTests() {
     id: 'SEC-LIN-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in Query',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     lineage: {
       novelty: 'NEW_SURFACE',
       whyNow: null
@@ -2778,7 +2778,7 @@ export function runTests() {
     title: 'SQLi with fake novelty',
     disposition: 'REPORTABLE',
     verdict: 'CONFIRMED',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     lineage: { novelty: 'BOGUS_NOVELTY' },
     consensus: { supports: 3, totalVotes: 3, refutes: 0, unanimous: true },
     rigor: { score: 0.9 }
@@ -2793,7 +2793,7 @@ export function runTests() {
     id: 'SEC-FORGE-01',
     ruleId: 'CWE-89',
     title: 'Candidate with forged lineageId',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     lineageId: 'FORGED_00000000000000000000000000'
   };
   const forgedScanRes = finalizeScan({
@@ -2837,7 +2837,7 @@ export function runTests() {
       id: 'SEC-BAD-CVSS-69',
       ruleId: 'CWE-89',
       title: 'Bad CVSS candidate',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
       cvssV4: { vector: 'CVSS:4.0/AV:N/MALFORMED', score: 9.0 }
     }],
     repoRoot: process.cwd()
@@ -2851,7 +2851,7 @@ export function runTests() {
     id: 'SEC-NO-SEV',
     ruleId: 'CWE-89',
     title: 'Finding without severity',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   }];
   const validatedNoSev = validateCanonicalFindings(canonicalMissingSev, process.cwd());
   if (validatedNoSev[0].severity !== 'UNRATED') {
@@ -2879,13 +2879,13 @@ export function runTests() {
 
   // 69.6 deriveAuthoritativeEvidenceSufficiency produces valid completeness object
   const authEs = deriveAuthoritativeEvidenceSufficiency({
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   }, [{
     findingId: 'SEC-TEST',
     decision: 'CONFIRMED',
     _validatedEvidence: [
-      { path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'source' },
-      { path: 'skills/security-audit/scripts/safe-git.mjs', line: 1, role: 'sink' }
+      { path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'source' },
+      { path: 'skills/3lens/scripts/safe-git.mjs', line: 1, role: 'sink' }
     ]
   }], process.cwd());
   if (authEs.score < 0.5 || !authEs.sourceVerified || !authEs.sinkVerified) {
@@ -2900,7 +2900,7 @@ export function runTests() {
     title: 'Evidence Sufficiency Test',
     disposition: 'REPORTABLE',
     verdict: 'CONFIRMED',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     evidenceSufficiency: esResult,
     consensus: { supports: 3, totalVotes: 3, refutes: 0, unanimous: true }
   };
@@ -3205,7 +3205,7 @@ export function runTests() {
     description: 'Improve rate limiting',
     findingType: 'HARDENING',
     severity: 'CRITICAL',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const validatedHardening = validateCanonicalFindings([hardeningCandidate], process.cwd());
   if (validatedHardening[0].severity !== 'LOW') {
@@ -3235,7 +3235,7 @@ export function runTests() {
     description: 'Benign proof header but malicious attackPath',
     proof: 'benign source-to-sink static dataflow trace',
     attackPath: { steps: [], proofOfConcept: 'rm -rf / --no-preserve-root' },
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     disposition: 'REPORTABLE',
     verdict: 'CONFIRMED',
     consensus: { supports: 3, totalVotes: 3 },
@@ -3256,7 +3256,7 @@ export function runTests() {
       findingType: 'VULNERABILITY',
       proofKind: 'STATIC_TRACE',
       severity: 'HIGH',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
       disposition: 'DEFERRED'
     },
     {
@@ -3267,7 +3267,7 @@ export function runTests() {
       findingType: 'HARDENING',
       proofKind: 'CONFIG_EVIDENCE',
       severity: 'LOW',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
       disposition: 'REPORTABLE',
       consensus: { supports: 3, totalVotes: 3 },
       rigor: { score: 0.9 }
@@ -3313,12 +3313,12 @@ export function runTests() {
   const validAp2Payload = {
     attackPathId: 'AP-TEST-2.0',
     attackerCapability: 'NETWORK_UNAUTHENTICATED',
-    entrypoint: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, symbol: 'main' },
-    source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
-    transformations: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 5, description: 'Pass through helper' }],
-    authorizationBoundary: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Missing check' },
+    entrypoint: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 1, symbol: 'main' },
+    source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
+    transformations: [{ uri: 'skills/3lens/scripts/safe-git.mjs', line: 5, description: 'Pass through helper' }],
+    authorizationBoundary: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Missing check' },
     defenseChecks: [],
-    sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Command execution sink' },
+    sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Command execution sink' },
     impactBoundary: { target: 'host_os', blastRadius: 'remote_code_execution' },
     preconditions: ['Network connectivity available'],
     postconditions: ['Arbitrary command executed']
@@ -3329,7 +3329,7 @@ export function runTests() {
   }
 
   // 73.4 R2-P1-04 Evidence Snapshot & Stale Evidence Detection
-  const snap1 = computeEvidenceSnapshot(process.cwd(), 'skills/security-audit/scripts/safe-git.mjs', 1);
+  const snap1 = computeEvidenceSnapshot(process.cwd(), 'skills/3lens/scripts/safe-git.mjs', 1);
   if (!snap1.exists || !snap1.blobHash || !snap1.lineHash) {
     throw new Error('R2-P1-04 VIOLATION: computeEvidenceSnapshot failed to generate blobHash and lineHash');
   }
@@ -3371,7 +3371,7 @@ export function runTests() {
         ruleId: 'semgrep-sqli',
         message: { text: 'SQL Injection detected' },
         level: 'error',
-        locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/3lens/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
       }]
     }]
   };
@@ -3399,7 +3399,7 @@ export function runTests() {
   }
 
   const cliScan = finalizeScan({
-    candidates: [{ id: 'C1', ruleId: 'CWE-89', title: 'SQLi', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 } }],
+    candidates: [{ id: 'C1', ruleId: 'CWE-89', title: 'SQLi', location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 } }],
     targetProfile: 'cli',
     repoRoot: process.cwd()
   });
@@ -3419,13 +3419,13 @@ export function runTests() {
     ruleId: 'CWE-89',
     title: 'SQL Injection in Repository',
     disposition: 'REPORTABLE',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
   };
   const baseline74 = buildAuditBaseline({
     repoRoot: process.cwd(),
     targetRevision: 'HEAD',
     canonicalFindings: [testFinding74],
-    manifest: { files: [{ path: 'skills/security-audit/scripts/safe-git.mjs', isScanned: true }] },
+    manifest: { files: [{ path: 'skills/3lens/scripts/safe-git.mjs', isScanned: true }] },
     threatModel: { components: [{ name: 'Core' }], frameworks: ['Node.js'], entrypoints: ['bin/agy'] }
   });
   if (!baseline74.scopeFingerprint || !baseline74.surfaceFingerprint || !baseline74.findingLineageIds.includes('LIN-SEC-74')) {
@@ -3466,7 +3466,7 @@ export function runTests() {
 
   // 75. R3-P0 / R3-P1 Invariant: Bounded Assurance, Defensive Terminology, Measurement Integrity, & Legacy Exclusion Migration
   // 75.1 R3-P0-01 Purpose Boundary & Defensive Terminology
-  const skillContent75 = fs.readFileSync(path.resolve(process.cwd(), 'skills/security-audit/SKILL.md'), 'utf8');
+  const skillContent75 = fs.readFileSync(path.resolve(process.cwd(), 'skills/3lens/SKILL.md'), 'utf8');
   if (!skillContent75.includes('## Purpose Boundary') || skillContent75.includes('--strictness')) {
     throw new Error('R3-P0-01 / R3-P1-01 VIOLATION: SKILL.md missing Purpose Boundary or retains --strictness in public syntax');
   }
@@ -3608,7 +3608,7 @@ export default appName;`;
     id: 'LIN-TEST-123',
     ruleId: 'CWE-89',
     title: 'SQL Query in Admin Tool',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
     lineageId: 'LIN-TEST-123',
     lineage: { lineageId: 'LIN-TEST-123', novelty: 'NEW_SURFACE' },
     riskAcceptance: validWaiver
@@ -3636,7 +3636,7 @@ export default appName;`;
   if (sameRootCheck.valid || sameRootCheck.status !== 'TCB_ISOLATION_ERROR') {
     throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed to reject identical tool and target root');
   }
-  const validTcbCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd(), { allowSelfAudit: true });
+  const validTcbCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/3lens'), process.cwd(), { allowSelfAudit: true });
   if (!validTcbCheck.valid || validTcbCheck.verifiedScriptsCount < 5) {
     throw new Error('R4-P2-02 VIOLATION: verifyToolSelfIntegrity failed on valid scripts');
   }
@@ -3695,11 +3695,11 @@ export default appName;`;
   }
 
   // 77.3 R5-P1-01 Real TCB Integrity Verification & Containment Check
-  const overlapCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd());
+  const overlapCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/3lens'), process.cwd());
   if (overlapCheck.valid || overlapCheck.status !== 'TCB_OVERLAP') {
     throw new Error('R5-P1-01 VIOLATION: verifyToolSelfIntegrity failed to flag TCB_OVERLAP on nested tool root');
   }
-  const selfAuditCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/security-audit'), process.cwd(), { allowSelfAudit: true });
+  const selfAuditCheck = verifyToolSelfIntegrity(path.resolve(process.cwd(), 'skills/3lens'), process.cwd(), { allowSelfAudit: true });
   if (!selfAuditCheck.valid || selfAuditCheck.status !== 'SELF_AUDIT_MODE' || selfAuditCheck.verifiedScriptsCount < 8) {
     throw new Error(`R5-P1-01 VIOLATION: verifyToolSelfIntegrity failed self-audit mode verification: ${selfAuditCheck.error}`);
   }
@@ -3833,7 +3833,7 @@ export default appName;`;
       throw new Error('R6-P1-01 VIOLATION: Manifest with empty criticalScripts was accepted as conformant');
     }
 
-    const realManifest = generateToolIntegrityManifest(path.resolve(process.cwd(), 'skills/security-audit'));
+    const realManifest = generateToolIntegrityManifest(path.resolve(process.cwd(), 'skills/3lens'));
     const tamperedManifest = { ...realManifest, manifestDigest: 'deadbeef'.repeat(8) };
     fs.writeFileSync(emptyManifestPath, JSON.stringify(tamperedManifest), 'utf8');
     const tamperedDigestRes = verifyToolSelfIntegrity(fakeManifestDir, process.cwd(), { allowSelfAudit: true });
@@ -3899,14 +3899,14 @@ export default appName;`;
   // ---------------------------------------------------------------------------
   // 80. R7-P0-02 Invariant: Cross-Platform SARIF URI Normalization & Granular Evidence Binding Accounting
   // ---------------------------------------------------------------------------
-  const winPath80 = 'skills\\security-audit\\scripts\\safe-git.mjs';
+  const winPath80 = 'skills\\3lens\\scripts\\safe-git.mjs';
   const normWin80 = resolveExternalUri(process.cwd(), winPath80);
-  if (normWin80 !== 'skills/security-audit/scripts/safe-git.mjs') {
+  if (normWin80 !== 'skills/3lens/scripts/safe-git.mjs') {
     throw new Error(`R7-P0-02 VIOLATION: resolveExternalUri failed to normalize Windows path: ${normWin80}`);
   }
-  const pctPath80 = 'skills%5Csecurity-audit%5Cscripts%5Csafe-git.mjs';
+  const pctPath80 = 'skills%5C3lens%5Cscripts%5Csafe-git.mjs';
   const normPct80 = resolveExternalUri(process.cwd(), pctPath80);
-  if (normPct80 !== 'skills/security-audit/scripts/safe-git.mjs') {
+  if (normPct80 !== 'skills/3lens/scripts/safe-git.mjs') {
     throw new Error(`R7-P0-02 VIOLATION: resolveExternalUri failed to normalize percent-encoded path: ${normPct80}`);
   }
 
@@ -3919,12 +3919,12 @@ export default appName;`;
           {
             ruleId: 'MOCK-01',
             message: { text: 'Real finding in source' },
-            locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+            locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/3lens/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
           },
           {
             ruleId: 'MOCK-01',
             message: { text: 'Shadow context duplicate finding' },
-            locations: [{ physicalLocation: { artifactLocation: { uri: 'scratch/context/skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+            locations: [{ physicalLocation: { artifactLocation: { uri: 'scratch/context/skills/3lens/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
           },
           {
             ruleId: 'MOCK-02',
@@ -4081,7 +4081,7 @@ export default appName;`;
   // 88. R9-T08: Generic actor without evidence triggers threat-model quality warning
   // ---------------------------------------------------------------------------
   const mockTm88 = {
-    components: [{ id: 'CompA', evidence: ['skills/security-audit/scripts/safe-git.mjs'] }],
+    components: [{ id: 'CompA', evidence: ['skills/3lens/scripts/safe-git.mjs'] }],
     actors: [
       { id: 'external-attacker', status: 'ASSUMPTION', source: 'UNKNOWN' }
     ]

@@ -55,7 +55,7 @@ The `security-audit` plugin is strictly designed for defensive security assuranc
 - While this mitigates simple instruction confusion, prompt boundaries are a policy guidance mechanism rather than a cryptographic guarantee. For hostile repositories, containerized sandboxing is essential.
 
 ### 2.6 Strict Path Containment & Sibling Prefix Enclosure (R7-P0-01, v1.1.0 P0/P1)
-- All boundary enforcement logic is centralized in the authoritative TCB module [`skills/security-audit/scripts/path-containment.mjs`](file:///skills/security-audit/scripts/path-containment.mjs).
+- All boundary enforcement logic is centralized in the authoritative TCB module [`skills/3lens/scripts/path-containment.mjs`](file:///skills/3lens/scripts/path-containment.mjs).
 - Context preparation (`prepare-review-context.mjs`), evidence snapshotting (`finalize-scan.mjs`), PreToolUse interception (`hooks/shadow-context-guard.mjs`), and attack path verification (`validate-attack-path.mjs`) consume `isPathContained()` and `isRealPathContained()`.
 - Containment relies on `path.relative()` containment algebra (`relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))`) rather than string-prefix matching (`startsWith`), strictly preventing parent directory traversals (`../outside`) and sibling directory confusion (e.g. `scratch/context` vs `scratch/context-evil`).
 - Canonical target validation asserts realpath containment via `fs.realpathSync()`, failing closed under Default-Deny on unresolvable or escaping symbolic links (CWE-59 defense).

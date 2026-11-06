@@ -24,14 +24,14 @@ import {
   validateCandidateSet,
   probeEnvironment,
   parseStreamJsonTrace
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import {
   finalizeScan,
   computeLineageFingerprint,
   normalizeCandidateSymbol
-} from '../skills/security-audit/scripts/finalize-scan.mjs';
-import { evaluateDiscovery } from '../skills/security-audit/scripts/run-discovery-eval.mjs';
-import { evaluateStability } from '../skills/security-audit/scripts/run-stability-eval.mjs';
+} from '../skills/3lens/scripts/finalize-scan.mjs';
+import { evaluateDiscovery } from '../skills/3lens/scripts/run-discovery-eval.mjs';
+import { evaluateStability } from '../skills/3lens/scripts/run-stability-eval.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

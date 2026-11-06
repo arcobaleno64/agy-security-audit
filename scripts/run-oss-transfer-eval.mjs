@@ -17,8 +17,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { validatePatchSyntax } from '../skills/security-audit/scripts/validate-patch.mjs';
-import { deriveFinalDisposition } from '../skills/security-audit/scripts/finalize-scan.mjs';
+import { validatePatchSyntax } from '../skills/3lens/scripts/validate-patch.mjs';
+import { deriveFinalDisposition } from '../skills/3lens/scripts/finalize-scan.mjs';
 
 const REPO_ROOT = process.cwd();
 const GROUND_TRUTH_PATH = path.resolve(REPO_ROOT, 'evals/oss-corpus/ground-truth.json');

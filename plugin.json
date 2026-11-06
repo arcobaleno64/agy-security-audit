@@ -1,9 +1,16 @@
 {
-  "name": "security-audit",
-  "displayName": "Security Audit & Verification",
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "three-lens",
+  "displayName": "Three-Lens (3lens)",
   "version": "1.10.0",
-  "description": "Evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI, featuring double-blind 3-lens consensus and OS-isolated replays.",
+  "description": "Evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity, featuring double-blind 3-lens consensus and PreToolUse shadow-context confinement.",
   "logo": "assets/logo.svg",
+  "author": {
+    "name": "SatenVision",
+    "url": "https://satenvision.com"
+  },
+  "repository": "https://github.com/arcobaleno64/three-lens",
+  "license": "MIT",
   "suggestedPrompts": [
     "Audit the current Git workspace for vulnerabilities and security posture",
     "Perform a 3-lens adversarial verification review on pending git diffs",
