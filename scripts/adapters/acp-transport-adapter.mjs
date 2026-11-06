@@ -489,6 +489,16 @@ export async function connectNativeAcpTransport(options = {}) {
     const messageListeners = new Set();
     const closeListeners = new Set();
 
+    // Gate 0 (R17-F04-02): Unified at-most-once close notification across all termination pathways
+    let hasNotifiedClose = false;
+    const notifyCloseOnce = (event) => {
+      if (hasNotifiedClose) return;
+      hasNotifiedClose = true;
+      for (const cb of closeListeners) {
+        try { cb(event); } catch {}
+      }
+    };
+
     const failHandshake = (reason) => {
       if (handshakeSettled) return;
       handshakeSettled = true;
@@ -530,9 +540,8 @@ export async function connectNativeAcpTransport(options = {}) {
       failHandshake(`Connection handshake timed out after ${timeoutMs}ms`);
     }, timeoutMs);
 
-    // Dynamic Server Exit & Invalidation Governance across full lifecycle (R16-F04-01):
+    // Dynamic Server Exit & Invalidation Governance across full lifecycle (R16-F04-01 / R17-F04-02):
     child.on('exit', (code, sig) => {
-      const wasActive = sessionStatus === TRANSPORT_STATUS.ACTIVE;
       sessionStatus = TRANSPORT_STATUS.TERMINATED;
       const termMsg = `ACP server terminated with exit code ${code}, signal ${sig}`;
 
@@ -544,10 +553,8 @@ export async function connectNativeAcpTransport(options = {}) {
 
       if (!handshakeSettled) {
         failHandshake(`ACP server exited prematurely with code ${code}, signal ${sig}`);
-      } else if (wasActive) {
-        for (const cb of closeListeners) {
-          try { cb({ code, signal: sig, reason: termMsg }); } catch {}
-        }
+      } else {
+        notifyCloseOnce({ code: code ?? 0, signal: sig || null, reason: termMsg, origin: 'exit' });
       }
     });
 
@@ -560,6 +567,8 @@ export async function connectNativeAcpTransport(options = {}) {
 
       if (!handshakeSettled) {
         failHandshake(err.message);
+      } else {
+        notifyCloseOnce({ code: 1, signal: null, reason: `Channel error: ${err.message}`, origin: 'error' });
       }
     });
 
@@ -646,14 +655,13 @@ export async function connectNativeAcpTransport(options = {}) {
                 closeListeners.add(listener);
                 return () => closeListeners.delete(listener);
               },
-              close: () => {
-                if (sessionStatus === TRANSPORT_STATUS.ACTIVE) {
-                  sessionStatus = TRANSPORT_STATUS.TERMINATED;
-                }
+              close: (reason = 'client_close') => {
+                sessionStatus = TRANSPORT_STATUS.TERMINATED;
                 for (const [id, req] of pendingRequests.entries()) {
                   req.reject(new Error('ACP session closed by client'));
                 }
                 pendingRequests.clear();
+                notifyCloseOnce({ code: 0, signal: null, reason: `ACP session closed by client: ${reason}`, origin: 'client' });
                 if (!child.killed) {
                   try { child.kill('SIGTERM'); } catch {}
                 }
@@ -666,17 +674,25 @@ export async function connectNativeAcpTransport(options = {}) {
             return failHandshake(`Server returned error: ${validation.error}`);
           }
         } else {
-          // 2. Active Session Dispatching Phase (R16-F04-01)
+          // 2. Active Session Dispatching Phase (R16-F04-01 / R17-F04-01)
           if (parsed && typeof parsed === 'object') {
             // Check if this response answers a pending request
             if (parsed.id !== undefined && pendingRequests.has(parsed.id)) {
               const req = pendingRequests.get(parsed.id);
               pendingRequests.delete(parsed.id);
-              if (parsed.error) {
-                const errMsg = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message || JSON.stringify(parsed.error));
+
+              // Gate 0 (R17-F04-01): Strict JSON-RPC 2.0 response verification
+              if (parsed.jsonrpc !== '2.0') {
+                req.reject(new Error(`Invalid JSON-RPC protocol version in response: expected '2.0', got '${parsed.jsonrpc}'`));
+              } else if (parsed.error !== undefined) {
+                const errMsg = typeof parsed.error === 'string'
+                  ? parsed.error
+                  : (parsed.error?.message || JSON.stringify(parsed.error));
                 req.reject(new Error(`ACP JSON-RPC error: ${errMsg}`));
+              } else if (parsed.result !== undefined) {
+                req.resolve(parsed.result);
               } else {
-                req.resolve(parsed.result !== undefined ? parsed.result : parsed);
+                req.reject(new Error('Malformed JSON-RPC 2.0 response: must contain either result or error'));
               }
             }
 

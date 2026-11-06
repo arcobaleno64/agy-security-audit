@@ -269,6 +269,12 @@ process.stdin.on('data', (chunk) => {
         result: { pong: true, echo: req.params?.echo || 'ok' }
       };
       process.stdout.write(JSON.stringify(response) + '\\n');
+    } else if (req.method === 'ping_unverified_noise') {
+      // Counterexample R17-F04-01: missing jsonrpc version
+      process.stdout.write(JSON.stringify({ id: req.id, noise: 'unverified' }) + '\\n');
+    } else if (req.method === 'ping_wrong_version') {
+      // Counterexample R17-F04-01: invalid jsonrpc 1.0 version
+      process.stdout.write(JSON.stringify({ jsonrpc: '1.0', id: req.id, result: { pong: true } }) + '\\n');
     } else if (req.method === 'exit') {
       process.exit(0);
     }
@@ -387,4 +393,85 @@ test('ACP Governance (R16-F04-01): Server exit immediately invalidates ACTIVE se
     async () => session.request('ping'),
     /Cannot send request: ACP transport is not active/
   );
+});
+
+test('ACP Governance (R17-F04-01): Active session response dispatcher strictly rejects non-JSON-RPC 2.0 payloads and wrong protocol versions', async () => {
+  const session = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  try {
+    assert.equal(session.status, TRANSPORT_STATUS.ACTIVE);
+
+    // Negative Counterexample 1: Missing jsonrpc entirely (noise payload {"id":2, "noise":"unverified"})
+    await assert.rejects(
+      async () => session.request('ping_unverified_noise'),
+      /Invalid JSON-RPC protocol version in response: expected '2.0', got 'undefined'/
+    );
+
+    // Negative Counterexample 2: Invalid JSON-RPC protocol version {"jsonrpc":"1.0", ...}
+    await assert.rejects(
+      async () => session.request('ping_wrong_version'),
+      /Invalid JSON-RPC protocol version in response: expected '2.0', got '1.0'/
+    );
+
+    // Positive Control: Valid JSON-RPC 2.0 response succeeds
+    const validRes = await session.request('ping', { echo: 'valid_2.0' });
+    assert.equal(validRes.pong, true);
+    assert.equal(validRes.echo, 'valid_2.0');
+  } finally {
+    session.close();
+  }
+});
+
+test('ACP Governance (R17-F04-02): onClose listeners receive consistent at-most-once notification across all termination pathways', async () => {
+  // Pathway 1: Client explicit session.close()
+  const session1 = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  let closeCount1 = 0;
+  let closeEvent1 = null;
+  session1.onClose((evt) => {
+    closeCount1++;
+    closeEvent1 = evt;
+  });
+
+  session1.close('explicit_test');
+  // Wait a small tick to allow any potential duplicate exit events
+  await new Promise(r => setTimeout(r, 50));
+
+  assert.equal(closeCount1, 1, 'Client close must trigger onClose exactly once');
+  assert.equal(closeEvent1.origin, 'client');
+  assert.equal(session1.status, TRANSPORT_STATUS.TERMINATED);
+
+  // Pathway 2: Server exit
+  const session2 = await connectNativeAcpTransport({
+    agyBin: process.execPath,
+    args: ['-e', MOCK_PERSISTENT_SERVER_CODE],
+    timeoutMs: 5000,
+    allowFallback: false
+  });
+
+  let closeCount2 = 0;
+  let closeEvent2 = null;
+  session2.onClose((evt) => {
+    closeCount2++;
+    closeEvent2 = evt;
+  });
+
+  const exitPromise = new Promise(r => session2.onClose(r));
+  session2.send({ jsonrpc: '2.0', id: 101, method: 'exit' });
+  await exitPromise;
+  await new Promise(r => setTimeout(r, 50));
+
+  assert.equal(closeCount2, 1, 'Server exit must trigger onClose exactly once');
+  assert.equal(closeEvent2.origin, 'exit');
+  assert.equal(session2.status, TRANSPORT_STATUS.TERMINATED);
 });
