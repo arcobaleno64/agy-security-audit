@@ -333,7 +333,7 @@ export function runEvals(repoRoot = process.cwd()) {
     assertEval('Patch Regression', path.basename(pr.file), () => {
       const diffContent = fs.readFileSync(path.resolve(repoRoot, pr.file), 'utf8');
       if (pr.reason === 'stale baseline divergence') {
-        const staleRes = detectStalePatch(repoRoot, ['skills/security-audit/scripts/safe-git.mjs'], 'HEAD~999999');
+        const staleRes = detectStalePatch(repoRoot, ['skills/3lens/scripts/safe-git.mjs'], 'HEAD~999999');
         if (!staleRes.stale) {
           throw new Error('Diverged/stale baseline was not flagged as stale');
         }

@@ -585,7 +585,7 @@ test('Proves run-to-run bitwise identity across 10 repeated executions', () => {
 test('Adapter imports strictly zero external npm dependencies (Node.js ESM built-ins only)', () => {
   const targetFiles = [
     path.join(REPO_ROOT, 'scripts/adapters/cloudflare-adapter.mjs'),
-    path.join(REPO_ROOT, 'skills/security-audit/scripts/adapters/cloudflare-adapter.mjs')
+    path.join(REPO_ROOT, 'skills/3lens/scripts/adapters/cloudflare-adapter.mjs')
   ];
 
   for (const file of targetFiles) {

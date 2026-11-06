@@ -24,25 +24,25 @@
       "grade": "L1",
       "claim": "121 automated release invariants and G6 19 runtime confinement vectors verified green in deterministic CI harness.",
       "scope": "121 automated invariants, G6 19 vectors",
-      "verificationMethod": "Deterministic automated test runner and invariant assertions (skills/security-audit/scripts/render-sarif.mjs --test).",
+      "verificationMethod": "Deterministic automated test runner and invariant assertions (skills/3lens/scripts/render-sarif.mjs --test).",
       "artifacts": [
         {
-          "path": "skills/security-audit/scripts/render-sarif.mjs",
-          "sha256": "48784af188b1833a373f828275d6710a5bdb5342b7f79d3c0a3a9432b85a6884",
+          "path": "skills/3lens/scripts/render-sarif.mjs",
+          "sha256": "3b1c42cbe75cab0a86766ea688b0b5ae11e317f1ae1c9a6460d3e61891abaa00",
           "description": "Canonical SARIF renderer and 121 automated release invariants test suite"
         },
         {
-          "path": "skills/security-audit/scripts/check-release-invariants.mjs",
-          "sha256": "d9880ab1e3f51b87d2ae0859c40f32e06dfa9285466967196ac1e946ce57df7d",
+          "path": "skills/3lens/scripts/check-release-invariants.mjs",
+          "sha256": "9ddb336a294450d7281970ec7ff3603c3a6c4a148439a5309dbb1be15bbdf3da",
           "description": "Release Invariants Gate specification checker (62 specs, 40 security invariants)"
         },
         {
-          "path": "skills/security-audit/tool-integrity-manifest.json",
-          "sha256": "3974f384c636de06651bda1b975b0fde9e4907e2379a63ebab60dbb8b3217154",
+          "path": "skills/3lens/tool-integrity-manifest.json",
+          "sha256": "0758de9274c5014fdaa8ba17660f7e99c14399ec1d17ced7b7e388386aed9c03",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {
-          "path": "skills/security-audit/scripts/adapters/cloudflare-adapter.mjs",
+          "path": "skills/3lens/scripts/adapters/cloudflare-adapter.mjs",
           "sha256": "36c3eac48d828b2d582ac411db35c7bab4522d679d7d7a855de12fa6ef0ef2a0",
           "description": "Cloudflare Finding Producer Adapter (lossless canonical translation, quarantine boundary, zero external dependencies)"
         },
@@ -131,7 +131,7 @@
       "artifacts": [
         {
           "path": "hooks/shadow-context-guard.mjs",
-          "sha256": "ac640a24184c731fcb1fa8adf4ccbd0d5b40f17d8789149ccbdeb670dc2e61c0",
+          "sha256": "d77a833c8419b1d7853989efa51993c0b63fc31a7666a0105608256a966a3045",
           "description": "PreToolUse hook enforcing shadow context redirection and runtime confinement"
         },
         {
@@ -249,12 +249,12 @@
         },
         {
           "path": "scripts/run-oss-transfer-eval.mjs",
-          "sha256": "4b6872f17c5840062843ee9ed62cc2de745e19b78ea8cadbe014bcdcc744b7e3",
+          "sha256": "0bdeff55470bc1a52ea081c02b1dd2d8dc9a54ffaf81f72c9d393206ce8af34f",
           "description": "Curated External-Origin Fixture Validation runner"
         },
         {
           "path": "scripts/run-live-oss-transfer.mjs",
-          "sha256": "ee239b8bcf3106160087507a3236ec408edcff7f787e815d8b6c6d32acf8fd1a",
+          "sha256": "4baa0ae898724a962e3d6e76d0d7ddfa3bbc8c281eef7d9ad32e3aaf953333a2",
           "description": "Live Full Upstream Repository Transfer Evaluation Runner"
         },
         {

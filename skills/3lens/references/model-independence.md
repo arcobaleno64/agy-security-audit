@@ -10,9 +10,9 @@ The `security-audit` plugin is architected strictly around **declarative, verifi
 ### 1.1 Control Plane Authority Hierarchy
 To prevent contract drift between documentation, subagent prompts, and deterministic runtime validators, the following unambiguous authority order is enforced:
 1. **Level 1 (Ground Truth Authority)**: Canonical JSON Schemas (`schemas/*.schema.json`) and deterministic runtime validators (`scripts/finalize-scan.mjs`).
-2. **Level 2**: Main workflow specifications in `SKILL.md` and job contracts in `skills/security-audit/jobs/*.md`.
+2. **Level 2**: Main workflow specifications in `SKILL.md` and job contracts in `skills/3lens/jobs/*.md`.
 3. **Level 3**: Subagent prompt contracts in `agents/*.md`.
-4. **Level 4**: Architectural references, protocols, and examples in `skills/security-audit/references/*.md`.
+4. **Level 4**: Architectural references, protocols, and examples in `skills/3lens/references/*.md`.
 
 Any ambiguity or conflicting representation between documentation examples and canonical schemas is strictly resolved in favor of Level 1.
 
@@ -20,7 +20,7 @@ Any ambiguity or conflicting representation between documentation examples and c
 
 ## 2. Standardized Role & Capability Contracts
 
-Every subagent contract in `agents/*.md` and `skills/security-audit/jobs/*.md` conforms to standard schema definitions:
+Every subagent contract in `agents/*.md` and `skills/3lens/jobs/*.md` conforms to standard schema definitions:
 
 ### 2.1 Threat Modeler (`agents/threat-modeler.md`)
 - **Capability Requirements**: Read-only repository traversal (`view_file`, `list_dir`, `grep_search`, `find_by_name`). Command execution disabled (`commandExecutionPolicy: off`).

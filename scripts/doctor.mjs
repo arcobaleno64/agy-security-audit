@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { verifyToolSelfIntegrity } from '../skills/security-audit/scripts/finalize-scan.mjs';
+import { verifyToolSelfIntegrity } from '../skills/3lens/scripts/finalize-scan.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,7 +188,7 @@ export function inspectPluginLayout(repoRoot = DEFAULT_REPO_ROOT) {
   const plugin = parseJsonFile(path.join(repoRoot, 'plugin.json'));
   const hooks = parseJsonFile(path.join(repoRoot, 'hooks.json'));
   const structurallyValid = missing.length === 0
-    && plugin.ok && plugin.value?.name === 'security-audit'
+    && plugin.ok && (plugin.value?.name === 'three-lens' || plugin.value?.name === 'security-audit')
     && hooks.ok && Boolean(hooks.value?.['shadow-context-guard']?.PreToolUse);
 
   return {
@@ -211,7 +211,7 @@ export function inspectPluginLayout(repoRoot = DEFAULT_REPO_ROOT) {
 }
 
 export function inspectTcbIntegrity(repoRoot = DEFAULT_REPO_ROOT, verifier = verifyToolSelfIntegrity) {
-  const toolRoot = path.join(repoRoot, 'skills', 'security-audit');
+  const toolRoot = path.join(repoRoot, 'skills', '3lens');
   try {
     const result = verifier(toolRoot, repoRoot, { allowSelfAudit: true });
     return {

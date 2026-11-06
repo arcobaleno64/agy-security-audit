@@ -22,7 +22,7 @@
     "layer4_deterministic_tcb": {
       "boundary": "Authoritative TCB filesystem I/O kernel",
       "objective": "Eliminate TOCTOU filesystem races and sibling path confusion via safe file descriptors",
-      "module": "skills/security-audit/scripts/path-containment.mjs"
+      "module": "skills/3lens/scripts/path-containment.mjs"
     }
   },
   "roles": {
@@ -34,7 +34,7 @@
         "invoke_subagent",
         "send_message",
         "manage_subagents",
-        "run_command:node skills/security-audit/scripts/*"
+        "run_command:node skills/3lens/scripts/*"
       ],
       "ask": [
         "run_command:git *"
@@ -98,7 +98,7 @@
         "view_file",
         "replace_file_content",
         "run_command:npm test",
-        "run_command:node skills/security-audit/scripts/validate-patch.mjs *"
+        "run_command:node skills/3lens/scripts/validate-patch.mjs *"
       ],
       "ask": [
         "write_to_file",

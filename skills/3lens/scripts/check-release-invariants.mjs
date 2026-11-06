@@ -87,41 +87,41 @@ const REQUIRED_FILES = [
   'hooks.json',
   'hooks/shadow-context-guard.mjs',
   'rules/AGENTS.md',
-  'skills/security-audit/SKILL.md',
-  'skills/security-audit/tool-integrity-manifest.json',
-  'skills/security-audit/scripts/safe-git.mjs',
-  'skills/security-audit/scripts/finalize-scan.mjs',
-  'skills/security-audit/scripts/render-sarif.mjs',
-  'skills/security-audit/scripts/build-inventory.mjs',
-  'skills/security-audit/scripts/build-threat-model.mjs',
-  'skills/security-audit/scripts/project-context.mjs',
-  'skills/security-audit/scripts/validate-attack-path.mjs',
-  'skills/security-audit/scripts/validate-patch.mjs',
-  'skills/security-audit/scripts/prepare-review-context.mjs',
-  'skills/security-audit/scripts/path-containment.mjs',
-  'skills/security-audit/scripts/standards-mapping.mjs',
-  'skills/security-audit/scripts/run-evals.mjs',
-  'skills/security-audit/scripts/run-semantic-eval.mjs',
-  'skills/security-audit/scripts/run-discovery-eval.mjs',
-  'skills/security-audit/scripts/run-stability-eval.mjs',
-  'skills/security-audit/scripts/record-benchmark-run.mjs',
-  'skills/security-audit/scripts/check-release-invariants.mjs',
-  'skills/security-audit/standards/standards-map.json',
-  'skills/security-audit/standards/applicability-profiles.json',
-  'skills/security-audit/jobs/scan.md',
-  'skills/security-audit/jobs/review.md',
-  'skills/security-audit/jobs/validate.md',
-  'skills/security-audit/jobs/deep.md',
-  'skills/security-audit/jobs/remediate.md',
-  'skills/security-audit/jobs/verify-fix.md',
-  'skills/security-audit/references/discovery.md',
-  'skills/security-audit/references/patching-jail.md',
-  'skills/security-audit/references/swarm-consensus.md',
-  'skills/security-audit/references/threat-modeling.md',
-  'skills/security-audit/references/verifier-protocol.md',
-  'skills/security-audit/references/finding-lineage.md',
-  'skills/security-audit/references/safe-proof-policy.md',
-  'skills/security-audit/references/model-independence.md',
+  'skills/3lens/SKILL.md',
+  'skills/3lens/tool-integrity-manifest.json',
+  'skills/3lens/scripts/safe-git.mjs',
+  'skills/3lens/scripts/finalize-scan.mjs',
+  'skills/3lens/scripts/render-sarif.mjs',
+  'skills/3lens/scripts/build-inventory.mjs',
+  'skills/3lens/scripts/build-threat-model.mjs',
+  'skills/3lens/scripts/project-context.mjs',
+  'skills/3lens/scripts/validate-attack-path.mjs',
+  'skills/3lens/scripts/validate-patch.mjs',
+  'skills/3lens/scripts/prepare-review-context.mjs',
+  'skills/3lens/scripts/path-containment.mjs',
+  'skills/3lens/scripts/standards-mapping.mjs',
+  'skills/3lens/scripts/run-evals.mjs',
+  'skills/3lens/scripts/run-semantic-eval.mjs',
+  'skills/3lens/scripts/run-discovery-eval.mjs',
+  'skills/3lens/scripts/run-stability-eval.mjs',
+  'skills/3lens/scripts/record-benchmark-run.mjs',
+  'skills/3lens/scripts/check-release-invariants.mjs',
+  'skills/3lens/standards/standards-map.json',
+  'skills/3lens/standards/applicability-profiles.json',
+  'skills/3lens/jobs/scan.md',
+  'skills/3lens/jobs/review.md',
+  'skills/3lens/jobs/validate.md',
+  'skills/3lens/jobs/deep.md',
+  'skills/3lens/jobs/remediate.md',
+  'skills/3lens/jobs/verify-fix.md',
+  'skills/3lens/references/discovery.md',
+  'skills/3lens/references/patching-jail.md',
+  'skills/3lens/references/swarm-consensus.md',
+  'skills/3lens/references/threat-modeling.md',
+  'skills/3lens/references/verifier-protocol.md',
+  'skills/3lens/references/finding-lineage.md',
+  'skills/3lens/references/safe-proof-policy.md',
+  'skills/3lens/references/model-independence.md',
   'schemas/scan-manifest.schema.json',
   'schemas/threat-model.schema.json',
   'schemas/candidate.schema.json',
@@ -187,7 +187,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
   // 3. Check automated test suite
-  const testScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/render-sarif.mjs');
+  const testScriptPath = path.resolve(repoRoot, 'skills/3lens/scripts/render-sarif.mjs');
   try {
     const stdout = execFileSync(process.execPath, [testScriptPath, '--test'], {
       cwd: repoRoot,
@@ -202,7 +202,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
   // 3.1 Check Deterministic Security Invariant & Adversarial Regression Suite (50 Cases) (P2-02, R1-P2-01)
-  const evalsScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-evals.mjs');
+  const evalsScriptPath = path.resolve(repoRoot, 'skills/3lens/scripts/run-evals.mjs');
   try {
     const stdout = execFileSync(process.execPath, [evalsScriptPath], {
       cwd: repoRoot,
@@ -217,7 +217,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
   // 3.2 Check L1.5 Disposition Ground-Truth Benchmark (R1-P2-01 / R2-P0-08)
-  const semanticScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-semantic-eval.mjs');
+  const semanticScriptPath = path.resolve(repoRoot, 'skills/3lens/scripts/run-semantic-eval.mjs');
   try {
     const stdout = execFileSync(process.execPath, [semanticScriptPath], {
       cwd: repoRoot,
@@ -232,7 +232,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
   // 3.3 Check Real Agent Discovery Evaluation Benchmark (R2-P0-08)
-  const discoveryScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-discovery-eval.mjs');
+  const discoveryScriptPath = path.resolve(repoRoot, 'skills/3lens/scripts/run-discovery-eval.mjs');
   try {
     const stdout = execFileSync(process.execPath, [discoveryScriptPath], {
       cwd: repoRoot,
@@ -247,7 +247,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
   }
 
   // 3.4 Check Multi-Run Stochastic Stability Benchmark (R2-P0-08)
-  const stabilityScriptPath = path.resolve(repoRoot, 'skills/security-audit/scripts/run-stability-eval.mjs');
+  const stabilityScriptPath = path.resolve(repoRoot, 'skills/3lens/scripts/run-stability-eval.mjs');
   try {
     const stdout = execFileSync(process.execPath, [stabilityScriptPath], {
       cwd: repoRoot,
@@ -367,7 +367,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
 
 
   // 5. Validate Orchestration & Verification Invariant Consistency (P1-04)
-  const skillPath = path.resolve(repoRoot, 'skills/security-audit/SKILL.md');
+  const skillPath = path.resolve(repoRoot, 'skills/3lens/SKILL.md');
   if (fs.existsSync(skillPath)) {
     const skillContent = fs.readFileSync(skillPath, 'utf8');
     if (skillContent.includes('--workers')) {
@@ -386,7 +386,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       check: () => {
         const candidate = {
           id: 'INV-1',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
           consensus: { verdict: 'CONFIRMED' }
         };
         const res = deriveFinalDisposition(candidate, []);
@@ -401,7 +401,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       check: () => {
         const candidate = {
           id: 'INV-2',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 }
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 10 }
         };
         const res = deriveFinalDisposition(candidate, []);
         if (res.disposition !== 'DEFERRED' || res.mappedVerdict !== 'NEEDS_MANUAL_REVIEW') {
@@ -415,7 +415,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       check: () => {
         const candidate = {
           id: 'INV-3',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 10 },
           sourceVerified: true,
           dataflowVerified: true,
           isSingleCandidate: true
@@ -476,7 +476,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       check: () => {
         const canonicalFinding = {
           id: 'INV-7',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
           disposition: 'DEFERRED',
           mappedVerdict: 'NEEDS_MANUAL_REVIEW',
           title: 'Unverified Finding'
@@ -488,7 +488,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         // R1-P1-03: Fabricated REPORTABLE claim without consensus is downgraded to DEFERRED
         const fakeReportable = {
           id: 'INV-7-FAKE',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1, endLine: 1 },
           disposition: 'REPORTABLE',
           verdict: 'CONFIRMED',
           title: 'Fake Confirmed',
@@ -505,7 +505,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       id: 'SEC-INV-08',
       name: 'all verifier REFUTES evidence-bound',
       check: () => {
-        const candidate = { id: 'INV-8', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 } };
+        const candidate = { id: 'INV-8', location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 } };
         const unverifiedRefute = [
           { findingId: 'INV-8', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'Unverified claim with no evidence' }
         ];
@@ -522,10 +522,10 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       id: 'SEC-INV-09',
       name: 'verify-fix requires all 3 lenses',
       check: () => {
-        const finding = { id: 'INV-9', ruleId: 'CWE-89', location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10 } };
+        const finding = { id: 'INV-9', ruleId: 'CWE-89', location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10 } };
         // 1 DEFENSES vote only -> REJECTED
         const oneVote = [
-          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' }
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' }
         ];
         const res1 = verifyRemediation(finding, oneVote, process.cwd());
         if (res1.verified) {
@@ -533,8 +533,8 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         }
         // 2 votes only (DEFENSES + REACHABILITY) -> REJECTED
         const twoVotes = [
-          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/security-audit/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' },
-          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'blocked', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] }
+          { findingId: 'INV-9', lens: 'DEFENSES', decision: 'REFUTES', mitigationProofLine: 'skills/3lens/scripts/safe-git.mjs:10', mitigationReason: 'barrier added' },
+          { findingId: 'INV-9', lens: 'REACHABILITY', decision: 'REFUTES', reason: 'blocked', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'dead-path' }] }
         ];
         const res2 = verifyRemediation(finding, twoVotes, process.cwd());
         if (res2.verified) {
@@ -663,7 +663,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       check: () => {
         const candidate = {
           id: 'INV-15',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 25 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 25 },
           rigorMetrics: {
             sinkVerified: true,
             sourceVerified: true,
@@ -685,9 +685,9 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
 
         // 2. Fake rigorMetrics on candidate cannot grant REPORTABLE without validated evidence
         const arbitraryEvVotes = [
-          { findingId: 'INV-15', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'general' }] },
-          { findingId: 'INV-15', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-          { findingId: 'INV-15', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 20, role: 'general' }] }
+          { findingId: 'INV-15', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'general' }] },
+          { findingId: 'INV-15', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+          { findingId: 'INV-15', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 20, role: 'general' }] }
         ];
         const resFakeRigor = deriveFinalDisposition(candidate, arbitraryEvVotes, { score: 0.95 }, repoRoot);
         if (resFakeRigor.disposition === 'REPORTABLE') {
@@ -703,7 +703,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           component: 'Auth',
           family: 'auth/authz/tenancy',
           status: 'REVIEWED_NO_CANDIDATE',
-          reviewedEvidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 1 }],
+          reviewedEvidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 1 }],
           notes: 'No unmitigated vulnerabilities found.'
         };
         const cellRes = validateDiscoveryCell(validCell, repoRoot);
@@ -822,7 +822,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
             id: 'SEC-BAD-CVSS',
             ruleId: 'CWE-89',
             title: 'Bad CVSS candidate',
-            location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+            location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
             cvssV4: { vector: 'CVSS:4.0/AV:N/INVALID', score: 5.0 }
           }],
           repoRoot
@@ -1004,7 +1004,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           title: 'Hardening Title',
           findingType: 'HARDENING',
           severity: 'CRITICAL',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
         };
         const validatedH = validateCanonicalFindings([testHardening], repoRoot);
         if (validatedH[0].severity !== 'LOW') {
@@ -1028,7 +1028,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           title: 'Command Injection',
           proof: 'benign trace',
           attackPath: { steps: [], proofOfConcept: 'rm -rf / --no-preserve-root' },
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 },
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 },
           disposition: 'REPORTABLE',
           verdict: 'CONFIRMED',
           consensus: { supports: 3, totalVotes: 3 },
@@ -1118,12 +1118,12 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         const apTest = {
           attackPathId: 'AP-INV-23',
           attackerCapability: 'NETWORK_UNAUTHENTICATED',
-          entrypoint: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, symbol: 'main' },
-          source: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
-          transformations: [{ uri: 'skills/security-audit/scripts/safe-git.mjs', line: 5, description: 'Step' }],
-          authorizationBoundary: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 10, description: 'Auth boundary' },
+          entrypoint: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 1, symbol: 'main' },
+          source: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 1, description: 'Source user input' },
+          transformations: [{ uri: 'skills/3lens/scripts/safe-git.mjs', line: 5, description: 'Step' }],
+          authorizationBoundary: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 10, description: 'Auth boundary' },
           defenseChecks: [],
-          sink: { uri: 'skills/security-audit/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Sink' },
+          sink: { uri: 'skills/3lens/scripts/safe-git.mjs', line: 15, symbol: 'execSync', description: 'Sink' },
           impactBoundary: { target: 'host', blastRadius: 'local' },
           preconditions: ['Precond'],
           postconditions: ['Postcond']
@@ -1157,7 +1157,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           id: 'INV-23-CAND',
           ruleId: 'CWE-89',
           title: 'SQL Injection',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
         };
         const finalizedNoVotes = finalizeScan({
           candidates: [mockCand],
@@ -1182,13 +1182,13 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
           ruleId: 'CWE-89',
           title: 'SQL Injection',
           disposition: 'REPORTABLE',
-          location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 1 }
+          location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 1 }
         };
         const baseline = buildAuditBaseline({
           repoRoot,
           targetRevision: 'HEAD',
           canonicalFindings: [testCand],
-          manifest: { files: [{ path: 'skills/security-audit/scripts/safe-git.mjs', isScanned: true }] },
+          manifest: { files: [{ path: 'skills/3lens/scripts/safe-git.mjs', isScanned: true }] },
           threatModel: { components: [{ name: 'Git' }], trustBoundaries: [] }
         });
         if (!baseline.scopeFingerprint || !baseline.threatModelFingerprint || !baseline.findingLineageIds.includes('LIN-INV-24')) {
@@ -1226,7 +1226,7 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       name: 'Bounded Assurance, Measurement Integrity, & Legacy Exclusion Migration',
       check: () => {
         // 1. Purpose Boundary & Defensive Terminology in SKILL.md
-        const skillPath = path.resolve(repoRoot, 'skills/security-audit/SKILL.md');
+        const skillPath = path.resolve(repoRoot, 'skills/3lens/SKILL.md');
         const skillText = fs.readFileSync(skillPath, 'utf8');
         if (!skillText.includes('## Purpose Boundary') || skillText.includes('--strictness')) {
           throw new Error('SKILL.md missing Purpose Boundary or retains --strictness in public command syntax');
@@ -1352,11 +1352,11 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
         }
 
         // 3. Real TCB Verification & Overlap Detection
-        const overlapRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/security-audit'), repoRoot);
+        const overlapRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/3lens'), repoRoot);
         if (overlapRes.valid || overlapRes.status !== 'TCB_OVERLAP') {
           throw new Error('verifyToolSelfIntegrity failed to detect TCB_OVERLAP on nested tool root');
         }
-        const selfAuditRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/security-audit'), repoRoot, { allowSelfAudit: true });
+        const selfAuditRes = verifyToolSelfIntegrity(path.resolve(repoRoot, 'skills/3lens'), repoRoot, { allowSelfAudit: true });
         if (!selfAuditRes.valid || selfAuditRes.status !== 'SELF_AUDIT_MODE' || selfAuditRes.verifiedScriptsCount < 8) {
           throw new Error('verifyToolSelfIntegrity failed self-audit mode verification');
         }
@@ -1500,14 +1500,14 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
       name: 'Cross-Platform SARIF URI Normalization & Granular Evidence Binding Accounting (R7-P0-02)',
       check: () => {
         // 1. Cross-platform URI resolution
-        const winPath = 'skills\\security-audit\\scripts\\safe-git.mjs';
+        const winPath = 'skills\\3lens\\scripts\\safe-git.mjs';
         const normWin = resolveExternalUri(repoRoot, winPath);
-        if (normWin !== 'skills/security-audit/scripts/safe-git.mjs') {
+        if (normWin !== 'skills/3lens/scripts/safe-git.mjs') {
           throw new Error(`resolveExternalUri failed to normalize Windows path: ${normWin}`);
         }
-        const pctPath = 'skills%5Csecurity-audit%5Cscripts%5Csafe-git.mjs';
+        const pctPath = 'skills%5C3lens%5Cscripts%5Csafe-git.mjs';
         const normPct = resolveExternalUri(repoRoot, pctPath);
-        if (normPct !== 'skills/security-audit/scripts/safe-git.mjs') {
+        if (normPct !== 'skills/3lens/scripts/safe-git.mjs') {
           throw new Error(`resolveExternalUri failed to normalize percent-encoded path: ${normPct}`);
         }
 
@@ -1521,12 +1521,12 @@ export function checkReleaseInvariants(repoRoot = process.cwd()) {
                 {
                   ruleId: 'MOCK-01',
                   message: { text: 'Real finding in source' },
-                  locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+                  locations: [{ physicalLocation: { artifactLocation: { uri: 'skills/3lens/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
                 },
                 {
                   ruleId: 'MOCK-01',
                   message: { text: 'Shadow context duplicate finding' },
-                  locations: [{ physicalLocation: { artifactLocation: { uri: 'scratch/context/skills/security-audit/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
+                  locations: [{ physicalLocation: { artifactLocation: { uri: 'scratch/context/skills/3lens/scripts/safe-git.mjs' }, region: { startLine: 1 } } }]
                 },
                 {
                   ruleId: 'MOCK-02',

@@ -1,10 +1,10 @@
 ---
-name: security-audit
+name: 3lens
 description: >-
   Conducts evidence-backed, multi-stage security assurance reviews, vulnerability verification, and patch analysis on codebases or git diffs, informed by NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, and frontier defensive frameworks (Anthropic's Claude Security and OpenAI's Codex Security research). Employs elastic subagent voting under Default-Deny on authority claims, double-blind 3-lens verification, CVSS v4.0 metrics, and SARIF 2.1.0 report generation. Use when the user asks to review code for security flaws, audit vulnerabilities, run security scans, or patch vulnerabilities.
 ---
 
-# AGY Security Audit Skill (`security-audit` v1.10.0)
+# Three-Lens Security Skill (/3lens v1.10.0)
 
 An evidence-driven security assurance workflow for Google Antigravity (AGY), aligned with NIST SSDF (SP 800-218), OWASP ASVS 5.0.0, OWASP SAMM, CWE taxonomy, and CVSS v4.0, incorporating defensive architectural concepts from frontier agent security frameworks including Anthropic's Claude Security and OpenAI's Codex Security research.
 
@@ -36,7 +36,7 @@ external targets or harmful real-world actions.
 When launched, the skill inspects explicit user flags or prompts for customization across core dimensions:
 
 ```text
-/security-audit [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--patch] [--export] [--preflight]
+/3lens [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--patch] [--export] [--preflight]
 ```
 
 ### Dimension 0: Audit Intent (`auditIntent`)
@@ -77,11 +77,11 @@ When executing security review, the skill operates under one of three distinct i
 1. Run `build-inventory.mjs` to derive ground-truth inventory and manifest:
    - For `scan` mode:
      ```bash
-     node skills/security-audit/scripts/build-inventory.mjs --mode scan --output-dir-manifest scratch/directory-manifest.json --output-manifest scratch/scan-manifest.json
+     node skills/3lens/scripts/build-inventory.mjs --mode scan --output-dir-manifest scratch/directory-manifest.json --output-manifest scratch/scan-manifest.json
      ```
    - For `review` mode:
      ```bash
-     node skills/security-audit/scripts/build-inventory.mjs --mode review --output-manifest scratch/review-manifest.json
+     node skills/3lens/scripts/build-inventory.mjs --mode review --output-manifest scratch/review-manifest.json
      ```
 2. Read the job specifications:
    - [jobs/review.md](./jobs/review.md) for diff reviews.
@@ -93,7 +93,7 @@ When executing security review, the skill operates under one of three distinct i
 1. **Pre-Context Secret Protection & Mandated Shadow Context Pipeline**:
    Execute `prepare-review-context.mjs` to prepare sanitized, tokenized shadow files under `scratch/context/`:
    ```bash
-   node skills/security-audit/scripts/prepare-review-context.mjs --repo-root .
+   node skills/3lens/scripts/prepare-review-context.mjs --repo-root .
    ```
    All model/agent source inspections, sink searches, and code snippets MUST read from `scratch/context/` rather than raw repository files. Plaintext credentials are deterministically replaced with structured `<SECRET:class=...:hash=...>` placeholders while strictly preserving exact source line numbers. Orchestrator instructions mandate subagents inspect `scratch/context/`; when runtime sandbox telemetry is available it is attested as `OBSERVED`, otherwise truthfully attested as `MANDATED`.
 2. Execute Tier 2 Sink searches across prepared context using native `grep_search`:
@@ -128,7 +128,7 @@ When executing security review, the skill operates under one of three distinct i
    - **Primary Official Pipeline: Direct Authoritative Finalization & Rendering**
      `finalize-scan.mjs` owns final authority, applies verifier ballots under Default-Deny, redacts secrets, and directly outputs Canonical Findings, SARIF, and Markdown in one invocation:
      ```bash
-     node skills/security-audit/scripts/finalize-scan.mjs \
+     node skills/3lens/scripts/finalize-scan.mjs \
        --candidates scratch/candidate-findings.json \
        --votes scratch/votes \
        --manifest scratch/directory-manifest.json \
@@ -140,7 +140,7 @@ When executing security review, the skill operates under one of three distinct i
    - **Secondary / Adapter Pipeline: Canonical Rendering**
      If rendering existing canonical findings, `render-sarif.mjs` strictly validates canonical schema and downgrades unproven claims under Default-Deny before formatting:
      ```bash
-     node skills/security-audit/scripts/render-sarif.mjs \
+     node skills/3lens/scripts/render-sarif.mjs \
        --canonical scratch/canonical-findings.json \
        --manifest scratch/directory-manifest.json \
        --output-sarif scratch/AGY-SECURITY-RESULTS.sarif \

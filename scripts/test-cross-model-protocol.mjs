@@ -16,7 +16,7 @@ import {
   validateIndependenceAuthority,
   VALID_IDENTITY_SOURCES,
   VALID_TAXONOMY_TIERS
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 import {
   classifyComparisonExperiment,
   computeComparativeJaccard,

@@ -36,7 +36,7 @@ import {
 import {
   finalizeScan,
   loadCloudflareAdapter
-} from '../../skills/security-audit/scripts/finalize-scan.mjs';
+} from '../../skills/3lens/scripts/finalize-scan.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -281,7 +281,7 @@ test('Test 4: Ingest with coverage-ledger-complete.json and 0 reportable finding
 });
 
 test('Test 5: End-to-End CLI execution via spawnSync with --import-cloudflare-findings and --import-cloudflare-coverage', () => {
-  const finalizeScript = path.resolve(REPO_ROOT, 'skills/security-audit/scripts/finalize-scan.mjs');
+  const finalizeScript = path.resolve(REPO_ROOT, 'skills/3lens/scripts/finalize-scan.mjs');
   const confirmedFixture = path.join(FIXTURES_DIR, 'findings-confirmed.json');
   const completeCoverageFixture = path.join(FIXTURES_DIR, 'coverage-ledger-complete.json');
 
@@ -353,7 +353,7 @@ test('Test 7 (P0 Regression): Target repository cannot hijack adapter execution 
     assert(typeof adapter.toCandidateSet === 'function', 'Loaded genuine adapter from TCB, not hostile target code');
 
     // 2. Direct CLI invocation with --repo-root pointing to hostile target MUST NOT execute hostile adapter
-    const finalizeScript = path.resolve(REPO_ROOT, 'skills/security-audit/scripts/finalize-scan.mjs');
+    const finalizeScript = path.resolve(REPO_ROOT, 'skills/3lens/scripts/finalize-scan.mjs');
     const confirmedFixture = path.join(FIXTURES_DIR, 'findings-confirmed.json');
     const completeCoverageFixture = path.join(FIXTURES_DIR, 'coverage-ledger-complete.json');
     const outJson = path.join(hostileTargetDir, 'out-p0-test.json');

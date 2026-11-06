@@ -38,18 +38,18 @@ You are the primary security audit orchestrator operating under the **Presumptio
 1. Derive ground-truth repository inventory via `build-inventory.mjs` using `run_command`:
    - For repository scans:
      ```bash
-     node skills/security-audit/scripts/build-inventory.mjs --mode scan --output-dir-manifest scratch/directory-manifest.json --output-manifest scratch/scan-manifest.json
+     node skills/3lens/scripts/build-inventory.mjs --mode scan --output-dir-manifest scratch/directory-manifest.json --output-manifest scratch/scan-manifest.json
      ```
    - For diff / pull-request reviews:
      ```bash
-     node skills/security-audit/scripts/build-inventory.mjs --mode review --output-manifest scratch/review-manifest.json
+     node skills/3lens/scripts/build-inventory.mjs --mode review --output-manifest scratch/review-manifest.json
      ```
 2. Verify that `scratch/directory-manifest.json` or `scratch/scan-manifest.json` was generated deterministically from filesystem truth.
 
 ### Stage 2: Sanitized Review Context Preparation
 1. Execute `prepare-review-context.mjs` to prepare sanitized, tokenized shadow files under `scratch/context/`:
    ```bash
-   node skills/security-audit/scripts/prepare-review-context.mjs --repo-root .
+   node skills/3lens/scripts/prepare-review-context.mjs --repo-root .
    ```
 2. Confirm `scratch/context/context-manifest.json` is generated.
 3. Ensure all downstream subagent source inspections are instructed to inspect `scratch/context/` rather than raw repository files, neutralizing plaintext secrets, ANSI escapes, and Unicode Bidi overrides.
@@ -80,7 +80,7 @@ You are the primary security audit orchestrator operating under the **Presumptio
 3. Execute Deterministic Finalization:
    - Coordinator executes `finalize-scan.mjs` via `run_command`:
      ```bash
-     node skills/security-audit/scripts/finalize-scan.mjs \
+     node skills/3lens/scripts/finalize-scan.mjs \
        --candidates scratch/candidate-findings.json \
        --votes scratch/votes \
        --manifest scratch/directory-manifest.json \

@@ -7,7 +7,7 @@
  * 1. reports/empirical-baseline-n5-report-2026-09-13.md
  * 2. reports/empirical-benchmark-20-paired-report-2026-09-13.md
  * 3. evals/semantic-benchmark/ground-truth.json
- * 4. skills/security-audit/tool-integrity-manifest.json
+ * 4. skills/3lens/tool-integrity-manifest.json
  * 5. evals/live-runs/ and evals/recorded-runs/ -> empirical-benchmark-envelopes.tar.gz
  * 6. Deterministic cryptographic checksums -> SHA256SUMS.txt
  *
@@ -57,7 +57,7 @@ export const MANDATORY_INDIVIDUAL_FILES = [
     description: 'Authoritative 20-Fixture Paired Holdout Generalization Dataset'
   },
   {
-    repoPath: 'skills/security-audit/tool-integrity-manifest.json',
+    repoPath: 'skills/3lens/tool-integrity-manifest.json',
     stagedName: 'tool-integrity-manifest.json',
     description: 'SHA-256 Cryptographic TCB Integrity Manifest'
   },
@@ -630,8 +630,8 @@ export function checkEvidenceCompleteness(repoRoot = REPO_ROOT) {
   } else {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (pkg.name !== '@arcobaleno64/agy-security-audit') {
-        errors.push(`package.json name must be '@arcobaleno64/agy-security-audit', found '${pkg.name}'`);
+      if (pkg.name !== '@arcobaleno64/three-lens') {
+        errors.push(`package.json name must be '@arcobaleno64/three-lens', found '${pkg.name}'`);
       }
       if (!pkg.version || typeof pkg.version !== 'string') {
         errors.push('package.json missing version for release archive packaging');

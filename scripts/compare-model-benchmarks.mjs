@@ -17,7 +17,7 @@ import {
   validateIndependenceAuthority,
   VALID_IDENTITY_SOURCES,
   VALID_TAXONOMY_TIERS
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const DEFAULT_REPO_ROOT = path.resolve(path.dirname(__filename), '..');

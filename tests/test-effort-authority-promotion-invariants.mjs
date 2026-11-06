@@ -12,8 +12,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveFinalDisposition, finalizeScan } from '../skills/security-audit/scripts/finalize-scan.mjs';
-import { renderSarif, renderMarkdown } from '../skills/security-audit/scripts/render-sarif.mjs';
+import { deriveFinalDisposition, finalizeScan } from '../skills/3lens/scripts/finalize-scan.mjs';
+import { renderSarif, renderMarkdown } from '../skills/3lens/scripts/render-sarif.mjs';
 
 const EFFORT_TIERS = ['low', 'medium', 'high'];
 
@@ -91,7 +91,7 @@ for (const effort of EFFORT_TIERS) {
     const candidate = {
       id: `SEC-NONLENS-${effort.toUpperCase()}-05`,
       ruleId: 'CWE-89',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
       modelEffort: effort
     };
 
@@ -102,15 +102,15 @@ for (const effort of EFFORT_TIERS) {
         reviewerId: 'rev-general-1',
         decision: 'CONFIRMED',
         evidence: [
-          { path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' },
-          { path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }
+          { path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' },
+          { path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }
         ]
       },
       {
         findingId: candidate.id,
         reviewerId: 'rev-general-2',
         decision: 'CONFIRMED',
-        evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+        evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
       }
     ];
 
@@ -124,14 +124,14 @@ for (const effort of EFFORT_TIERS) {
     const candidate = {
       id: `SEC-NONLENS3-${effort.toUpperCase()}-06`,
       ruleId: 'CWE-79',
-      location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+      location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
       modelEffort: effort
     };
 
     const nonLensVotes = [
-      { findingId: candidate.id, reviewerId: 'rev-1', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-      { findingId: candidate.id, reviewerId: 'rev-2', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
-      { findingId: candidate.id, reviewerId: 'rev-3', decision: 'CONFIRMED', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] }
+      { findingId: candidate.id, reviewerId: 'rev-1', decision: 'CONFIRMED', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+      { findingId: candidate.id, reviewerId: 'rev-2', decision: 'CONFIRMED', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] },
+      { findingId: candidate.id, reviewerId: 'rev-3', decision: 'CONFIRMED', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] }
     ];
 
     const disposition = deriveFinalDisposition(candidate, nonLensVotes, { score: 0.95 }, process.cwd());
@@ -164,16 +164,16 @@ test('Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Relea
     id: 'SEC-REPORTABLE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in SafeGit',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
     disposition: 'REPORTABLE',
     nonce: testNonce
   };
 
   const unanimousVotes = [
-    { findingId: 'SEC-REPORTABLE-01', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: 'SEC-REPORTABLE-01', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: 'SEC-REPORTABLE-01', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: 'SEC-REPORTABLE-01', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
   const disposition = deriveFinalDisposition(reportableCandidate, unanimousVotes, { score: 0.95 }, process.cwd(), { nonce: testNonce, expectedNonce: testNonce });
@@ -183,7 +183,7 @@ test('Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Relea
     candidates: [reportableCandidate],
     votes: unanimousVotes,
     nonce: testNonce,
-    manifest: { complete: false, coverageStatus: 'COMPLETE', files: ['skills/security-audit/scripts/safe-git.mjs'] },
+    manifest: { complete: false, coverageStatus: 'COMPLETE', files: ['skills/3lens/scripts/safe-git.mjs'] },
     repoRoot: process.cwd(),
     allowSelfAudit: true
   });
@@ -201,7 +201,7 @@ test('Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03
     id: 'SEC-F03-COUNTEREXAMPLE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate with Split Lens Ballots',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -211,21 +211,21 @@ test('Authority Promotion Gate: 3-Lens Duplicate/Split Ballot Counterexample F03
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-3',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     },
     {
       findingId: candidate.id,
@@ -252,7 +252,7 @@ test('Authority Promotion Gate: Conflicting Duplicate Reviewer Counterexample R5
     id: 'SEC-R5-F03-COUNTEREXAMPLE-REV2-CONFLICT',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate with Conflicting Reviewer Ballots',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -262,21 +262,21 @@ test('Authority Promotion Gate: Conflicting Duplicate Reviewer Counterexample R5
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-3',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     },
     {
       findingId: candidate.id,
@@ -301,7 +301,7 @@ test('Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Req
     id: 'SEC-R5-F03-NO-EFFORT-METADATA',
     ruleId: 'CWE-89',
     title: 'Candidate without explicit effort metadata',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 }
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 }
   };
 
   const twoNonLensSupports = [
@@ -309,13 +309,13 @@ test('Authority Promotion Gate: Missing Effort Metadata Cannot Bypass 3-Lens Req
       findingId: candidateNoEffort.id,
       reviewerId: 'rev-1',
       decision: 'CONFIRMED',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidateNoEffort.id,
       reviewerId: 'rev-2',
       decision: 'CONFIRMED',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -334,7 +334,7 @@ test('Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample
     id: 'SEC-REPLAY-NONCE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate with Replayed Ballots',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -344,21 +344,21 @@ test('Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-3',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -386,7 +386,7 @@ test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexam
     id: 'SEC-REPLAY-MANIFEST-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate with Replayed Manifest Nonce',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -395,7 +395,7 @@ test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexam
     nonce: 'NONCE-RUN-A',
     taskCorrelationNonce: 'NONCE-RUN-A',
     complete: true,
-    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+    entries: [{ path: 'skills/3lens/scripts/safe-git.mjs', status: 'SCANNED' }]
   };
 
   const oldVotesWithOldNonce = [
@@ -405,7 +405,7 @@ test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexam
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
@@ -413,7 +413,7 @@ test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexam
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
@@ -421,7 +421,7 @@ test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexam
       lens: 'IMPACT',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -451,7 +451,7 @@ test('Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexamp
     id: 'SEC-NO-NONCE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate without Execution Nonce',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -461,21 +461,21 @@ test('Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexamp
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-3',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -497,7 +497,7 @@ test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Def
     id: 'SEC-CANDIDATE-NONCE-BYPASS-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate Self-Asserting Stale Nonce',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
     nonce: 'NONCE-RUN-A' // Untrusted candidate self-asserts old nonce
   };
@@ -507,7 +507,7 @@ test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Def
     nonce: 'NONCE-RUN-A',
     taskCorrelationNonce: 'NONCE-RUN-A',
     complete: true,
-    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+    entries: [{ path: 'skills/3lens/scripts/safe-git.mjs', status: 'SCANNED' }]
   };
 
   const oldVotesWithOldNonce = [
@@ -517,7 +517,7 @@ test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Def
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidateWithOldNonce.id,
@@ -525,7 +525,7 @@ test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Def
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidateWithOldNonce.id,
@@ -533,7 +533,7 @@ test('Authority Promotion Gate: Candidate Nonce Cannot Bypass Stale Manifest Def
       lens: 'IMPACT',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -563,7 +563,7 @@ test('Authority Promotion Gate: Missing Execution Nonce Cannot Suppress Finding 
     id: 'SEC-EFFORT-NO-NONCE-REFUTE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate without Nonce Facing Refutation',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -573,21 +573,21 @@ test('Authority Promotion Gate: Missing Execution Nonce Cannot Suppress Finding 
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'REFUTES',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
       reviewerId: 'rev-3',
       lens: 'IMPACT',
       decision: 'SUPPORTS',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -608,7 +608,7 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
     id: 'SEC-MANIFEST-MISSING-RUNID-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate Facing Manifest with Missing ScanRunId',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -616,7 +616,7 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
     complete: false,
     nonce: 'NONCE-RUN-A',
     taskCorrelationNonce: 'NONCE-RUN-A',
-    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+    entries: [{ path: 'skills/3lens/scripts/safe-git.mjs', status: 'SCANNED' }]
   };
 
   const oldVotesWithOldNonce = [
@@ -626,7 +626,7 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
@@ -634,7 +634,7 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
@@ -642,7 +642,7 @@ test('Authority Promotion Gate: Missing Manifest ScanRunId Cannot Inherit Nonce 
       lens: 'IMPACT',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -675,7 +675,7 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
     id: 'SEC-MANIFEST-DUAL-MISSING-RUNID-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection Candidate Facing Manifest with Missing Both RunIds',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -683,7 +683,7 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
     complete: false,
     nonce: 'NONCE-RUN-A',
     taskCorrelationNonce: 'NONCE-RUN-A',
-    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+    entries: [{ path: 'skills/3lens/scripts/safe-git.mjs', status: 'SCANNED' }]
   };
 
   const oldVotesWithOldNonce = [
@@ -693,7 +693,7 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
       lens: 'REACHABILITY',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }]
     },
     {
       findingId: candidate.id,
@@ -701,7 +701,7 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
       lens: 'DEFENSES',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }]
     },
     {
       findingId: candidate.id,
@@ -709,7 +709,7 @@ test('Authority Promotion Gate: Missing Both ScanRunIds Cannot Inherit Manifest 
       lens: 'IMPACT',
       decision: 'SUPPORTS',
       nonce: 'NONCE-RUN-A',
-      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+      evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }]
     }
   ];
 
@@ -736,7 +736,7 @@ test('Authority Promotion Gate: Public Renderer Canonical Parity Counterexample 
     id: 'SEC-PARITY-RENDERER-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in Auth for Parity Check',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high'
   };
 
@@ -745,13 +745,13 @@ test('Authority Promotion Gate: Public Renderer Canonical Parity Counterexample 
     scanRunId: 'SCAN-PARITY-RUN-01',
     nonce: 'NONCE-PARITY-01',
     taskCorrelationNonce: 'NONCE-PARITY-01',
-    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+    entries: [{ path: 'skills/3lens/scripts/safe-git.mjs', status: 'SCANNED' }]
   };
 
   const votes = [
-    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: 'NONCE-PARITY-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
   const sarifRes = renderSarif({ findings: [candidate], manifest, votes, scanRunId: 'SCAN-PARITY-RUN-01', repoRoot: process.cwd() });
@@ -783,23 +783,23 @@ test('Authority Promotion Gate: Direct-input CLI (render-sarif.mjs --input --vot
     id: 'SEC-CLI-DIRECT-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in Direct CLI Path',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
     nonce: testNonce,
     scanRunId: testRunId
   };
 
   const votes = [
-    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, scanRunId: testRunId, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
   fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
   fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
 
   try {
-    const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+    const renderScript = path.resolve('skills/3lens/scripts/render-sarif.mjs');
     const result = spawnSync(process.execPath, [
       renderScript,
       '--input', candidatesPath,
@@ -842,22 +842,22 @@ test('Authority Promotion Gate: Direct-input CLI without nonce or with mismatche
     id: 'SEC-CLI-DIRECT-02',
     ruleId: 'CWE-89',
     title: 'SQL Injection in Direct CLI Path Without Nonce',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
     nonce: testNonce
   };
 
   const votes = [
-    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
   fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
   fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
 
   try {
-    const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+    const renderScript = path.resolve('skills/3lens/scripts/render-sarif.mjs');
 
     // Case 1: CLI invocation without --nonce
     const resNoNonce = spawnSync(process.execPath, [
@@ -905,22 +905,22 @@ test('Authority Promotion Gate: Direct-input CLI with Manifest Run Binding enfor
     id: 'SEC-CLI-MANIFEST-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in Manifest Run Binding Test',
-    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    location: { uri: 'skills/3lens/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
     nonce: manifestNonce,
     scanRunId: 'RUN-MATCH-01'
   };
 
   const votes = [
-    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: candidate.id, reviewerId: 'rev-1', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: candidate.id, reviewerId: 'rev-2', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: candidate.id, reviewerId: 'rev-3', lens: 'IMPACT', decision: 'SUPPORTS', nonce: manifestNonce, scanRunId: 'RUN-MATCH-01', evidence: [{ path: 'skills/3lens/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
   fs.writeFileSync(candidatesPath, JSON.stringify([candidate], null, 2), 'utf8');
   fs.writeFileSync(votesPath, JSON.stringify(votes, null, 2), 'utf8');
 
-  const renderScript = path.resolve('skills/security-audit/scripts/render-sarif.mjs');
+  const renderScript = path.resolve('skills/3lens/scripts/render-sarif.mjs');
 
   try {
     // Scenario 1: Manifest complete: true (Fail-Closed: even with matching scan-run-id, completed manifest cannot inherit nonce)

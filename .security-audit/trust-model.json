@@ -5,7 +5,7 @@
       "name": "Inventory",
       "criticality": "high",
       "evidence": [
-        "skills/security-audit/scripts/build-inventory.mjs"
+        "skills/3lens/scripts/build-inventory.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -23,7 +23,7 @@
       "name": "ContextPreparation",
       "criticality": "critical",
       "evidence": [
-        "skills/security-audit/scripts/prepare-review-context.mjs"
+        "skills/3lens/scripts/prepare-review-context.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -41,7 +41,7 @@
       "name": "ThreatModeling",
       "criticality": "high",
       "evidence": [
-        "skills/security-audit/scripts/build-threat-model.mjs"
+        "skills/3lens/scripts/build-threat-model.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -58,7 +58,7 @@
       "name": "AttackPathValidation",
       "criticality": "high",
       "evidence": [
-        "skills/security-audit/scripts/validate-attack-path.mjs"
+        "skills/3lens/scripts/validate-attack-path.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -75,7 +75,7 @@
       "name": "PatchValidation",
       "criticality": "high",
       "evidence": [
-        "skills/security-audit/scripts/validate-patch.mjs"
+        "skills/3lens/scripts/validate-patch.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -92,7 +92,7 @@
       "name": "ExternalEvidence",
       "criticality": "medium",
       "evidence": [
-        "skills/security-audit/scripts/finalize-scan.mjs"
+        "skills/3lens/scripts/finalize-scan.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -109,7 +109,7 @@
       "name": "FinalizerAuthority",
       "criticality": "critical",
       "evidence": [
-        "skills/security-audit/scripts/finalize-scan.mjs"
+        "skills/3lens/scripts/finalize-scan.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -126,8 +126,8 @@
       "name": "TCBIntegrity",
       "criticality": "critical",
       "evidence": [
-        "skills/security-audit/tool-integrity-manifest.json",
-        "skills/security-audit/scripts/finalize-scan.mjs"
+        "skills/3lens/tool-integrity-manifest.json",
+        "skills/3lens/scripts/finalize-scan.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -144,7 +144,7 @@
       "name": "Reporting",
       "criticality": "medium",
       "evidence": [
-        "skills/security-audit/scripts/render-sarif.mjs"
+        "skills/3lens/scripts/render-sarif.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -162,7 +162,7 @@
       "name": "GitBoundary",
       "criticality": "critical",
       "evidence": [
-        "skills/security-audit/scripts/safe-git.mjs"
+        "skills/3lens/scripts/safe-git.mjs"
       ],
       "source": "REPOSITORY_EVIDENCE",
       "applicableFamilies": [
@@ -200,7 +200,7 @@
       "to": "ContextPreparation",
       "status": "FACT",
       "evidence": [
-        "skills/security-audit/scripts/prepare-review-context.mjs"
+        "skills/3lens/scripts/prepare-review-context.mjs"
       ]
     },
     {
@@ -209,7 +209,7 @@
       "to": "SUBAGENT_REVIEWER",
       "status": "FACT",
       "evidence": [
-        "skills/security-audit/SKILL.md"
+        "skills/3lens/SKILL.md"
       ]
     },
     {
@@ -218,7 +218,7 @@
       "to": "FinalizerAuthority",
       "status": "FACT",
       "evidence": [
-        "skills/security-audit/scripts/finalize-scan.mjs"
+        "skills/3lens/scripts/finalize-scan.mjs"
       ]
     },
     {
@@ -227,7 +227,7 @@
       "to": "GitBoundary",
       "status": "FACT",
       "evidence": [
-        "skills/security-audit/scripts/safe-git.mjs"
+        "skills/3lens/scripts/safe-git.mjs"
       ]
     }
   ]

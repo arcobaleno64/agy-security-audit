@@ -27,8 +27,8 @@ import { spawnSync } from 'node:child_process';
 import {
   probeEnvironment,
   parseStreamJsonTrace
-} from '../skills/security-audit/scripts/record-benchmark-run.mjs';
-import { TOOL_VERSION } from '../skills/security-audit/scripts/finalize-scan.mjs';
+} from '../skills/3lens/scripts/record-benchmark-run.mjs';
+import { TOOL_VERSION } from '../skills/3lens/scripts/finalize-scan.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -802,7 +802,7 @@ Options:
           tool_calls: [
             {
               name: 'run_command',
-              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
+              args: { CommandLine: 'node skills/3lens/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
             }
           ]
         }
@@ -835,7 +835,7 @@ Options:
           tool_calls: [
             {
               name: 'run_command',
-              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
+              args: { CommandLine: 'node skills/3lens/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
             }
           ]
         }
@@ -1018,7 +1018,7 @@ Options:
             },
             {
               name: 'run_command',
-              args: { CommandLine: 'node skills/security-audit/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
+              args: { CommandLine: 'node skills/3lens/scripts/finalize-scan.mjs --manifest scratch/scan-manifest.json' }
             }
           ]
         }
