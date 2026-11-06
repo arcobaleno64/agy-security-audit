@@ -158,28 +158,31 @@ test('Authority Promotion Gate: EXECUTION_COMPLETE != FINDING_VERIFIED != RELEAS
 test('Authority Promotion Gate: REPORTABLE Finding Strictly Separated from Release Authority (RFC 0003 Section 3)', () => {
   // RFC 0003 Section 3: Internal Advisory (REPORTABLE) != Release Authority
   // Even if a finding is confirmed REPORTABLE by unanimous 3-Lens panel, it can NEVER grant Release Authority (canDeclareClean must be false)
+  const testNonce = 'NONCE-AUTH-001';
   const reportableCandidate = {
     id: 'SEC-REPORTABLE-01',
     ruleId: 'CWE-89',
     title: 'SQL Injection in SafeGit',
     location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
     modelEffort: 'high',
-    disposition: 'REPORTABLE'
+    disposition: 'REPORTABLE',
+    nonce: testNonce
   };
 
   const unanimousVotes = [
-    { findingId: 'SEC-REPORTABLE-01', lens: 'REACHABILITY', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
-    { findingId: 'SEC-REPORTABLE-01', lens: 'DEFENSES', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
-    { findingId: 'SEC-REPORTABLE-01', lens: 'IMPACT', decision: 'SUPPORTS', evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
+    { findingId: 'SEC-REPORTABLE-01', lens: 'REACHABILITY', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'DEFENSES', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }] },
+    { findingId: 'SEC-REPORTABLE-01', lens: 'IMPACT', decision: 'SUPPORTS', nonce: testNonce, evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }] }
   ];
 
-  const disposition = deriveFinalDisposition(reportableCandidate, unanimousVotes, { score: 0.95 }, process.cwd());
+  const disposition = deriveFinalDisposition(reportableCandidate, unanimousVotes, { score: 0.95 }, process.cwd(), { nonce: testNonce, expectedNonce: testNonce });
   assert.equal(disposition.disposition, 'REPORTABLE', 'Unanimous 3-Lens panel with evidence achieves REPORTABLE');
 
   const scanWithReportable = finalizeScan({
     candidates: [reportableCandidate],
     votes: unanimousVotes,
-    manifest: { complete: true, coverageStatus: 'COMPLETE', files: ['skills/security-audit/scripts/safe-git.mjs'] },
+    nonce: testNonce,
+    manifest: { complete: false, coverageStatus: 'COMPLETE', files: ['skills/security-audit/scripts/safe-git.mjs'] },
     repoRoot: process.cwd(),
     allowSelfAudit: true
   });
@@ -370,6 +373,116 @@ test('Authority Promotion Gate: Execution Nonce Replay Prevention Counterexample
   assert.equal(resFinding.disposition, 'DEFERRED', 'Old ballots missing execution nonce must fail closed to DEFERRED');
   assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
 });
+
+test('Authority Promotion Gate: Old Manifest Nonce Replay Prevention Counterexample R7-F03-02 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R7 (R7-F03-02):
+  // When finalizeScan is invoked with a new execution run (scanRunId: 'RUN-B')
+  // but receives an old manifest with nonce 'RUN-A' (e.g. from a prior completed run)
+  // and 3 ballots from the previous run with nonce 'RUN-A',
+  // the new scan run MUST NOT inherit the old manifest's nonce to replay old ballots!
+  // It must strictly fail closed to DEFERRED.
+  const candidate = {
+    id: 'SEC-REPLAY-MANIFEST-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate with Replayed Manifest Nonce',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const oldManifest = {
+    scanRunId: 'RUN-A',
+    nonce: 'NONCE-RUN-A',
+    taskCorrelationNonce: 'NONCE-RUN-A',
+    complete: true,
+    entries: [{ path: 'skills/security-audit/scripts/safe-git.mjs', status: 'SCANNED' }]
+  };
+
+  const oldVotesWithOldNonce = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      nonce: 'NONCE-RUN-A',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const scanResult = finalizeScan({
+    candidates: [candidate],
+    manifest: oldManifest,
+    scanRunId: 'RUN-B',
+    // Caller does not specify nonce, attempting to piggyback on oldManifest.nonce
+    votes: oldVotesWithOldNonce,
+    repoRoot: process.cwd(),
+    allowSelfAudit: true
+  });
+
+  const resFinding = scanResult.canonicalFindings[0];
+  assert.equal(resFinding.disposition, 'DEFERRED', 'Old manifest nonce replayed under new scanRunId must fail closed to DEFERRED');
+  assert.notEqual(resFinding.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+});
+
+test('Authority Promotion Gate: Missing Execution Nonce Fail-Closed Counterexample R7-F03-01 (Fail-Closed to DEFERRED)', () => {
+  // Counterexample identified by ChatGPT R7 (R7-F03-01):
+  // Under Default-Deny on Authority Claims (RFC 0003 Section 3),
+  // candidate promotion to REPORTABLE strictly requires a verifiable execution nonce.
+  // When neither caller, manifest, nor candidate provides an execution nonce,
+  // ballots cannot be verified as belonging to this execution run,
+  // and candidate must strictly fail closed to DEFERRED!
+  const candidate = {
+    id: 'SEC-NO-NONCE-01',
+    ruleId: 'CWE-89',
+    title: 'SQL Injection Candidate without Execution Nonce',
+    location: { uri: 'skills/security-audit/scripts/safe-git.mjs', startLine: 10, endLine: 25 },
+    modelEffort: 'high'
+  };
+
+  const votesWithoutNonce = [
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 10, role: 'source' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-2',
+      lens: 'DEFENSES',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 15, role: 'control' }]
+    },
+    {
+      findingId: candidate.id,
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'SUPPORTS',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 25, role: 'sink' }]
+    }
+  ];
+
+  const disposition = deriveFinalDisposition(candidate, votesWithoutNonce, { score: 0.95 }, process.cwd());
+  assert.equal(disposition.disposition, 'DEFERRED', 'Missing execution nonce must fail closed to DEFERRED');
+  assert.notEqual(disposition.disposition, 'REPORTABLE', 'Must strictly not achieve REPORTABLE');
+});
+
 
 
 

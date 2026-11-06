@@ -154,14 +154,15 @@ export function getGitProvenance(repoRoot) {
  * Builds standard SARIF 2.1.0 document.
  * Centralized through finalizeScan to enforce default-deny and canonical contract.
  */
-export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
+export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
     votes,
-    auditIntent
+    auditIntent,
+    nonce
   });
   return renderSarifFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -177,14 +178,15 @@ export function renderSarif({ findings = [], manifest = null, provenance = null,
  * Builds Human-Readable Markdown Audit Report with strict entity escaping and default-deny.
  * Centralized through finalizeScan to guarantee 100% parity with SARIF and JSON.
  */
-export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
+export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
     votes,
-    auditIntent
+    auditIntent,
+    nonce
   });
   return renderMarkdownFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -314,6 +316,9 @@ export function runTests() {
 
   // 4. Directory manifest validation
   const validManifest = {
+    complete: false,
+    nonce: 'NONCE-SARIF-001',
+    taskCorrelationNonce: 'NONCE-SARIF-001',
     entries: [
       { path: 'src/', status: 'SCANNED', fileCount: 10, reason: 'Source code' },
       { path: 'dist/', status: 'EXCLUDED_GENERATED', fileCount: 5, reason: 'Build output' }
@@ -350,6 +355,7 @@ export function runTests() {
       ruleId: 'CWE-89',
       title: 'SQL Injection in Auth',
       severity: 'CRITICAL',
+      nonce: 'NONCE-SARIF-001',
       cvssV4: {
         vector: validVector,
         score: 9.3,
@@ -371,6 +377,7 @@ export function runTests() {
       reviewerId: 'rev-1',
       lens: 'REACHABILITY',
       decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
       evidence: [
         { path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'source' },
         { path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }
@@ -381,6 +388,7 @@ export function runTests() {
       reviewerId: 'rev-2',
       lens: 'DEFENSES',
       decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
       evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'control' }]
     },
     {
@@ -388,6 +396,7 @@ export function runTests() {
       reviewerId: 'rev-3',
       lens: 'IMPACT',
       decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
       evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }]
     }
   ];

@@ -1717,6 +1717,17 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
   // 2. Candidate task-binding and deduplication of votes
   const safeVotes = Array.isArray(votes) ? votes : [];
   const expectedNonce = options.expectedNonce || options.nonce || candidate?.nonce || null;
+  const isEffortCandidate = Boolean(
+    candidate?.modelEffort ||
+    candidate?.effort ||
+    candidate?.reasoningProfile ||
+    candidate?.tier ||
+    options?.modelEffort ||
+    options?.effort ||
+    options?.modelProvenance?.effort
+  );
+  const requiresNonce = Boolean(isEffortCandidate || options?.enforceThreeLens || options?.requireNonce);
+
   const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
     return validateBallot(v, candidate, { expectedNonce }).valid;
@@ -1984,6 +1995,18 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
           };
         }
 
+        // Gate 0 (R7-F03-01 / RFC 0003 Section 3):
+        // Promotion to REPORTABLE strictly requires a verifiable execution task-correlation nonce!
+        // When expectedNonce is null, unassigned/un-correlated ballots cannot achieve REPORTABLE authority.
+        if (requiresNonce && !expectedNonce) {
+          return {
+            disposition: 'DEFERRED',
+            mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+            reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce to achieve REPORTABLE; deferred under default-deny',
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+          };
+        }
+
         return {
           disposition: 'REPORTABLE',
           mappedVerdict: 'CONFIRMED',
@@ -2001,16 +2024,6 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
       };
     }
-
-    const isEffortCandidate = Boolean(
-      candidate?.modelEffort ||
-      candidate?.effort ||
-      candidate?.reasoningProfile ||
-      candidate?.tier ||
-      options?.modelEffort ||
-      options?.effort ||
-      options?.modelProvenance?.effort
-    );
 
     // Gate 0 (M54-P1-F03 / R5-F03-02 / RFC 0003):
     // 3-Lens verification panel is required if:
@@ -2087,6 +2100,14 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     // Reportable requirement: 2/3 supermajority + authoritative rigor >= 0.60 + source & sink verified
     // Gate 0 (M54-P1-F03 / R5-F03-02): All candidates subject to 3-lens requirement cannot bypass via legacy 2/3
     if (!requiresThreeLens && supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
+      if (requiresNonce && !expectedNonce) {
+        return {
+          disposition: 'DEFERRED',
+          mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+          reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce to achieve REPORTABLE; deferred under default-deny',
+          votesSummary: { total, supports, refutes, unanimous: false, lenses: Array.from(lenses) }
+        };
+      }
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
@@ -2868,7 +2889,13 @@ export function finalizeScan({
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
-  let effectiveNonce = nonce || manifest?.nonce || manifest?.taskCorrelationNonce || null;
+  const isManifestStaleOrMismatched = Boolean(
+    manifest && (
+      manifest.complete === true ||
+      (scanRunId && manifest.scanRunId && manifest.scanRunId !== scanRunId)
+    )
+  );
+  let effectiveNonce = nonce || (!isManifestStaleOrMismatched ? (manifest?.nonce || manifest?.taskCorrelationNonce || null) : null);
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
@@ -3414,7 +3441,7 @@ export function finalizeScan({
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = effectiveManifest;
   const effectiveScanRunId = scanRunId || effectiveManifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  effectiveNonce = effectiveNonce || effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null;
+  effectiveNonce = effectiveNonce || (!isManifestStaleOrMismatched ? (effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null) : null);
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
@@ -3445,6 +3472,9 @@ export function finalizeScan({
     if (effectiveNonce) {
       effectiveManifest.nonce = effectiveNonce;
       effectiveManifest.taskCorrelationNonce = effectiveNonce;
+    } else if (isManifestStaleOrMismatched) {
+      delete effectiveManifest.nonce;
+      delete effectiveManifest.taskCorrelationNonce;
     }
     effectiveManifest.projectId = projectId;
     effectiveManifest.findingCounts = {
