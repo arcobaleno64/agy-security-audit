@@ -536,6 +536,23 @@ export async function connectNativeAcpTransport(options = {}) {
       return failHandshake(`Failed to spawn ACP binary: ${err.message}`);
     }
 
+    // Drain stderr continuously to prevent pipe buffer backpressure (Codex P2)
+    if (child.stderr) {
+      child.stderr.on('data', () => {});
+    }
+
+    // Handle asynchronous errors on stdin stream to prevent unhandled EPIPE crash (Codex P2)
+    if (child.stdin) {
+      child.stdin.on('error', (err) => {
+        sessionStatus = TRANSPORT_STATUS.TERMINATED;
+        for (const [id, req] of pendingRequests.entries()) {
+          req.reject(new Error(`ACP stdin error: ${err.message}`));
+        }
+        pendingRequests.clear();
+        notifyCloseOnce({ code: null, signal: null, reason: `ACP stdin error: ${err.message}`, origin: 'error' });
+      });
+    }
+
     timer = setTimeout(() => {
       failHandshake(`Connection handshake timed out after ${timeoutMs}ms`);
     }, timeoutMs);
@@ -676,8 +693,9 @@ export async function connectNativeAcpTransport(options = {}) {
         } else {
           // 2. Active Session Dispatching Phase (R16-F04-01 / R17-F04-01)
           if (parsed && typeof parsed === 'object') {
-            // Check if this response answers a pending request
-            if (parsed.id !== undefined && pendingRequests.has(parsed.id)) {
+            // Check if this is a response to a pending request (has id and no method; method indicates a reverse request from server)
+            const isResponse = parsed.id !== undefined && parsed.method === undefined;
+            if (isResponse && pendingRequests.has(parsed.id)) {
               const req = pendingRequests.get(parsed.id);
               pendingRequests.delete(parsed.id);
 

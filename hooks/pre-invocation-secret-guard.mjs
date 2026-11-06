@@ -21,6 +21,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Emits result with strict LF line ending, avoiding CRLF conversion issues on Windows
 function emit(obj) {
@@ -229,8 +230,8 @@ export async function main() {
   return emit({});
 }
 
-// Direct execution guard
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+// Direct execution guard (handles file paths with spaces and special characters via fileURLToPath)
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   main().catch((err) => {
     emit({
       injectSteps: [

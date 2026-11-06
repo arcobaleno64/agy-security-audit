@@ -141,3 +141,30 @@ test('PreInvocation Secret Guard - Non-Object JSON Payload (Fail-Closed Invarian
   assert.equal(responseNull.terminationBehavior, 'terminate');
   assert.ok(responseNull.injectSteps[0].errorMessage.userMessage.includes('must be a non-null JSON object'));
 });
+
+test('PreInvocation Secret Guard - Installation path with spaces executes directly (R21-F01-01)', async () => {
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+  const tempSpaceDir = path.join(os.tmpdir(), `secret guard test ${Date.now()}`);
+  fs.mkdirSync(tempSpaceDir, { recursive: true });
+  const copiedHook = path.join(tempSpaceDir, 'pre-invocation-secret-guard.mjs');
+  fs.copyFileSync(HOOK_SCRIPT, copiedHook);
+
+  try {
+    const payload = JSON.stringify({
+      prompt: '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...'
+    });
+    const result = spawnSync(process.execPath, [copiedHook], {
+      input: payload,
+      encoding: 'utf8',
+      timeout: 3000
+    });
+
+    assert.equal(result.status, 0, `Process exited with code ${result.status}, stderr: ${result.stderr}`);
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(parsed.terminationBehavior, 'terminate');
+    assert.ok(parsed.injectSteps[0].errorMessage.userMessage.includes('PRIVATE_KEY'));
+  } finally {
+    fs.rmSync(tempSpaceDir, { recursive: true, force: true });
+  }
+});
