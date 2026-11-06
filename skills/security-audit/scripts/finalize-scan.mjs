@@ -1652,8 +1652,10 @@ export function validateBallot(vote, candidate = null, options = {}) {
     return { valid: false, reason: `Finding ID mismatch: ballot for '${vote.findingId}' passed to candidate '${candidate.id}'` };
   }
 
-  // Task-correlation nonce enforcement
-  const expectedNonce = options.expectedNonce || candidate?.nonce;
+  // Task-correlation nonce enforcement: execution options take strict precedence over candidate self-assertions
+  const expectedNonce = ('expectedNonce' in options)
+    ? options.expectedNonce
+    : (('nonce' in options) ? options.nonce : (candidate?.nonce || null));
   if (expectedNonce) {
     if (!vote.nonce) {
       return { valid: false, reason: `Missing required task-correlation nonce (expected '${expectedNonce}')` };
@@ -1666,6 +1668,11 @@ export function validateBallot(vote, candidate = null, options = {}) {
   const validLenses = ['REACHABILITY', 'DEFENSES', 'IMPACT'];
   if (vote.lens && !validLenses.includes(String(vote.lens).toUpperCase())) {
     return { valid: false, reason: `Invalid lens '${vote.lens}'. Must be one of: ${validLenses.join(', ')}` };
+  }
+
+  // Gate 0 (M54-P1-F03): Ballots for effort-directed candidates strictly require a valid lens
+  if ((candidate?.modelEffort || candidate?.effort) && (!vote.lens || !validLenses.includes(String(vote.lens).toUpperCase()))) {
+    return { valid: false, reason: `Effort-directed candidate strictly requires a valid lens ballot from: ${validLenses.join(', ')}` };
   }
 
   const validDecisions = ['CONFIRMED', 'SUPPORTS', 'REPORTABLE', 'FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED', 'DEFERRED', 'NEEDS_MANUAL_REVIEW'];
@@ -1683,7 +1690,7 @@ export function validateBallot(vote, candidate = null, options = {}) {
  * Every REFUTES decision strictly requires verifiable evidence binding (P1-02).
  * Every SUPPORTS decision strictly requires verifiable evidence binding and cannot self-certify via raw rigorMetrics (R1-P0-01).
  */
-export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null) {
+export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0 }, repoRoot = null, options = {}) {
   // 1. Schema & Location Containment Validation
   if (!candidate || typeof candidate !== 'object') {
     return { disposition: 'DEFERRED', mappedVerdict: 'NEEDS_MANUAL_REVIEW', reason: 'Malformed candidate' };
@@ -1711,10 +1718,99 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
 
   // 2. Candidate task-binding and deduplication of votes
   const safeVotes = Array.isArray(votes) ? votes : [];
+  // R8-F03-01: executionNonce derives strictly from trusted execution context, never untrusted candidate
+  const executionNonce = options.expectedNonce || options.nonce || null;
+  const candidateNonce = candidate?.nonce || null;
+
+  // 1. If candidate self-asserts a nonce that contradicts the execution context nonce, fail-closed
+  if (candidateNonce && executionNonce && candidateNonce !== executionNonce) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: `Candidate task-correlation nonce mismatch: candidate claims '${candidateNonce}', execution expected '${executionNonce}'; deferred under default-deny`,
+      votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
+
+  const isEffortCandidate = Boolean(
+    candidate?.modelEffort ||
+    candidate?.effort ||
+    candidate?.reasoningProfile ||
+    candidate?.tier ||
+    options?.modelEffort ||
+    options?.effort ||
+    options?.modelProvenance?.effort
+  );
+  const requiresNonce = Boolean(isEffortCandidate || options?.enforceThreeLens || options?.requireNonce);
+
+  // 2. Gate 0 (R8-F03-02 / RFC 0003 Section 3):
+  // Candidate disposition mutation (both REPORTABLE and SUPPRESSED) strictly requires verified execution nonce from execution context!
+  // Untrusted candidate.nonce cannot substitute for executionNonce to achieve authority.
+  if (requiresNonce && !executionNonce) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce from execution context; deferred under default-deny',
+      votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
+
+  // 3. For ballot filtering: ballot must match executionNonce if present, or candidateNonce
+  const expectedNonce = executionNonce || candidateNonce || null;
   const candidateVotes = safeVotes.filter(v => {
     if (!v) return false;
-    return validateBallot(v, candidate).valid;
+    return validateBallot(v, candidate, { expectedNonce }).valid;
   });
+
+  // Gate 0 (M54-P1-F03 / R5-F03-01): Conflicting/Contradictory Ballot Detection
+  // Check if any reviewerId, persona, or lens submitted contradictory/conflicting decisions
+  const decisionsByReviewer = new Map();
+  const decisionsByLens = new Map();
+  let hasConflictingBallots = false;
+  let conflictReason = null;
+
+  for (const v of candidateVotes) {
+    const revKey = v.reviewerId || v.persona || null;
+    const lensKey = v.lens ? String(v.lens).toUpperCase() : null;
+    const rawDecision = String(v.decision || v.verdict || '').toUpperCase();
+    const normDecision = ['CONFIRMED', 'SUPPORTS', 'REPORTABLE'].includes(rawDecision)
+      ? 'SUPPORTS'
+      : (['FALSE_POSITIVE', 'REFUTES', 'SUPPRESSED'].includes(rawDecision) ? 'REFUTES' : 'DEFERRED');
+
+    if (revKey) {
+      if (!decisionsByReviewer.has(revKey)) {
+        decisionsByReviewer.set(revKey, new Set());
+      }
+      const set = decisionsByReviewer.get(revKey);
+      if (set.size > 0 && !set.has(normDecision)) {
+        hasConflictingBallots = true;
+        conflictReason = `Reviewer '${revKey}' submitted conflicting decisions: [${[...set, normDecision].join(', ')}]`;
+      }
+      set.add(normDecision);
+    }
+
+    if (lensKey) {
+      if (!decisionsByLens.has(lensKey)) {
+        decisionsByLens.set(lensKey, new Set());
+      }
+      const set = decisionsByLens.get(lensKey);
+      if (set.size > 0 && !set.has(normDecision)) {
+        hasConflictingBallots = true;
+        conflictReason = `Lens '${lensKey}' received conflicting decisions: [${[...set, normDecision].join(', ')}]`;
+      }
+      set.add(normDecision);
+    }
+  }
+
+  // Under Default-Deny, any candidate with contradictory/conflicting ballots strictly fails closed to DEFERRED
+  if (hasConflictingBallots) {
+    return {
+      disposition: 'DEFERRED',
+      mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+      reason: `Contradictory ballots detected (${conflictReason}); deferred under default-deny`,
+      votesSummary: { total: candidateVotes.length, supports: 0, refutes: 0, unanimous: false }
+    };
+  }
 
   const dedupedVotes = [];
   const seenKeys = new Set();
@@ -1742,9 +1838,20 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     let defensesSupports = null;
     let impactSupports = null;
     const lenses = new Set();
+    const lensVotes = {
+      REACHABILITY: [],
+      DEFENSES: [],
+      IMPACT: []
+    };
 
     for (const v of dedupedVotes) {
-      if (v.lens) lenses.add(String(v.lens).toUpperCase());
+      if (v.lens) {
+        const uLens = String(v.lens).toUpperCase();
+        lenses.add(uLens);
+        if (lensVotes[uLens]) {
+          lensVotes[uLens].push(v);
+        }
+      }
       const decision = String(v.decision || v.verdict || '').toUpperCase();
       const lens = v.lens ? String(v.lens).toUpperCase() : null;
 
@@ -1843,8 +1950,27 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         };
       }
 
-      // 3-Lens requires unanimous confirmation (supports === 3)
-      if (supports === 3) {
+      // Gate 0 (M54-P1-F03 / R5-F03-01): Strict 3-Lens Unanimous Panel Enforcement
+      // Requires exactly 1 valid supporting ballot for REACHABILITY, 1 for DEFENSES, and 1 for IMPACT.
+      // Must have zero conflicting ballots, total === 3, candidateVotes.length === 3, and dedupedVotes.length === 3.
+      // Any duplicate votes per lens, split votes, deferrals, refutations, or total !== 3 strictly fails closed to DEFERRED
+      const isUnanimousThreeLens = Boolean(
+        !hasConflictingBallots &&
+        candidateVotes.length === 3 &&
+        dedupedVotes.length === 3 &&
+        total === 3 &&
+        supports === 3 &&
+        refutes === 0 &&
+        reachabilitySupports &&
+        defensesSupports &&
+        impactSupports &&
+        lensVotes.REACHABILITY.length === 1 &&
+        lensVotes.DEFENSES.length === 1 &&
+        lensVotes.IMPACT.length === 1 &&
+        validSupportVotes.length === 3
+      );
+
+      if (isUnanimousThreeLens) {
         // R1-P0-01: Verify required evidence tuple:
         // 1. REACHABILITY must prove source/entrypoint
         const reachEv = reachabilitySupports?._validatedEvidence || [];
@@ -1898,6 +2024,18 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
           };
         }
 
+        // Gate 0 (R7-F03-01 / RFC 0003 Section 3):
+        // Promotion to REPORTABLE strictly requires a verifiable execution task-correlation nonce!
+        // When expectedNonce is null, unassigned/un-correlated ballots cannot achieve REPORTABLE authority.
+        if (requiresNonce && !expectedNonce) {
+          return {
+            disposition: 'DEFERRED',
+            mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+            reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce to achieve REPORTABLE; deferred under default-deny',
+            votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+          };
+        }
+
         return {
           disposition: 'REPORTABLE',
           mappedVerdict: 'CONFIRMED',
@@ -1913,6 +2051,35 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
         mappedVerdict: 'NEEDS_MANUAL_REVIEW',
         reason: '3-Lens panel non-unanimous; candidate unproven under default-deny',
         votesSummary: { total, supports, refutes, unanimous: false, isThreeLens, lenses: Array.from(lenses) }
+      };
+    }
+
+    // Gate 0 (M54-P1-F03 / R5-F03-02 / RFC 0003):
+    // 3-Lens verification panel is required if:
+    // 1. Candidate carries effort metadata (modelEffort, reasoningProfile, tier, etc.)
+    // 2. Execution context mandates 3-lens (options.enforceThreeLens === true)
+    // 3. Any lens-based ballots were submitted (lenses.size > 0)
+    const requiresThreeLens = Boolean(
+      isEffortCandidate ||
+      options?.enforceThreeLens ||
+      lenses.size > 0
+    );
+
+    // Gate 0 (M54-P1-F03 / R5-F03-02 / RFC 0003): All candidates subject to 3-Lens requirement strictly require unanimous Fixed 3-Lens panel
+    if (requiresThreeLens && !isThreeLens) {
+      if (validDecisiveMitigationVote && refutes / total >= 0.66) {
+        return {
+          disposition: 'SUPPRESSED',
+          mappedVerdict: 'FALSE_POSITIVE',
+          reason: 'Affirmatively refuted by verifier with verified mitigation evidence',
+          votesSummary: { total, supports, refutes, unanimous: refutes === total, isThreeLens: false, lenses: Array.from(lenses) }
+        };
+      }
+      return {
+        disposition: 'DEFERRED',
+        mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+        reason: `Candidate subject to Fixed 3-Lens requirement strictly requires unanimous 3-Lens panel verification (REACHABILITY, DEFENSES, IMPACT); non-lens or partial ballots cannot grant REPORTABLE disposition under default-deny`,
+        votesSummary: { total, supports, refutes, unanimous: false, isThreeLens: false, lenses: Array.from(lenses) }
       };
     }
 
@@ -1960,7 +2127,16 @@ export function deriveFinalDisposition(candidate, votes = [], rigor = { score: 0
     const authoritativeRigor = deriveAuthoritativeRigor(candidate, validSupportVotes, repoRoot);
 
     // Reportable requirement: 2/3 supermajority + authoritative rigor >= 0.60 + source & sink verified
-    if (supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
+    // Gate 0 (M54-P1-F03 / R5-F03-02): All candidates subject to 3-lens requirement cannot bypass via legacy 2/3
+    if (!requiresThreeLens && supportRatio >= 0.66 && total >= 2 && authoritativeRigor.score >= 0.60 && authoritativeRigor.metrics.sourceVerified && authoritativeRigor.metrics.sinkVerified) {
+      if (requiresNonce && !expectedNonce) {
+        return {
+          disposition: 'DEFERRED',
+          mappedVerdict: 'NEEDS_MANUAL_REVIEW',
+          reason: 'Candidate subject to task-correlation requirement strictly requires verified execution nonce to achieve REPORTABLE; deferred under default-deny',
+          votesSummary: { total, supports, refutes, unanimous: false, lenses: Array.from(lenses) }
+        };
+      }
       return {
         disposition: 'REPORTABLE',
         mappedVerdict: 'CONFIRMED',
@@ -2742,6 +2918,26 @@ export function finalizeScan({
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
   const safeRepoRoot = (typeof repoRoot === 'string' && repoRoot.trim().length > 0) ? repoRoot : null;
+  // RFC 0003 Section 3 / R10-F03-01: Under Default-Deny on Authority Claims,
+  // an execution nonce from manifest is ONLY inheritable if:
+  // 1. Manifest exists and is incomplete (manifest.complete !== true)
+  // 2. Both executionRunId and manifestRunId are non-empty strings
+  // 3. executionRunId strictly equals manifestRunId
+  // Missing Run ID on either or both sides strictly refuses nonce inheritance under default-deny.
+  const manifestRunId = (manifest?.scanRunId && String(manifest.scanRunId).trim().length > 0)
+    ? String(manifest.scanRunId).trim()
+    : null;
+  const executionRunId = (scanRunId && String(scanRunId).trim().length > 0)
+    ? String(scanRunId).trim()
+    : null;
+  const isManifestRunBound = Boolean(
+    manifest &&
+    !manifest.complete &&
+    executionRunId &&
+    manifestRunId &&
+    executionRunId === manifestRunId
+  );
+  let effectiveNonce = nonce || (isManifestRunBound ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
@@ -2825,6 +3021,12 @@ export function finalizeScan({
     delete raw.isSingleCandidate;
     delete raw.mitigationProofLine;
     delete raw.mitigationReason;
+    // R8-F03-01: Untrusted candidate cannot self-assert execution nonce authority
+    const candidateClaimedNonce = raw.nonce || null;
+    delete raw.nonce;
+    if (candidateClaimedNonce && effectiveNonce && candidateClaimedNonce !== effectiveNonce) {
+      raw.nonce = candidateClaimedNonce; // Retain mismatch for deterministic fail-closed check
+    }
 
     // Sanitize attackPath location types: candidates cannot self-assert preimage/artifact types
     if (raw.attackPath && typeof raw.attackPath === 'object') {
@@ -2865,9 +3067,10 @@ export function finalizeScan({
     const rigor = calculateEvidenceSufficiency(raw.rigorMetrics);
 
     // Check for IMPACT lens calibration (strictly validating candidate identity, lens, and nonce)
+    const expectedCandidateNonce = effectiveNonce || candidateClaimedNonce || null;
     const candidateVotes = safeVotes.filter(v => {
       if (!v || (v.findingId !== raw.id && v.findingId !== candidateId)) return false;
-      return validateBallot(v, raw).valid;
+      return validateBallot(v, raw, { expectedNonce: expectedCandidateNonce }).valid;
     });
     const impactVote = candidateVotes.find(v => v.lens && String(v.lens).toUpperCase() === 'IMPACT');
 
@@ -2901,7 +3104,15 @@ export function finalizeScan({
         votesSummary: { total: 0, supports: 0, refutes: 0, unanimous: false }
       };
     } else {
-      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot);
+      const dispositionOptions = {
+        enforceThreeLens: true,
+        auditIntent: safeAuditIntent,
+        modelProvenance: safeModelProvenance,
+        modelEffort: raw.modelEffort || raw.effort || modelProvenance?.effort,
+        nonce: effectiveNonce || null,
+        expectedNonce: effectiveNonce || null
+      };
+      dispositionResult = deriveFinalDisposition(raw, safeVotes, rigor, safeRepoRoot, dispositionOptions);
     }
 
 
@@ -3083,7 +3294,7 @@ export function finalizeScan({
     ? (matrixValidation.valid && !hasUnresolvedCells && !hasUnconfirmedCriticalZeros)
     : (safeAuditIntent === 'REGRESSION');
 
-  let effectiveManifest = manifest;
+  let effectiveManifest = manifest ? { ...manifest } : null;
   if (!effectiveManifest && cloudflareCoverage) {
     effectiveManifest = {
       schemaVersion: '1.0.0',
@@ -3279,7 +3490,7 @@ export function finalizeScan({
   // R9-P0-01 & R9-P1-05: Update scan-manifest lifecycle & identity atomically
   let updatedManifest = effectiveManifest;
   const effectiveScanRunId = scanRunId || effectiveManifest?.scanRunId || `SCAN-${crypto.randomBytes(4).toString('hex')}`;
-  const effectiveNonce = nonce || effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null;
+  effectiveNonce = effectiveNonce || (isManifestRunBound ? (effectiveManifest?.nonce || effectiveManifest?.taskCorrelationNonce || null) : null);
   let projectId = null;
   // R10-P1-05: Identity precedence: USER_CONFIRMED Project Context > manifest.projectId > package.json > directory basename
   if (projectContextRes.context?.project?.projectId && projectContextRes.context.project.source !== 'SUGGESTED') {
@@ -3310,6 +3521,9 @@ export function finalizeScan({
     if (effectiveNonce) {
       effectiveManifest.nonce = effectiveNonce;
       effectiveManifest.taskCorrelationNonce = effectiveNonce;
+    } else if (!isManifestRunBound) {
+      delete effectiveManifest.nonce;
+      delete effectiveManifest.taskCorrelationNonce;
     }
     effectiveManifest.projectId = projectId;
     effectiveManifest.findingCounts = {

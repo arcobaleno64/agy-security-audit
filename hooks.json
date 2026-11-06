@@ -1,4 +1,13 @@
 {
+  "pre-invocation-secret-guard": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node hooks/pre-invocation-secret-guard.mjs",
+        "timeout": 5
+      }
+    ]
+  },
   "shadow-context-guard": {
     "PreToolUse": [
       {

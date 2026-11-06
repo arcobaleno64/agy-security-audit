@@ -657,7 +657,9 @@ export function executeLiveCoordinatorAudit({
   const stdout = proc.stdout || '';
   const stderr = proc.stderr || '';
 
-  console.log(`[E2E-COORDINATOR] Process completed with exit code ${proc.status ?? (proc.error ? 1 : 0)} in ${durationSeconds.toFixed(1)}s`);
+  const procSignal = proc.signal || null;
+  const procExitCode = proc.status !== null ? proc.status : (procSignal ? 128 : (proc.error ? 1 : 0));
+  console.log(`[E2E-COORDINATOR] Process completed with exit code ${procExitCode}${procSignal ? ` (signal: ${procSignal})` : ''} in ${durationSeconds.toFixed(1)}s`);
 
   // Detect candidates from scratch if available
   let candidateCount = null;
@@ -669,8 +671,8 @@ export function executeLiveCoordinatorAudit({
     } catch {}
   }
 
-  // Parse telemetry
-  const parsedTrace = parseStreamJsonTrace(stdout);
+  // Parse telemetry with explicit Exit Code triple contract governance
+  const parsedTrace = parseStreamJsonTrace(stdout, { exitCode: procExitCode, signal: procSignal });
   const discoveredConvId = parsedTrace.telemetry?.conversationId || null;
   const validation = validateCoordinatorTrace(stdout, discoveredConvId, targetClaim, candidateCount, repoRoot, {
     invocationStartTime: startTs,
@@ -718,8 +720,10 @@ export function executeLiveCoordinatorAudit({
   console.log(`✔ [E2E-COORDINATOR] Raw trace preserved at: ${tracePath}`);
   console.log(`✔ [E2E-COORDINATOR] Evidence envelope saved to: ${envelopePath}`);
 
+  const isExecutionSuccess = validation.valid && procExitCode === 0 && !procSignal && Boolean(parsedTrace.success);
+
   return {
-    success: validation.valid,
+    success: isExecutionSuccess,
     envelopePath,
     tracePath,
     validation,

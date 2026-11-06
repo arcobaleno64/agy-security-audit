@@ -224,6 +224,8 @@ export function buildPassArtifacts(passNumber = 1, options = {}) {
   const remedySem03 = options.remedySem03 !== undefined
     ? Boolean(options.remedySem03)
     : !(options.simulateVariance || options.preRemediation);
+  const passNonce = options.nonce || `nonce-eval-pass-${passNumber}`;
+  const scanRunId = options.scanRunId || `SCAN-EVAL-P${passNumber}`;
 
   let selectedArchetypes = [...VULNERABLE_ARCHETYPES];
 
@@ -264,7 +266,9 @@ export function buildPassArtifacts(passNumber = 1, options = {}) {
         startLine: targetLine,
         endLine
       },
-      cvssV4: arch.cvssV4
+      cvssV4: arch.cvssV4,
+      nonce: passNonce,
+      scanRunId
     });
 
     for (const b of arch.ballots) {
@@ -272,6 +276,8 @@ export function buildPassArtifacts(passNumber = 1, options = {}) {
         findingId: candidateId,
         lens: b.lens,
         decision: b.decision,
+        nonce: passNonce,
+        scanRunId,
         evidence: [
           {
             path: arch.file,
@@ -298,7 +304,9 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     : !(options.simulateVariance || options.preRemediation);
 
   const startTime = Date.now();
-  const { candidates, votes } = buildPassArtifacts(passNumber, { ...options, remedySem03 });
+  const runId = options.runId || `run-pass-${passNumber}`;
+  const passNonce = options.nonce || `nonce-eval-${runId}`;
+  const { candidates, votes } = buildPassArtifacts(passNumber, { ...options, remedySem03, nonce: passNonce, scanRunId: runId });
 
   // Finalize scan via authoritative finalizeScan under Default-Deny
   const finalization = finalizeScan({
@@ -306,7 +314,9 @@ export function executeBenchmarkPass(passNumber = 1, options = {}) {
     votes,
     repoRoot,
     auditIntent: 'DISCOVERY',
-    allowSelfAudit: true
+    allowSelfAudit: true,
+    nonce: passNonce,
+    scanRunId: runId
   });
 
   const durationMs = Date.now() - startTime;

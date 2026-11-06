@@ -199,15 +199,20 @@ export function validateIndependenceAuthority(taxonomyA, taxonomyB, claimedTier)
  * subagent invocations, and token consumption under Default-Deny.
  *
  * @param {string} rawNdjson - Raw newline-delimited JSON stream output
+ * @param {object|number} [options={}] - Optional parse options or numeric exit code
+ * @param {number} [options.exitCode=0] - Process exit code (must be 0 for success)
  * @returns {{ success: boolean, telemetry: object|null, rawResponse: string, error: string|null }}
  */
-export function parseStreamJsonTrace(rawNdjson) {
+export function parseStreamJsonTrace(rawNdjson, options = {}) {
+  const { exitCode = 0, signal = null } = (typeof options === 'number' ? { exitCode: options } : options) || {};
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
     return {
       success: false,
       telemetry: null,
       rawResponse: '',
-      error: 'NDJSON trace is empty or invalid'
+      error: (signal || exitCode !== 0)
+        ? `CENSORED_EXPOSURE: ${signal ? `Process terminated by signal: ${signal}` : `Process terminated with non-zero exit code: ${exitCode}`}`
+        : 'NDJSON trace is empty or invalid'
     };
   }
 
@@ -224,6 +229,7 @@ export function parseStreamJsonTrace(rawNdjson) {
   let accumulatedText = '';
   let durationSeconds = null;
   let finalStatus = null;
+  let finishedReason = null;
   let hasResultEvent = false;
   let resultError = null;
 
@@ -352,6 +358,11 @@ export function parseStreamJsonTrace(rawNdjson) {
       if (res.status) {
         finalStatus = res.status;
       }
+      if (res.finished_reason || res.finishedReason || res.finish_reason || res.finishReason) {
+        finishedReason = res.finished_reason || res.finishedReason || res.finish_reason || res.finishReason;
+      } else if (eventObj.finished_reason || eventObj.finishedReason || eventObj.finish_reason || eventObj.finishReason) {
+        finishedReason = eventObj.finished_reason || eventObj.finishedReason || eventObj.finish_reason || eventObj.finishReason;
+      }
       if (res.error) {
         resultError = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
       } else if (eventObj.error) {
@@ -379,11 +390,6 @@ export function parseStreamJsonTrace(rawNdjson) {
     };
   }
 
-  // Fallback to accumulated text if no result.response was provided
-  if (!rawResponse && accumulatedText) {
-    rawResponse = accumulatedText;
-  }
-
   // If tokenUsage was not populated by step_update events, but resultUsage exists, use resultUsage
   if (tokenUsage.totalTokens === 0 && tokenUsage.inputTokens === 0 && tokenUsage.outputTokens === 0 && resultUsage) {
     tokenUsage = resultUsage;
@@ -403,11 +409,27 @@ export function parseStreamJsonTrace(rawNdjson) {
     toolsUsed: Array.from(toolsUsed),
     subagentsInvoked: Array.from(subagentsInvoked),
     permissionMode: permissionMode || null,
+    finishedReason: finishedReason || null,
     tokenUsage,
     durationSeconds: durationSeconds !== null ? durationSeconds : null
   };
 
   // Fail-Closed Validation under Default-Deny:
+  // Gate 0 (M54-P1-F02 / R15-F02-01): Triple contract verification: Exit Code 0 + Result Event + Schema Validity
+  // Non-zero exit code or signal termination strictly and unconditionally classifies as CENSORED_EXPOSURE
+  if (signal || exitCode !== 0) {
+    telemetry.finishedReason = 'CENSORED_EXPOSURE';
+    const reasonMsg = signal
+      ? `Process terminated by signal: ${signal}`
+      : `Process terminated with non-zero exit code: ${exitCode}`;
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `CENSORED_EXPOSURE: ${reasonMsg}`
+    };
+  }
+
   if (resultError) {
     return {
       success: false,
@@ -415,6 +437,37 @@ export function parseStreamJsonTrace(rawNdjson) {
       rawResponse,
       error: `Stream execution error: ${resultError}`
     };
+  }
+
+  // Gate 0 (M54-P1-F02): Finished reason must belong to strict allowlist of successful completions
+  // If finishedReason is present, non-allowlisted values (interrupted, error, print_timeout, safety, max_tokens, etc.) Fail-Closed
+  const ALLOWED_FINISHED_REASONS = new Set(['stop', 'end_turn', 'complete', 'completed', 'eos', 'stop_sequence']);
+  if (finishedReason) {
+    const normalizedReason = String(finishedReason).trim().toLowerCase();
+    if (['max_tokens', 'length'].includes(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream truncated due to token limit with finished_reason: ${finishedReason}`
+      };
+    }
+    if (['safety', 'content_filter', 'filter', 'recitation'].includes(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream blocked by safety filter with finished_reason: ${finishedReason}`
+      };
+    }
+    if (!ALLOWED_FINISHED_REASONS.has(normalizedReason)) {
+      return {
+        success: false,
+        telemetry,
+        rawResponse,
+        error: `CENSORED_EXPOSURE: Stream terminated with non-allowlisted finished_reason: '${finishedReason}'`
+      };
+    }
   }
 
   if (finalStatus && finalStatus !== 'SUCCESS' && finalStatus !== 'COMPLETED') {
@@ -426,12 +479,21 @@ export function parseStreamJsonTrace(rawNdjson) {
     };
   }
 
-  if (!hasResultEvent && !rawResponse.trim()) {
+  if (!hasResultEvent) {
     return {
       success: false,
       telemetry,
       rawResponse,
-      error: 'NDJSON stream terminated prematurely without result event or response text'
+      error: 'CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event'
+    };
+  }
+
+  if (!rawResponse.trim()) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: 'CENSORED_EXPOSURE: NDJSON stream completed with empty response text'
     };
   }
 
@@ -937,7 +999,13 @@ export function createBenchmarkRunEnvelope(options = {}) {
     ...cleanEnvOverrides
   };
 
-  const candidates = Array.isArray(options.candidates) ? options.candidates : [];
+  const tierEffort = options.tier || options.effort || (options.environment?.modelTier) || null;
+  const candidates = (Array.isArray(options.candidates) ? options.candidates : []).map(c => {
+    if (c && typeof c === 'object' && tierEffort && !c.modelEffort) {
+      return { ...c, modelEffort: tierEffort };
+    }
+    return c;
+  });
   const verifiedFindings = Array.isArray(options.verifiedFindings)
     ? options.verifiedFindings
     : (Array.isArray(options.findings) ? options.findings : null);

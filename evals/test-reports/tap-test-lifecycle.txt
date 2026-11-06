@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: finished_reason lifecycle governance: omitted finished_reason on exit 0 is clean
+ok 1 - finished_reason lifecycle governance: omitted finished_reason on exit 0 is clean
+  ---
+  duration_ms: 1.4449
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: explicit stop finished_reason is clean
+ok 2 - finished_reason lifecycle governance: explicit stop finished_reason is clean
+  ---
+  duration_ms: 0.1713
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: safety filter fails closed as CENSORED_EXPOSURE
+ok 3 - finished_reason lifecycle governance: safety filter fails closed as CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.2197
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: token truncation fails closed as CENSORED_EXPOSURE
+ok 4 - finished_reason lifecycle governance: token truncation fails closed as CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.2068
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: accumulated text without final result event fails closed as CENSORED_EXPOSURE
+ok 5 - finished_reason lifecycle governance: accumulated text without final result event fails closed as CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.2098
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: empty response on result event fails closed as CENSORED_EXPOSURE
+ok 6 - finished_reason lifecycle governance: empty response on result event fails closed as CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.1787
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: delta fallback bypass counterexample F02 (Fail-Closed Invariant)
+ok 7 - finished_reason lifecycle governance: delta fallback bypass counterexample F02 (Fail-Closed Invariant)
+  ---
+  duration_ms: 0.143
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: non-allowlisted finished_reason interrupted (Fail-Closed Invariant)
+ok 8 - finished_reason lifecycle governance: non-allowlisted finished_reason interrupted (Fail-Closed Invariant)
+  ---
+  duration_ms: 0.1457
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: non-allowlisted finished_reason print_timeout (Fail-Closed Invariant)
+ok 9 - finished_reason lifecycle governance: non-allowlisted finished_reason print_timeout (Fail-Closed Invariant)
+  ---
+  duration_ms: 0.1631
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: allowlist completion reasons (stop, end_turn, complete)
+ok 10 - finished_reason lifecycle governance: allowlist completion reasons (stop, end_turn, complete)
+  ---
+  duration_ms: 0.2486
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: non-zero exit code 1 fails closed (Exit Code + Result Event + Schema triple contract)
+ok 11 - finished_reason lifecycle governance: non-zero exit code 1 fails closed (Exit Code + Result Event + Schema triple contract)
+  ---
+  duration_ms: 0.1728
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM) fails closed
+ok 12 - finished_reason lifecycle governance: non-zero exit code 137 (SIGKILL/OOM) fails closed
+  ---
+  duration_ms: 0.1155
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: non-zero exit code unconditionally overrides pre-existing finished_reason to CENSORED_EXPOSURE
+ok 13 - finished_reason lifecycle governance: non-zero exit code unconditionally overrides pre-existing finished_reason to CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.1406
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: signal termination (SIGTERM/SIGKILL with status null) fails closed as CENSORED_EXPOSURE
+ok 14 - finished_reason lifecycle governance: signal termination (SIGTERM/SIGKILL with status null) fails closed as CENSORED_EXPOSURE
+  ---
+  duration_ms: 0.1264
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: Claude stream missing result event fails closed as CENSORED_EXPOSURE (R15-F02-02)
+ok 15 - finished_reason lifecycle governance: Claude stream missing result event fails closed as CENSORED_EXPOSURE (R15-F02-02)
+  ---
+  duration_ms: 0.3547
+  type: 'test'
+  ...
+# Subtest: finished_reason lifecycle governance: Live benchmark runner signal normalization counterexample R16-F02-01 (SIGTERM with status null fails closed)
+ok 16 - finished_reason lifecycle governance: Live benchmark runner signal normalization counterexample R16-F02-01 (SIGTERM with status null fails closed)
+  ---
+  duration_ms: 0.1592
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 128.7223

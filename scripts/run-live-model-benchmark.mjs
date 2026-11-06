@@ -809,6 +809,7 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let procSignal = null;
 
     try {
       const agyBin = process.platform === 'win32' ? 'agy.exe' : 'agy';
@@ -824,15 +825,25 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
       });
 
       if (result.error) {
-        stderr = result.error.message;
+        stderr = result.error.code === 'ETIMEDOUT'
+          ? `CENSORED_EXPOSURE: Process execution timed out after ${timeoutMs}ms`
+          : `CENSORED_EXPOSURE: Process execution error: ${result.error.message}`;
         exitCode = 1;
       } else {
         stdout = result.stdout || '';
         stderr = result.stderr || '';
-        exitCode = result.status ?? 0;
+        procSignal = result.signal || null;
+        // Gate 0 (R16-F02-01): Explicitly detect signal termination (SIGTERM/SIGKILL with status: null).
+        // Default-Deny: Convert null status with signal to non-zero exit code (128) rather than 0.
+        exitCode = result.status !== null ? result.status : (result.signal ? 128 : (result.error ? 1 : 0));
+        if (procSignal) {
+          stderr = stderr
+            ? `${stderr}\nProcess terminated by signal: ${procSignal}`
+            : `CENSORED_EXPOSURE: Process terminated by signal: ${procSignal}`;
+        }
       }
     } catch (err) {
-      stderr = err.message;
+      stderr = `CENSORED_EXPOSURE: Process execution exception: ${err.message}`;
       exitCode = 1;
     }
 
@@ -842,24 +853,24 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
     let schemaError = null;
     let executionTelemetry = null;
 
-    const trace = parseStreamJsonTrace(stdout);
+    const trace = parseStreamJsonTrace(stdout, { exitCode, signal: procSignal });
     if (trace.success) {
       executionTelemetry = trace.telemetry;
+      const rawText = trace.rawResponse.trim();
+      const fenceMatch = rawText.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+      const cleanJson = fenceMatch ? fenceMatch[1].trim() : rawText;
       try {
-        parsedOutput = JSON.parse(trace.rawResponse.trim());
+        parsedOutput = JSON.parse(cleanJson);
       } catch (err) {
-        schemaError = `SCHEMA_VIOLATION: Invalid JSON in stream result response: ${err.message}`;
+        schemaError = `CENSORED_EXPOSURE: Invalid JSON in stream result response: ${err.message}`;
       }
     } else {
       if (trace.telemetry) {
         executionTelemetry = trace.telemetry;
       }
-      // Fallback in case raw JSON was returned directly without stream events
-      try {
-        parsedOutput = JSON.parse(stdout.trim());
-      } catch (err) {
-        schemaError = `STREAM_JSON_PARSE_ERROR: ${trace.error || err.message}`;
-      }
+      schemaError = trace.error?.startsWith('CENSORED_EXPOSURE')
+        ? trace.error
+        : `CENSORED_EXPOSURE: Stream trace validation failed (${trace.error || 'terminated prematurely'})`;
     }
 
     if (executionTelemetry) {
@@ -892,16 +903,37 @@ export function runAgyDiscoveryOnFixture(fixture, repoRoot = DEFAULT_REPO_ROOT, 
           symbol: cand.symbol || fixture.id
         });
       }
+      if (options.tier || options.effort || options.reasoningProfile) {
+        cand.modelEffort = options.tier || options.effort || options.reasoningProfile;
+      }
       candidates.push(cand);
     }
 
-    const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked");
-    let error = exitCode !== 0 ? (stderr || `Process exited with code ${exitCode}`) : null;
+    const ALLOWED_FINISHED_REASONS = new Set(['stop', 'end_turn', 'complete', 'completed', 'eos', 'stop_sequence']);
+    let nonAllowlistedFinishedReason = false;
+    if (executionTelemetry?.finishedReason) {
+      const normReason = String(executionTelemetry.finishedReason).trim().toLowerCase();
+      if (!ALLOWED_FINISHED_REASONS.has(normReason)) {
+        nonAllowlistedFinishedReason = true;
+      }
+    }
+
+    const isFilterBlocked = stdout.includes("blocked by Gemini's filters") || stdout.includes("request was blocked") || (executionTelemetry?.finishedReason && ['safety', 'content_filter', 'filter', 'recitation'].includes(String(executionTelemetry.finishedReason).toLowerCase()));
+    let error = (exitCode !== 0 || procSignal)
+      ? (stderr?.startsWith('CENSORED_EXPOSURE') ? stderr : `CENSORED_EXPOSURE: Process exited with code ${exitCode}${procSignal ? ` (signal: ${procSignal})` : ''} (${stderr || 'non-zero exit'})`)
+      : null;
+    if (!error && nonAllowlistedFinishedReason) {
+      error = `CENSORED_EXPOSURE: Stream terminated with non-allowlisted finished_reason: ${executionTelemetry.finishedReason}`;
+    }
     if (!error && schemaError) {
       error = schemaError;
     }
     if (!error && isFilterBlocked) {
-      error = 'Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
+      error = 'CENSORED_EXPOSURE: Upstream API content filter triggered; retrying discovery pass with alternative token sampling';
+    }
+
+    if ((exitCode !== 0 || procSignal) && executionTelemetry) {
+      executionTelemetry.finishedReason = 'CENSORED_EXPOSURE';
     }
 
     const isRateLimit = isRateLimitError(stderr) || isRateLimitError(stdout) || isRateLimitError(error);

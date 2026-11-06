@@ -154,14 +154,16 @@ export function getGitProvenance(repoRoot) {
  * Builds standard SARIF 2.1.0 document.
  * Centralized through finalizeScan to enforce default-deny and canonical contract.
  */
-export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
+export function renderSarif({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null, scanRunId = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
     votes,
-    auditIntent
+    auditIntent,
+    nonce,
+    scanRunId
   });
   return renderSarifFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -177,14 +179,16 @@ export function renderSarif({ findings = [], manifest = null, provenance = null,
  * Builds Human-Readable Markdown Audit Report with strict entity escaping and default-deny.
  * Centralized through finalizeScan to guarantee 100% parity with SARIF and JSON.
  */
-export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY' }) {
+export function renderMarkdown({ findings = [], manifest = null, provenance = null, repoRoot = process.cwd(), votes = [], auditIntent = 'DISCOVERY', nonce = null, scanRunId = null }) {
   const finalization = finalizeScan({
     candidates: findings,
     manifest,
     repoRoot,
     provenance,
     votes,
-    auditIntent
+    auditIntent,
+    nonce,
+    scanRunId
   });
   return renderMarkdownFromCanonical({
     canonicalFindings: finalization.canonicalFindings,
@@ -314,6 +318,10 @@ export function runTests() {
 
   // 4. Directory manifest validation
   const validManifest = {
+    complete: false,
+    scanRunId: 'SCAN-RUN-SARIF-001',
+    nonce: 'NONCE-SARIF-001',
+    taskCorrelationNonce: 'NONCE-SARIF-001',
     entries: [
       { path: 'src/', status: 'SCANNED', fileCount: 10, reason: 'Source code' },
       { path: 'dist/', status: 'EXCLUDED_GENERATED', fileCount: 5, reason: 'Build output' }
@@ -350,6 +358,7 @@ export function runTests() {
       ruleId: 'CWE-89',
       title: 'SQL Injection in Auth',
       severity: 'CRITICAL',
+      nonce: 'NONCE-SARIF-001',
       cvssV4: {
         vector: validVector,
         score: 9.3,
@@ -369,7 +378,9 @@ export function runTests() {
     {
       findingId: 'SEC-001',
       reviewerId: 'rev-1',
+      lens: 'REACHABILITY',
       decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
       evidence: [
         { path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'source' },
         { path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }
@@ -378,12 +389,22 @@ export function runTests() {
     {
       findingId: 'SEC-001',
       reviewerId: 'rev-2',
+      lens: 'DEFENSES',
       decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
       evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 42, role: 'control' }]
+    },
+    {
+      findingId: 'SEC-001',
+      reviewerId: 'rev-3',
+      lens: 'IMPACT',
+      decision: 'CONFIRMED',
+      nonce: 'NONCE-SARIF-001',
+      evidence: [{ path: 'skills/security-audit/scripts/safe-git.mjs', line: 44, role: 'sink' }]
     }
   ];
 
-  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes, repoRoot: process.cwd() });
+  const sarif = renderSarif({ findings: confirmedFindings, manifest: validManifest, votes: confirmedVotes, scanRunId: 'SCAN-RUN-SARIF-001', repoRoot: process.cwd() });
   if (sarif.version !== '2.1.0') throw new Error('SARIF version must be 2.1.0');
   if (sarif.runs[0].tool.driver.rules.length !== 1) throw new Error('Rule was not registered in driver.rules');
   if (sarif.runs[0].results[0].level !== 'error') throw new Error('Critical confirmed finding must map to level error');
@@ -594,6 +615,28 @@ export function runTests() {
 
   if (canonicalSarif.runs[0].results.length !== 1 || !canonicalMd.includes('SQL Injection in Auth')) {
     throw new Error('P0 VIOLATION: Inconsistency between canonical SARIF and Markdown outputs!');
+  }
+
+  // 17.1 Public Renderer Parity (R11-F03-01): renderSarif and renderMarkdown maintain identical canonical disposition parity under scanRunId inheritance
+  const publicSarif = renderSarif({
+    findings: confirmedFindings,
+    manifest: validManifest,
+    votes: confirmedVotes,
+    scanRunId: 'SCAN-RUN-SARIF-001',
+    repoRoot: process.cwd()
+  });
+  const publicMd = renderMarkdown({
+    findings: confirmedFindings,
+    manifest: validManifest,
+    votes: confirmedVotes,
+    scanRunId: 'SCAN-RUN-SARIF-001',
+    repoRoot: process.cwd()
+  });
+  if (publicSarif.runs[0].results[0].properties.disposition !== 'REPORTABLE') {
+    throw new Error('R11-F03-01 VIOLATION: renderSarif failed to produce REPORTABLE under scanRunId inheritance');
+  }
+  if (!publicMd.includes('REPORTABLE') && publicMd.includes('DEFERRED')) {
+    throw new Error('R11-F03-01 VIOLATION: renderMarkdown produced DEFERRED while renderSarif produced REPORTABLE under scanRunId inheritance');
   }
   console.log('✔ 17. P0 Invariant: 100% Canonical Parity between SARIF and Markdown.');
 
@@ -6074,6 +6117,8 @@ const votesPath = getArg('--votes');
 const manifestPath = getArg('--manifest');
 const repoRootArg = getArg('--repo-root') || process.cwd();
 const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
+const nonceArg = getArg('--nonce') || getArg('--task-correlation-nonce');
+const scanRunIdArg = getArg('--scan-run-id') || getArg('--run-id');
 const outputSarifPath = getArg('--output-sarif');
 const outputMdPath = getArg('--output-md');
 
@@ -6108,7 +6153,15 @@ if (canonicalPath || inputPath) {
         console.warn('[DEFAULT-DENY] Direct render without --votes. Under Default-Deny, all findings are derived as DEFERRED.');
       }
 
-      const finalization = finalizeScan({ candidates, manifest, repoRoot, votes, auditIntent: intentArg });
+      const finalization = finalizeScan({
+        candidates,
+        manifest,
+        repoRoot,
+        votes,
+        auditIntent: intentArg,
+        nonce: nonceArg || null,
+        scanRunId: scanRunIdArg || null
+      });
       canonicalFindings = finalization.canonicalFindings;
       coverageStatus = finalization.coverageStatus;
       activeIntent = finalization.auditIntent;

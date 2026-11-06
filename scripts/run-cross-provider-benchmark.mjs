@@ -55,13 +55,18 @@ const REPO_ROOT = path.resolve(__dirname, '..');
  * Extracts conversation/session ID, model identifier, text deltas, result object,
  * tool usage, duration, and token usage from Anthropic NDJSON stream.
  */
-export function parseClaudeStreamJsonTrace(rawNdjson) {
+export function parseClaudeStreamJsonTrace(rawNdjson, options = {}) {
+  const { exitCode = 0, signal = null } =
+    (typeof options === 'number' ? { exitCode: options } : options) || {};
+
   if (typeof rawNdjson !== 'string' || !rawNdjson.trim()) {
     return {
       success: false,
       telemetry: null,
       rawResponse: '',
-      error: 'NDJSON trace is empty or invalid'
+      error: (signal || exitCode !== 0)
+        ? `CENSORED_EXPOSURE: ${signal ? `Process terminated by signal: ${signal}` : `Process terminated with non-zero exit code: ${exitCode}`}`
+        : 'NDJSON trace is empty or invalid'
     };
   }
 
@@ -169,12 +174,34 @@ export function parseClaudeStreamJsonTrace(rawNdjson) {
     durationSeconds
   };
 
+  if (signal || exitCode !== 0) {
+    const reasonMsg = signal
+      ? `Process terminated by signal: ${signal}`
+      : `Process terminated with non-zero exit code: ${exitCode}`;
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: `CENSORED_EXPOSURE: ${reasonMsg}`
+    };
+  }
+
+  // Gate 0 (M54-P1-F02 / R15-F02-02): Result event is mandatory under triple contract
+  if (!hasResultEvent) {
+    return {
+      success: false,
+      telemetry,
+      rawResponse,
+      error: 'CENSORED_EXPOSURE: NDJSON stream terminated prematurely without final result event'
+    };
+  }
+
   if (resultError) {
     return { success: false, telemetry, rawResponse, error: resultError };
   }
 
   return {
-    success: hasResultEvent || rawResponse.length > 0,
+    success: exitCode === 0 && !signal && hasResultEvent,
     telemetry,
     rawResponse,
     sessionId,
@@ -270,10 +297,13 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     if (res.error) {
       execError = res.error.message;
       exitCode = 1;
+    } else if (res.signal) {
+      execError = `Process terminated by signal: ${res.signal}`;
+      exitCode = 128;
     } else {
       stdout = res.stdout || '';
       stderr = res.stderr || '';
-      exitCode = res.status ?? 0;
+      exitCode = res.status ?? (res.signal ? 128 : 0);
     }
   } catch (err) {
     execError = err.message;
@@ -298,6 +328,21 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     };
   }
 
+  // Gate 0 (M54-P1-F02 / R14-F02-01): Non-zero exit code strictly fails closed as CENSORED_EXPOSURE
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      censored: true,
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`,
+      durationMs,
+      stdout,
+      stderr,
+      candidates: [],
+      identityAttested: false,
+      telemetry: null
+    };
+  }
+
   if (!stdout.trim()) {
     return {
       success: false,
@@ -312,7 +357,7 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
     };
   }
 
-  const trace = parseStreamJsonTrace(stdout);
+  const trace = parseStreamJsonTrace(stdout, { exitCode });
   let parsedRaw = [];
   let parseError = null;
 
@@ -357,11 +402,12 @@ export function executeAgyFixture(fixture, repoRoot = REPO_ROOT, options = {}) {
   }
 
   const identityAttested = Boolean(trace.telemetry?.conversationId);
+  const isExecutionValid = exitCode === 0 && Boolean(trace.success);
 
   return {
-    success: true,
-    censored: false,
-    error: null,
+    success: isExecutionValid,
+    censored: !isExecutionValid,
+    error: isExecutionValid ? null : (trace.error || `Process exit code ${exitCode}`),
     durationMs,
     stdout,
     stderr,
@@ -410,10 +456,13 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     if (res.error) {
       execError = res.error.message;
       exitCode = 1;
+    } else if (res.signal) {
+      execError = `Process terminated by signal: ${res.signal}`;
+      exitCode = 128;
     } else {
       stdout = res.stdout || '';
       stderr = res.stderr || '';
-      exitCode = res.status ?? 0;
+      exitCode = res.status ?? (res.signal ? 128 : 0);
     }
   } catch (err) {
     execError = err.message;
@@ -438,6 +487,21 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     };
   }
 
+  // Gate 0 (M54-P1-F02 / R14-F02-01): Non-zero exit code strictly fails closed as CENSORED_EXPOSURE
+  if (exitCode !== 0) {
+    return {
+      success: false,
+      censored: true,
+      error: `CENSORED_EXPOSURE: Process terminated with non-zero exit code: ${exitCode}`,
+      durationMs,
+      stdout,
+      stderr,
+      candidates: [],
+      identityAttested: false,
+      telemetry: null
+    };
+  }
+
   if (!stdout.trim()) {
     return {
       success: false,
@@ -452,7 +516,7 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
     };
   }
 
-  const trace = parseClaudeStreamJsonTrace(stdout);
+  const trace = parseClaudeStreamJsonTrace(stdout, { exitCode });
   let parsedRaw = [];
   let parseError = null;
 
@@ -487,11 +551,12 @@ export function executeClaudeFixture(fixture, repoRoot = REPO_ROOT, options = {}
   }
 
   const identityAttested = Boolean(trace.sessionId && trace.modelName);
+  const isExecutionValid = exitCode === 0 && Boolean(trace.success);
 
   return {
-    success: true,
-    censored: false,
-    error: null,
+    success: isExecutionValid,
+    censored: !isExecutionValid,
+    error: isExecutionValid ? null : (trace.error || `Process exit code ${exitCode}`),
     durationMs,
     stdout,
     stderr,
