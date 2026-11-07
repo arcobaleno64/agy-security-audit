@@ -38,13 +38,23 @@
         },
         {
           "path": "skills/3lens/tool-integrity-manifest.json",
-          "sha256": "b7d71ead0c1fc8b19ce646b414c017fd85ada28aca03b08c1f216798d34ccbcd",
+          "sha256": "b9689a54d16bd439a38e46bb453faca99604bad90a143de212025ef2f09de74b",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {
           "path": "skills/3lens/scripts/adapters/cloudflare-adapter.mjs",
           "sha256": "36c3eac48d828b2d582ac411db35c7bab4522d679d7d7a855de12fa6ef0ef2a0",
           "description": "Cloudflare Finding Producer Adapter (lossless canonical translation, quarantine boundary, zero external dependencies)"
+        },
+        {
+          "path": "skills/3lens/scripts/adapters/plugin-data-adapter.mjs",
+          "sha256": "0bc3628b7c762785d125d2e5004138e0b603f49bc1351027811cd6cd1cd07f12",
+          "description": "Persistent Plugin Data Storage and Trust Registry Adapter (atomic mutual exclusion, root authorization chain)"
+        },
+        {
+          "path": "skills/3lens/scripts/compact-guard.mjs",
+          "sha256": "4e3c011fd45c085e24e0371f5a515d57cd142065fae9585345f54f72bada2bd2",
+          "description": "Compacted Audit State Envelope (CASE) Guard and Context Invariant Preservation"
         },
         {
           "path": "scripts/test-runtime-confinement.mjs",

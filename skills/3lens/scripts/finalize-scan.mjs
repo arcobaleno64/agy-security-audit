@@ -4642,6 +4642,8 @@ export function renderMarkdownFromCanonical({
  */
 export const REQUIRED_CRITICAL_SCRIPTS = [
   'scripts/adapters/cloudflare-adapter.mjs',
+  'scripts/adapters/plugin-data-adapter.mjs',
+  'scripts/compact-guard.mjs',
   'scripts/safe-git.mjs',
   'scripts/finalize-scan.mjs',
   'scripts/build-inventory.mjs',
@@ -5061,6 +5063,10 @@ if (isDirectExecution) {
   const intentArg = getArg('--intent') || getArg('--audit-intent') || 'DISCOVERY';
   const scanRunIdArg = getArg('--run-id') || getArg('--scan-run-id');
   const nonceArg = getArg('--nonce') || getArg('--task-correlation-nonce');
+  const isCompactedSessionArg = args.includes('--compacted-session') || args.includes('--is-compacted');
+  const compactContentPathArg = getArg('--compact-content');
+  const compactEnvelopePathArg = getArg('--compact-envelope');
+  const preCompactionStatePathArg = getArg('--pre-compaction-state');
   const outputJsonPath = getArg('--output') || getArg('--output-json');
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
@@ -5219,6 +5225,33 @@ if (isDirectExecution) {
         executedStages = executedStagesArg.split(',').map(s => s.trim()).filter(Boolean);
       }
 
+      let compactedAuditContent = null;
+      if (compactContentPathArg && fs.existsSync(compactContentPathArg)) {
+        compactedAuditContent = fs.readFileSync(compactContentPathArg, 'utf8');
+      }
+
+      let compactedAuditEnvelope = null;
+      if (compactEnvelopePathArg && fs.existsSync(compactEnvelopePathArg)) {
+        try {
+          compactedAuditEnvelope = JSON.parse(fs.readFileSync(compactEnvelopePathArg, 'utf8'));
+        } catch {}
+      } else if (fs.existsSync(path.resolve(repoRoot, 'scratch/compacted-audit-envelope.json'))) {
+        try {
+          compactedAuditEnvelope = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'scratch/compacted-audit-envelope.json'), 'utf8'));
+        } catch {}
+      }
+
+      let preCompactionState = null;
+      if (preCompactionStatePathArg && fs.existsSync(preCompactionStatePathArg)) {
+        try {
+          preCompactionState = JSON.parse(fs.readFileSync(preCompactionStatePathArg, 'utf8'));
+        } catch {}
+      } else if (fs.existsSync(path.resolve(repoRoot, 'scratch/pre-compaction-state.json'))) {
+        try {
+          preCompactionState = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'scratch/pre-compaction-state.json'), 'utf8'));
+        } catch {}
+      }
+
       const finalization = finalizeScan({
         candidates,
         manifest,
@@ -5232,7 +5265,11 @@ if (isDirectExecution) {
         executionAttestation,
         scanRunId: scanRunIdArg,
         nonce: nonceArg,
-        cloudflareCoverage
+        cloudflareCoverage,
+        compactedAuditEnvelope,
+        compactedAuditContent,
+        preCompactionState,
+        isCompactedSession: isCompactedSessionArg
       });
 
       if (outputJsonPath) {

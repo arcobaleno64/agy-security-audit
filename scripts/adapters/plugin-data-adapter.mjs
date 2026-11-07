@@ -414,11 +414,17 @@ export function validateTrustRegistry(registry, options = {}) {
         error: `Genesis registry (v1) activeKeyId/fingerprint must match embedded root anchor (${expectedRootId})`
       };
     }
-    // F02 Closure: Genesis registry keys must contain ONLY the genesis root anchor (strictly reject rogue key injection)
-    if (registry.keys.length !== 1 || registry.keys[0].keyId !== expectedRootId || registry.keys[0].keyFingerprint !== expectedRootFp) {
+    // F02 / R03-B02 Closure: Genesis registry keys must contain ONLY the genesis root anchor with exact properties
+    if (
+      registry.keys.length !== 1 ||
+      registry.keys[0].keyId !== expectedRootId ||
+      registry.keys[0].keyFingerprint !== expectedRootFp ||
+      registry.keys[0].publicKeyPem !== expectedRootPem ||
+      registry.keys[0].status !== 'ACTIVE_PINNED_ROOT'
+    ) {
       return {
         valid: false,
-        error: `Genesis registry (v1) keys array must contain exactly the pinned root key (${expectedRootId})`
+        error: `Genesis registry (v1) keys array must contain exactly the pinned root key (${expectedRootId}) with status ACTIVE_PINNED_ROOT and matching PEM`
       };
     }
   } else {
@@ -439,7 +445,19 @@ export function validateTrustRegistry(registry, options = {}) {
     let signerPem = null;
     if (proof.authorizedBy === expectedRootId) {
       signerPem = expectedRootPem;
-    } else if (options.priorRegistry && Array.isArray(options.priorRegistry.keys)) {
+    } else if (options.priorRegistry && typeof options.priorRegistry === 'object' && Array.isArray(options.priorRegistry.keys)) {
+      // R03-B02: Prior registry must be authenticated itself before trusting priorRegistry.keys
+      const priorValidation = validateTrustRegistry(options.priorRegistry, {
+        ...options,
+        priorRegistry: null,
+        minRegistryVersion: 1
+      });
+      if (!priorValidation.valid) {
+        return {
+          valid: false,
+          error: `Unauthenticated priorRegistry rejected: ${priorValidation.error}`
+        };
+      }
       const priorKey = options.priorRegistry.keys.find(
         k => k.keyId === proof.authorizedBy && (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE')
       );
@@ -451,7 +469,7 @@ export function validateTrustRegistry(registry, options = {}) {
     if (!signerPem) {
       return {
         valid: false,
-        error: `Signer key '${proof.authorizedBy}' for authorizationProof not found in trusted authority root or prior registry`
+        error: `Signer key '${proof.authorizedBy}' for authorizationProof not found in trusted authority root or authenticated prior registry`
       };
     }
 
@@ -524,6 +542,24 @@ export function loadTrustRegistry(options = {}) {
   }
 
   const fallback = JSON.parse(JSON.stringify(EMBEDDED_ROOT_REGISTRY));
+
+  // R03-B02: Strictly validate fallback against minRegistryVersion
+  if (typeof options.minRegistryVersion === 'number' && fallback.registryVersion < options.minRegistryVersion) {
+    const errorMsg = `Monotonic regression: registry version ${fallback.registryVersion} < minimum expected ${options.minRegistryVersion}`;
+    if (options.failClosed !== false) {
+      throw new Error(`[MONOTONIC_REGRESSION_FAIL_CLOSED] ${errorMsg}`);
+    }
+    return { source: 'EMBEDDED_FALLBACK', registry: null, valid: false, error: errorMsg };
+  }
+
+  // Validate fallback schema integrity
+  const fallbackValidation = validateTrustRegistry(fallback);
+  if (!fallbackValidation.valid) {
+    if (options.failClosed !== false) {
+      throw new Error(`Embedded fallback registry fails schema validation: ${fallbackValidation.error}`);
+    }
+    return { source: 'EMBEDDED_FALLBACK', registry: null, valid: false, error: fallbackValidation.error };
+  }
 
   if (options.autoInitialize === true) {
     saveTrustRegistry(fallback, options);
@@ -607,7 +643,7 @@ export function saveTrustRegistry(registry, options = {}) {
  * @param {object} [options={}]
  * @returns {{ valid: boolean, entries: Array<object>, error: string|null, count: number }}
  */
-export function loadRevocationJournal(options = {}) {
+function doLoadRevocationJournal(options = {}) {
   const journalPath = getRevocationJournalPath(options);
   const checkpointPath = getRevocationCheckpointPath(options);
 
@@ -634,6 +670,11 @@ export function loadRevocationJournal(options = {}) {
       if (options.failClosed !== false) throw new Error(msg);
       return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
     }
+    if (typeof options.minJournalEntries === 'number' && options.minJournalEntries > 0) {
+      const msg = `[JOURNAL_ROLLBACK_DETECTED] Journal file missing but minJournalEntries is ${options.minJournalEntries}`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
+    }
     return { valid: true, entries: [], error: null, count: 0, path: journalPath };
   }
 
@@ -648,12 +689,20 @@ export function loadRevocationJournal(options = {}) {
       return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
     }
 
+    if (typeof options.minJournalEntries === 'number' && lines.length < options.minJournalEntries) {
+      const msg = `[JOURNAL_ROLLBACK_DETECTED] Journal has ${lines.length} entries, less than expected minimum ${options.minJournalEntries}`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: lines.length, path: journalPath };
+    }
+
     const trustRegistryLoad = loadTrustRegistry({ ...options, failClosed: true });
     const trustedKeys = new Map();
 
     if (trustRegistryLoad.valid && trustRegistryLoad.registry) {
+      const revokedSet = new Set(trustRegistryLoad.registry.revokedKeyIds || []);
       for (const k of trustRegistryLoad.registry.keys || []) {
-        if (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE') {
+        // R03-B02: Allow RETIRED keys to verify historical entries, provided they are not revoked
+        if (['ACTIVE_PINNED_ROOT', 'ACTIVE', 'RETIRED'].includes(k.status) && !revokedSet.has(k.keyId)) {
           trustedKeys.set(k.keyId, k.publicKeyPem);
         }
       }
@@ -738,6 +787,26 @@ export function loadRevocationJournal(options = {}) {
 }
 
 /**
+ * Loads and validates the hash-chained revocation journal from PLUGIN_DATA.
+ * Resolves M54-P2-F01 and M54-P2-F04: Reader synchronization via withFileLock,
+ * mandatory signature verification, root & retired key verification, and anti-rollback.
+ *
+ * @param {object} [options={}]
+ * @returns {{ valid: boolean, entries: Array<object>, error: string|null, count: number }}
+ */
+export function loadRevocationJournal(options = {}) {
+  const journalPath = getRevocationJournalPath(options);
+  if (options.skipLock === true || !fs.existsSync(journalPath)) {
+    return doLoadRevocationJournal(options);
+  }
+  return withFileLock(journalPath, () => doLoadRevocationJournal(options), {
+    ...options,
+    staleLockTimeoutMs: options.staleLockTimeoutMs || 10000,
+    lockTimeoutMs: options.lockTimeoutMs || 15000
+  });
+}
+
+/**
  * Appends an entry to the revocation journal with mandatory Ed25519 signature under mutual exclusion.
  * Resolves M54-P2-F01 and M54-P2-F04.
  *
@@ -772,8 +841,34 @@ export function appendRevocationEntry(entryInput, options = {}) {
   const dir = path.dirname(journalPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
+  // R03-B03: Check leaf files for symlink pollution before opening/appending
+  const forbiddenRoots = [
+    options.repoRoot ? toRealNormalizedPath(options.repoRoot) : null,
+    toRealNormalizedPath(process.cwd()),
+    process.env.INIT_CWD ? toRealNormalizedPath(process.env.INIT_CWD) : null,
+    ...(Array.isArray(options.workspacePaths) ? options.workspacePaths.map(p => toRealNormalizedPath(p)) : [])
+  ].filter(Boolean);
+
+  for (const targetPath of [journalPath, checkpointPath]) {
+    if (fs.existsSync(targetPath)) {
+      const lstat = fs.lstatSync(targetPath);
+      if (lstat.isSymbolicLink()) {
+        throw new Error(`[SYMLINK_POLLUTION_VIOLATION] Target file (${targetPath}) must not be a symbolic link`);
+      }
+      if (options.allowInWorkspace !== true) {
+        const realFile = toRealNormalizedPath(targetPath).toLowerCase();
+        for (const root of forbiddenRoots) {
+          const rLower = root.toLowerCase();
+          if (realFile === rLower || realFile.startsWith(rLower + '/')) {
+            throw new Error(`[ZERO_WORKSPACE_POLLUTION_VIOLATION] Target file realpath (${realFile}) resides inside workspace (${root})`);
+          }
+        }
+      }
+    }
+  }
+
   return withFileLock(journalPath, () => {
-    const journal = loadRevocationJournal({ ...options, failClosed: true });
+    const journal = loadRevocationJournal({ ...options, failClosed: true, skipLock: true });
     const entryIndex = journal.entries.length;
 
     let prevEntryDigest = '0'.repeat(64);

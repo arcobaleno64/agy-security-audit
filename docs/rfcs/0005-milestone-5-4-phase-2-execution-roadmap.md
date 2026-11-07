@@ -113,18 +113,18 @@ $$\text{EXECUTION\_COMPLETE} \ne \text{FINDING\_VERIFIED} \ne \text{RELEASE\_AUT
 
 - **Review R01 Status**: `REJECTED` (10 Findings: 2 Critical, 5 High, 3 Medium)
 - **Review R02 Status**: `REJECTED` (F10 Closed; F01, F02, F05, F06, F07, F08 Open; F03, F04, F09 Partial)
-- **Review R03 Status**: `PENDING_REVIEW` (Full R02 remediations implemented across TCB and evaluation corpus)
-- **Phase 2 Exit Gate Status**: `PENDING_REVIEW` (Blocked on ChatGPT Pro Round 03 Approval)
+- **Review R03 Status**: `REJECTED` (F09, F10 Closed; R03-B01～R03-B07 Blockers identified)
+- **Review R04 Status**: `PENDING_REVIEW` (Full R03-B01～R03-B07 remediations implemented across TCB and evaluation corpus)
+- **Phase 2 Exit Gate Status**: `PENDING_REVIEW` (Blocked on ChatGPT Pro Round 04 Approval)
 
-| Finding ID | Severity | Category | Description | Round 02 Remediation Actions |
-| :--- | :--- | :--- | :--- | :--- |
-| `M54-P2-F01` | Critical | Storage/Trust | Revocation journal signature malleability & checkpoint swallowing | ✔ Full-field canonical signing (`computeRevocationEntrySignPayload`), fail-closed checkpoint parse error, atomic checkpoint write |
-| `M54-P2-F02` | Critical | Storage/Trust | Registry self-signing trust loop & genesis rogue key injection | ✔ Genesis v1 strictly requires single root anchor key; v>1 requires signer from root anchor or authenticated `priorRegistry`; fail-closed on corrupt prior registry |
-| `M54-P2-F03` | High | Security/Containment | Intermediate directory symlinks & post-creation bypass | ✔ Deepest existing ancestor traversal (`toRealNormalizedPath`), post-creation physical realpath re-verification, case-insensitive comparison |
-| `M54-P2-F04` | High | Concurrency | Stale lock reclamation race & PID liveness | ✔ Unique `lockId` verification on release, `isPidAlive(pid)` liveness check on stale reclamation, multi-process competition unit tests |
-| `M54-P2-F05` | High | Context/Compaction | CASE signature verification bypass when verifier key omitted | ✔ Mandatory `persistedStateDigest`, `requireSignature: true` strictly requires `verifierPublicKey` fail-closed, signature includes state and persistedState digests |
-| `M54-P2-F06` | High | Integration | finalize-scan.mjs not bound to compaction lifecycle | ✔ Bound to `isCompactedSession`, `preCompactionState`, and `manifest.isCompacted`; fails closed to `UNCHECKABLE`; deep immutable comparison wired |
-| `M54-P2-F07` | High | Ground Truth | Layer 2 corpus CVE misattribution & short git hashes | ✔ Transparently reclassified all in-repo benchmarks as `SYNTHETIC_REGRESSION` bound to `arcobaleno64/three-lens` with 40-char commit SHAs |
-| `M54-P2-F08` | Medium | Ground Truth | Clean controls misattributed to upstream repos | ✔ Transparently reclassified clean negative controls as `SYNTHETIC_CLEAN_CONTROL` bound to `arcobaleno64/three-lens` with 40-char commit SHAs |
-| `M54-P2-F09` | Medium | Report/Metrics | Ablation report tool invocation divergence & toolDirty | ✔ Documented tool invocation divergence (single-turn read vs. agentic command execution) and verified identical tool digest |
-| `M54-P2-F10` | Medium | Governance | Premature claim of Phase 2 exit criteria | ✔ CLOSED in R02 (status set to IN_REMEDIATION, exit gate PENDING_REVIEW) |
+| Blocker ID | Original Finding | Severity | Category | Description | Round 04 Remediation Actions |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `R03-B01` | `M54-P2-F01` | Critical | Storage/Trust | Anti-rollback high-water mark & dual-file wipeout | ✔ Fail-closed on missing journal/rollback (`[JOURNAL_ROLLBACK_DETECTED]`, `minJournalEntries`), atomic checkpoint write |
+| `R03-B02` | `M54-P2-F02` | Critical | Storage/Trust | minRegistryVersion fallback bypass & priorRegistry unverified | ✔ Fallback registry validates `minRegistryVersion`, `validateTrustRegistry` recursively authenticates `priorRegistry`, genesis keys array complete property check, RETIRED keys support for historical logs |
+| `R03-B03` | `M54-P2-F03` | High | Security/Containment | Leaf file symlink pollution | ✔ `fs.lstatSync()` checks journal and checkpoint files before open/append (`[SYMLINK_POLLUTION_VIOLATION]`), `toRealNormalizedPath` against all forbidden workspace roots |
+| `R03-B04` | `M54-P2-F04` | High | Concurrency | Reader un-synchronized & checkpoint race | ✔ `loadRevocationJournal()` synchronizes under `withFileLock(journalPath)` with writer, eliminating intermediate snapshot divergence |
+| `R03-B05` | `M54-P2-F05` | High | TCB/Integrity | `compact-guard.mjs` & `plugin-data-adapter.mjs` absent from TCB manifest | ✔ Pinned both scripts in `REQUIRED_CRITICAL_SCRIPTS` and `tool-integrity-manifest.json`; tracked in `evals/evidence-matrix.json` |
+| `R03-B06` | `M54-P2-F06` | High | Integration | CLI dispatch missing CASE compaction flags & tool digest skip | ✔ CLI dispatch wires `--compacted-session`, `--compact-envelope`, `--compact-content`, `--pre-compaction-state`; `toolManifestDigest` strictly required when expected |
+| `R03-B07` | `M54-P2-F07/F08` | High | Ground Truth | Base commit 143446b missing newly added files & future UTC frozenAt | ✔ Pinned all 14 cases to authentic commit `eddd0c38875c356fd20530b2e19cd12734d50155` where files exist; fixed UTC `frozenAt` to `2026-11-07T10:49:00Z` |
+| - | `M54-P2-F09` | Medium | Report/Metrics | Single pilot reasoning effort extrapolation | ✔ CLOSED in R03 (scoped to pilot observation and tool invocation trajectory) |
+| - | `M54-P2-F10` | Medium | Governance | Premature exit gate declaration | ✔ CLOSED in R02 (status set to IN_REMEDIATION, exit gate PENDING_REVIEW) |

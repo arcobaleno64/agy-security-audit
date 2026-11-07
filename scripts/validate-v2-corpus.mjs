@@ -45,6 +45,16 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
   const errors = [];
   const warnings = [];
 
+  // R03-B07: Validate frozenAt timestamp consistency
+  if (corpus.frozenAt) {
+    const frozenTime = new Date(corpus.frozenAt).getTime();
+    if (isNaN(frozenTime) || frozenTime > Date.now()) {
+      errors.push(`frozenAt timestamp '${corpus.frozenAt}' is invalid or from the future`);
+    }
+  } else {
+    errors.push('Missing required frozenAt timestamp in corpus');
+  }
+
   const cases = corpus.cases || [];
   const total = cases.length;
 

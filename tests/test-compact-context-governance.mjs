@@ -312,3 +312,39 @@ test('Compact Governance: F06 - finalizeScan detects preCompactionState tamperin
   assert.equal(res.compactGuard.valid, false);
   assert.ok(res.compactGuard.error.includes('persistedState tamper detected') || res.compactGuard.error.includes('deep immutable comparison failed'));
 });
+
+test('Compact Governance: R03-B06 - validateCompactedStateEnvelope fails closed if expected toolManifestDigest is missing in envelope', () => {
+  const envWithoutDigest = createCompactedStateEnvelope({
+    scanRunId: 'scan-run-123',
+    executionNonce: 'NONCE-123',
+    toolManifestDigest: '',
+    repoRootFingerprint: ''
+  });
+
+  const res = validateCompactedStateEnvelope(envWithoutDigest, {
+    toolManifestDigest: '0e8304a3977f26417792906eb4e34edfbad60b4832ba4832311f986fd7e35f95'
+  });
+
+  assert.equal(res.valid, false);
+  assert.ok(res.error.includes('Tool manifest digest mismatch') || res.error.includes('Tool manifest mismatch'));
+});
+
+test('Compact Governance: R03-B06 - extractCompactedAuditHeader handles JSON containing embedded code fences', () => {
+  const stateWithFence = {
+    scanRunId: 'scan-run-fenced',
+    executionNonce: 'NONCE-FENCED',
+    toolManifestDigest: 'abc',
+    repoRootFingerprint: 'xyz',
+    persistedState: {
+      embeddedSnippet: '```javascript\nconsole.log("hello");\n```'
+    }
+  };
+  const env = createCompactedStateEnvelope(stateWithFence);
+  const serialized = serializeCompactedAuditHeader(env);
+  const text = `Pre-context\n${serialized}\nPost-context`;
+
+  const extracted = extractCompactedAuditHeader(text);
+  assert.equal(extracted.valid, true);
+  assert.equal(extracted.envelope.scanRunId, 'scan-run-fenced');
+  assert.equal(extracted.envelope.persistedState.embeddedSnippet, '```javascript\nconsole.log("hello");\n```');
+});

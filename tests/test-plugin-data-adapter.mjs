@@ -549,3 +549,156 @@ test('PLUGIN_DATA Governance: F04 - Multi-process withFileLock competition enfor
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('PLUGIN_DATA Governance: R03-B02 - loadTrustRegistry fallback fails closed if minRegistryVersion > 1', () => {
+  const tempDir = createTempDir('empty-reg-');
+  assert.throws(
+    () => loadTrustRegistry({ pluginDataDir: tempDir, minRegistryVersion: 2, failClosed: true, allowInWorkspace: true }),
+    /MONOTONIC_REGRESSION_FAIL_CLOSED|Monotonic regression/
+  );
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R03-B02 - validateTrustRegistry rejects unauthenticated priorRegistry', () => {
+  const auth = generateTestAuthority();
+  const rogueAuth = generateTestAuthority();
+
+  const fakePrior = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: rogueAuth.keyId,
+    activeKeyFingerprint: rogueAuth.fp,
+    activePublicKeyPem: rogueAuth.pem,
+    keys: [{ keyId: rogueAuth.keyId, keyFingerprint: rogueAuth.fp, publicKeyPem: rogueAuth.pem, status: 'ACTIVE' }],
+    revokedKeyIds: []
+  };
+
+  const v2Reg = createAuthorizedRegistryUpdate(
+    fakePrior,
+    { revokedKeyIds: [] },
+    rogueAuth.keyId,
+    rogueAuth.privateKey
+  );
+
+  const validation = validateTrustRegistry(v2Reg, {
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    priorRegistry: fakePrior
+  });
+
+  assert.equal(validation.valid, false);
+  assert.ok(validation.error.includes('Unauthenticated priorRegistry rejected') || validation.error.includes('must match embedded root anchor'));
+});
+
+test('PLUGIN_DATA Governance: R03-B02 - loadRevocationJournal accepts historical signatures from RETIRED keys', () => {
+  const tempDir = createTempDir('retired-key-');
+  const rootAuth = generateTestAuthority();
+  const operatorAuth = generateTestAuthority();
+
+  const v1Reg = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: rootAuth.keyId,
+    activeKeyFingerprint: rootAuth.fp,
+    activePublicKeyPem: rootAuth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: rootAuth.keyId, keyFingerprint: rootAuth.fp, publicKeyPem: rootAuth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: rootAuth.keyId,
+    trustedRootPublicKeyPem: rootAuth.pem,
+    trustedRootFingerprint: rootAuth.fp
+  };
+
+  saveTrustRegistry(v1Reg, opts);
+
+  // Rotate to v2 adding operator as active key
+  const v2Reg = createAuthorizedRegistryUpdate(
+    v1Reg,
+    {
+      activeKeyId: operatorAuth.keyId,
+      activeKeyFingerprint: operatorAuth.fp,
+      activePublicKeyPem: operatorAuth.pem,
+      keys: [
+        { keyId: rootAuth.keyId, keyFingerprint: rootAuth.fp, publicKeyPem: rootAuth.pem, status: 'RETIRED', issuedAt: '2026-10-16T06:55:39.565Z' },
+        { keyId: operatorAuth.keyId, keyFingerprint: operatorAuth.fp, publicKeyPem: operatorAuth.pem, status: 'ACTIVE', issuedAt: '2026-10-16T06:55:39.565Z' }
+      ]
+    },
+    rootAuth.keyId,
+    rootAuth.privateKey
+  );
+  saveTrustRegistry(v2Reg, opts);
+
+  // Append entry signed by operator
+  appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-HISTORICAL-1' },
+    { ...opts, signerPrivateKey: operatorAuth.privateKey, signerKeyId: operatorAuth.keyId }
+  );
+
+  // Rotate to v3 retiring operatorAuth
+  const v3Reg = createAuthorizedRegistryUpdate(
+    v2Reg,
+    {
+      activeKeyId: rootAuth.keyId,
+      activeKeyFingerprint: rootAuth.fp,
+      activePublicKeyPem: rootAuth.pem,
+      keys: [
+        { keyId: rootAuth.keyId, keyFingerprint: rootAuth.fp, publicKeyPem: rootAuth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' },
+        { keyId: operatorAuth.keyId, keyFingerprint: operatorAuth.fp, publicKeyPem: operatorAuth.pem, status: 'RETIRED', issuedAt: '2026-10-16T06:55:39.565Z' }
+      ]
+    },
+    rootAuth.keyId,
+    rootAuth.privateKey
+  );
+  saveTrustRegistry(v3Reg, opts);
+
+  // loadRevocationJournal should still validate the entry signed by RETIRED operatorAuth
+  const journal = loadRevocationJournal(opts);
+  assert.equal(journal.valid, true);
+  assert.equal(journal.count, 1);
+  assert.equal(journal.entries[0].targetId, 'NONCE-HISTORICAL-1');
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R03-B03 - appendRevocationEntry rejects leaf symlink on journal file', (t) => {
+  const tempDir = createTempDir('symlink-leaf-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerPrivateKey: auth.privateKey,
+    signerKeyId: auth.keyId
+  };
+
+  const journalPath = getRevocationJournalPath(opts);
+  const fakeTarget = path.join(tempDir, 'target-file.txt');
+  fs.writeFileSync(fakeTarget, '', 'utf8');
+
+  try {
+    fs.symlinkSync(fakeTarget, journalPath, 'file');
+  } catch {
+    t.skip('Filesystem does not support file symlinks in test context');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return;
+  }
+
+  assert.throws(
+    () => appendRevocationEntry({ revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-EVIL' }, opts),
+    /SYMLINK_POLLUTION_VIOLATION/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

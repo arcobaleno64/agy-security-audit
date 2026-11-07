@@ -156,8 +156,8 @@ export function extractCompactedAuditHeader(text, options = {}) {
 
   const block = text.slice(startIdx + COMPACT_HEADER_DELIMITER_START.length, endIdx);
 
-  // Extract JSON from ```json ... ``` code fence
-  const fenceMatch = block.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  // Extract JSON from ```json ... ``` code fence (greedy match to avoid truncation by code fences in embedded strings)
+  const fenceMatch = block.match(/```(?:json)?\s*([\s\S]*)\s*```/);
   if (!fenceMatch || !fenceMatch[1]) {
     const error = 'Malformed code fence in compacted audit header';
     if (options.failClosed) throw new Error(error);
@@ -267,11 +267,13 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     };
   }
 
-  if (expectedContext.toolManifestDigest && envelope.toolManifestDigest && envelope.toolManifestDigest !== expectedContext.toolManifestDigest) {
-    return {
-      valid: false,
-      error: `Tool manifest mismatch: ${envelope.toolManifestDigest} != expected ${expectedContext.toolManifestDigest}`
-    };
+  if (expectedContext.toolManifestDigest) {
+    if (!envelope.toolManifestDigest || envelope.toolManifestDigest !== expectedContext.toolManifestDigest) {
+      return {
+        valid: false,
+        error: `Tool manifest mismatch: envelope has '${envelope.toolManifestDigest || 'EMPTY'}', expected '${expectedContext.toolManifestDigest}'`
+      };
+    }
   }
 
   if (expectedContext.repoRootFingerprint && envelope.repoRootFingerprint !== expectedContext.repoRootFingerprint) {
