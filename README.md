@@ -1,4 +1,4 @@
-# Three-Lens (3lens) v1.10.0
+# Three-Lens (3lens) v1.11.0
 
 three-lens is an evidence-backed, multi-stage security assurance and vulnerability verification plugin for Antigravity CLI (agy).
 
@@ -120,7 +120,7 @@ The role permissions defined in `recommended-security-audit-permissions.json` en
 
 ```text
 three-lens/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.10.0)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.11.0)
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
 ├── hooks.json                            # Antigravity hook registration (PreInvocation, PreToolUse)
 ├── hooks/                                # Lifecycle hook implementations

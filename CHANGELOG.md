@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0] - 2026-11-07
+
+### Three-Lens Identity Realignment & Ecosystem Hardening
+This release finalizes the transition to **Three-Lens (3lens)** as the canonical project and plugin identity, aligns Node.js platform compatibility requirements, adds CLI `--effort` control, introduces the authoritative FAQ and boundary definitions, and formalizes documentation and release gates.
+
+### Added
+- **Canonical Three-Lens (3lens) Plugin Identity**:
+  - Rebranded plugin identity to `three-lens` with backwards compatibility across documentation, manifests, and CLI integrations.
+  - Added comprehensive `docs/FAQ.md` addressing source code privacy, data handling boundaries, model independence, and zero external npm dependencies.
+- **CLI Effort Level Control**:
+  - Added `--effort <low|medium|high>` argument support to `skills/3lens/SKILL.md` under Dimension 0.5.
+- **Node.js Environment Compatibility Baseline**:
+  - Synchronized and verified minimum Node.js runtime requirement to `>= 20.0.0` across `README.md`, `README.zh-TW.md`, `package.json`, and `docs/reproduction/platform-compatibility.md`.
+
+### Changed
+- **TCB Cryptographic Manifest Pinned**:
+  - Re-computed and verified SHA-256 integrity hashes for all critical trusted computing base scripts in `skills/3lens/tool-integrity-manifest.json` and `evals/evidence-matrix.json`.
+- **Documentation Drift Invariant Enforcement**:
+  - Synchronized `SECURITY.md` supported versions table for active support of the `1.11.x` minor line.
+
+---
+
 ## [1.10.0] - 2026-11-05
 
 ### Landmark Milestone 5.3 & Phase B-5 Baseline Freeze Release
