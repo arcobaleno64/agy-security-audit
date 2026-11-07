@@ -202,21 +202,21 @@
       "family": "parser-and-deserialization",
       "role": "FIXED_COUNTERPART",
       "cwe": "CWE-1321",
-      "title": "Prototype Pollution Remediated with __proto__ Key Filtering (CWE-1321 Fixed Benchmark)",
+      "title": "Prototype Pollution Remediated with Comprehensive Key Filtering (CWE-1321 Fixed Benchmark)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
       "commitSha": "eddd0c38875c356fd20530b2e19cd12734d50155",
       "cveId": null,
       "modeledAfterCve": "CVE-2020-7598",
       "targetFile": "evals/oss-corpus/post-fix/01-minimist-prototype-pollution.js",
-      "targetSink": "if (key === '__proto__') return; at line 10",
+      "targetSink": "if (key === '__proto__' || key === 'constructor' || key === 'prototype') return; at lines 9 and 14",
       "expectedDisposition": "SUPPRESSED",
       "expectedSeverity": "NONE",
       "cvssVector": null,
-      "technicalProof": "Key filtering immediately drops __proto__ and prototype keys before navigation, neutralizing injection.",
+      "technicalProof": "Key filtering immediately drops __proto__, constructor, and prototype keys before navigation, neutralizing injection.",
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Fixed benchmark counterpart validates effective key sanitization."
+        "rationale": "Fixed benchmark counterpart validates effective key sanitization against __proto__ and constructor.prototype bypass."
       }
     },
     {
@@ -224,21 +224,21 @@
       "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "concurrency-and-lifecycle",
       "role": "VULNERABLE",
-      "cwe": "CWE-362",
-      "title": "TOCTOU Race Condition in One-Time Promotional Voucher Redemption (CWE-362 Benchmark Reproduction)",
+      "cwe": "CWE-367",
+      "title": "TOCTOU Race Condition in Asynchronous Wallet Withdrawal (CWE-367 Benchmark Reproduction)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
       "commitSha": "eddd0c38875c356fd20530b2e19cd12734d50155",
       "cveId": null,
       "targetFile": "evals/semantic-benchmark/10-toctou-race-condition.js",
-      "targetSink": "checkStatus() then claimVoucher() across async gap at lines 15-28",
+      "targetSink": "account.balance >= amount check then balance -= amount across async delay at lines 14-18",
       "expectedDisposition": "REPORTABLE",
       "expectedSeverity": "HIGH",
       "cvssVector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N",
-      "technicalProof": "Sending 20 concurrent HTTP requests with identical voucher code allows double-spending before status update completes.",
+      "technicalProof": "Concurrent withdrawal requests bypass balance check during the async delay before balance is decremented, allowing balance overdraft.",
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Unsynchronized check-then-act across database network calls creates exploitable race window in internal benchmark fixture."
+        "rationale": "Unsynchronized check-then-act across async I/O delay creates exploitable TOCTOU race condition in benchmark fixture."
       }
     },
     {

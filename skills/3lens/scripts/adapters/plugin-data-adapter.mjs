@@ -298,10 +298,13 @@ export function canonicalJsonStringify(obj) {
   if (obj === null || typeof obj !== 'object') {
     return JSON.stringify(obj);
   }
-  if (Array.isArray(obj)) {
-    return '[' + obj.map(canonicalJsonStringify).join(',') + ']';
+  if (obj instanceof Date) {
+    return JSON.stringify(obj.toISOString());
   }
-  const keys = Object.keys(obj).sort();
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => item === undefined ? 'null' : canonicalJsonStringify(item)).join(',') + ']';
+  }
+  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
   const pairs = keys.map(k => JSON.stringify(k) + ':' + canonicalJsonStringify(obj[k]));
   return '{' + pairs.join(',') + '}';
 }
@@ -513,13 +516,6 @@ export function computeRegistryAuthorizationPayload(registry) {
     keys: normalizedKeys,
     revokedKeyIds: Array.isArray(registry.revokedKeyIds) ? [...registry.revokedKeyIds].sort() : []
   };
-  if (registry.revocationHighWaterMark) {
-    payload.revocationHighWaterMark = {
-      headIndex: registry.revocationHighWaterMark.headIndex,
-      headDigest: registry.revocationHighWaterMark.headDigest,
-      updatedAt: registry.revocationHighWaterMark.updatedAt
-    };
-  }
   return canonicalJsonStringify(payload);
 }
 
@@ -653,45 +649,44 @@ export function validateTrustRegistry(registry, options = {}) {
       };
     }
 
-    if (hwm.signature || hwm.authorizedBy) {
-      if (!hwm.signature || !hwm.authorizedBy) {
-        return {
-          valid: false,
-          error: 'revocationHighWaterMark missing signature or authorizedBy',
-          cryptographicValidity: false,
-          monotonicValidity: true,
-          ancestryContinuity: true
-        };
-      }
-      const isRevokedKey = Array.isArray(registry.revokedKeyIds) && registry.revokedKeyIds.includes(hwm.authorizedBy);
-      const hwmSignerKey = registry.keys.find(
-        k => k.keyId === hwm.authorizedBy && ['ACTIVE_PINNED_ROOT', 'ACTIVE', 'RETIRED'].includes(k.status)
-      );
-      if (!hwmSignerKey || isRevokedKey) {
-        return {
-          valid: false,
-          error: `Signer '${hwm.authorizedBy}' for revocationHighWaterMark not found, inactive, or revoked in registry keys`,
-          cryptographicValidity: false,
-          monotonicValidity: true,
-          ancestryContinuity: true
-        };
-      }
-      const hwmPayload = Buffer.from(canonicalJsonStringify({
-        headIndex: hwm.headIndex,
-        headDigest: hwm.headDigest,
-        updatedAt: hwm.updatedAt,
-        authorizedBy: hwm.authorizedBy
-      }), 'utf8');
-      const isHwmSigValid = crypto.verify(null, hwmPayload, hwmSignerKey.publicKeyPem, Buffer.from(hwm.signature, 'hex'));
-      if (!isHwmSigValid) {
-        return {
-          valid: false,
-          error: 'Cryptographic verification of revocationHighWaterMark failed',
-          cryptographicValidity: false,
-          monotonicValidity: true,
-          ancestryContinuity: true
-        };
-      }
+    if (typeof hwm.signature !== 'string' || !hwm.signature.trim() || typeof hwm.authorizedBy !== 'string' || !hwm.authorizedBy.trim()) {
+      return {
+        valid: false,
+        error: '[HIGH_WATER_MARK_SIGNATURE_MISSING] revocationHighWaterMark requires authorizedBy and cryptographic signature',
+        cryptographicValidity: false,
+        monotonicValidity: true,
+        ancestryContinuity: true
+      };
+    }
+
+    const isRevokedKey = Array.isArray(registry.revokedKeyIds) && registry.revokedKeyIds.includes(hwm.authorizedBy);
+    const hwmSignerKey = registry.keys.find(
+      k => k.keyId === hwm.authorizedBy && ['ACTIVE_PINNED_ROOT', 'ACTIVE', 'RETIRED'].includes(k.status)
+    );
+    if (!hwmSignerKey || isRevokedKey) {
+      return {
+        valid: false,
+        error: `Signer '${hwm.authorizedBy}' for revocationHighWaterMark not found, inactive, or revoked in registry keys`,
+        cryptographicValidity: false,
+        monotonicValidity: true,
+        ancestryContinuity: true
+      };
+    }
+    const hwmPayload = Buffer.from(canonicalJsonStringify({
+      headIndex: hwm.headIndex,
+      headDigest: hwm.headDigest,
+      updatedAt: hwm.updatedAt,
+      authorizedBy: hwm.authorizedBy
+    }), 'utf8');
+    const isHwmSigValid = crypto.verify(null, hwmPayload, hwmSignerKey.publicKeyPem, Buffer.from(hwm.signature, 'hex'));
+    if (!isHwmSigValid) {
+      return {
+        valid: false,
+        error: 'Cryptographic verification of revocationHighWaterMark failed',
+        cryptographicValidity: false,
+        monotonicValidity: true,
+        ancestryContinuity: true
+      };
     }
   }
 
@@ -741,7 +736,7 @@ export function validateTrustRegistry(registry, options = {}) {
         };
       }
     }
-  } else if (registry.registryVersion > 1 && options.allowUnanchoredVersion !== true) {
+  } else if (registry.registryVersion > 1) {
     ancestryContinuity = false;
     return {
       valid: false,
@@ -878,15 +873,7 @@ export function validateTrustRegistry(registry, options = {}) {
     }
 
     const payload = Buffer.from(computeRegistryAuthorizationPayload(registry), 'utf8');
-    let isValid = crypto.verify(null, payload, signerPem, Buffer.from(proof.signature, 'hex'));
-    if (!isValid && registry.revocationHighWaterMark && proof.authorizedBy !== registry.revocationHighWaterMark.authorizedBy) {
-      // High-water mark was authorized via delegated operator sub-signature; check if registry version itself was authorized without it
-      const basePayload = Buffer.from(
-        computeRegistryAuthorizationPayload({ ...registry, revocationHighWaterMark: undefined }),
-        'utf8'
-      );
-      isValid = crypto.verify(null, basePayload, signerPem, Buffer.from(proof.signature, 'hex'));
-    }
+    const isValid = crypto.verify(null, payload, signerPem, Buffer.from(proof.signature, 'hex'));
     if (!isValid) {
       return {
         valid: false,
@@ -952,17 +939,32 @@ export function loadTrustRegistry(options = {}) {
 
       // Check for rollback against historical state in dir (R06 hardening)
       const histDir = path.join(dir, 'history');
+      let highestHistHwmIndex = -1;
       if (fs.existsSync(histDir)) {
         try {
           const histFiles = fs.readdirSync(histDir).filter(f => /^trust-registry\.v(\d+)\.json$/.test(f));
           let maxHistVersion = 0;
+          let sameVersionHistRegistry = null;
+
           for (const hf of histFiles) {
             const m = hf.match(/^trust-registry\.v(\d+)\.json$/);
             if (m) {
               const v = parseInt(m[1], 10);
               if (v > maxHistVersion) maxHistVersion = v;
+              try {
+                const histObj = JSON.parse(fs.readFileSync(path.join(histDir, hf), 'utf8'));
+                if (v === parsed.registryVersion) {
+                  sameVersionHistRegistry = histObj;
+                }
+                if (histObj.revocationHighWaterMark && typeof histObj.revocationHighWaterMark.headIndex === 'number') {
+                  if (histObj.revocationHighWaterMark.headIndex > highestHistHwmIndex) {
+                    highestHistHwmIndex = histObj.revocationHighWaterMark.headIndex;
+                  }
+                }
+              } catch (_) {}
             }
           }
+
           if (maxHistVersion > parsed.registryVersion) {
             const errorMsg = `[REGISTRY_ROLLBACK_DETECTED] On-disk registry version ${parsed.registryVersion} is less than historical version ${maxHistVersion}`;
             if (options.failClosed !== false) {
@@ -978,14 +980,108 @@ export function loadTrustRegistry(options = {}) {
               ancestryContinuity: false
             };
           }
+
+          // Same-version anti-rollback check (e.g. Genesis v1 with established HWM)
+          if (sameVersionHistRegistry) {
+            if (sameVersionHistRegistry.revocationHighWaterMark && !parsed.revocationHighWaterMark) {
+              const errorMsg = `[REGISTRY_ROLLBACK_DETECTED] Replay of unadorned Genesis registry over historical version ${parsed.registryVersion} with established revocations`;
+              if (options.failClosed !== false) {
+                throw new Error(errorMsg);
+              }
+              return {
+                source: 'PLUGIN_DATA',
+                registry: null,
+                valid: false,
+                error: errorMsg,
+                cryptographicValidity: false,
+                monotonicValidity: false,
+                ancestryContinuity: false
+              };
+            }
+            if (
+              sameVersionHistRegistry.revocationHighWaterMark &&
+              parsed.revocationHighWaterMark &&
+              parsed.revocationHighWaterMark.headIndex < sameVersionHistRegistry.revocationHighWaterMark.headIndex
+            ) {
+              const errorMsg = `[HIGH_WATER_MARK_ROLLBACK_DETECTED] On-disk registry high-water mark (${parsed.revocationHighWaterMark.headIndex}) is behind historical version ${parsed.registryVersion} mark (${sameVersionHistRegistry.revocationHighWaterMark.headIndex})`;
+              if (options.failClosed !== false) {
+                throw new Error(errorMsg);
+              }
+              return {
+                source: 'PLUGIN_DATA',
+                registry: null,
+                valid: false,
+                error: errorMsg,
+                cryptographicValidity: false,
+                monotonicValidity: false,
+                ancestryContinuity: false
+              };
+            }
+          }
+
+          // Invariant: If ANY historical registry recorded a high-water mark, parsed registry cannot have a lower or stripped mark
+          if (highestHistHwmIndex >= 0) {
+            if (!parsed.revocationHighWaterMark) {
+              const errorMsg = `[REGISTRY_ROLLBACK_DETECTED] Replay of registry without revocation high-water mark rejected (historical high-water mark index ${highestHistHwmIndex} exists)`;
+              if (options.failClosed !== false) {
+                throw new Error(errorMsg);
+              }
+              return {
+                source: 'PLUGIN_DATA',
+                registry: null,
+                valid: false,
+                error: errorMsg,
+                cryptographicValidity: false,
+                monotonicValidity: false,
+                ancestryContinuity: false
+              };
+            }
+            if (parsed.revocationHighWaterMark.headIndex < highestHistHwmIndex) {
+              const errorMsg = `[HIGH_WATER_MARK_ROLLBACK_DETECTED] On-disk registry high-water mark (${parsed.revocationHighWaterMark.headIndex}) is behind historical high-water mark (${highestHistHwmIndex})`;
+              if (options.failClosed !== false) {
+                throw new Error(errorMsg);
+              }
+              return {
+                source: 'PLUGIN_DATA',
+                registry: null,
+                valid: false,
+                error: errorMsg,
+                cryptographicValidity: false,
+                monotonicValidity: false,
+                ancestryContinuity: false
+              };
+            }
+          }
         } catch (hErr) {
-          if (hErr.message && hErr.message.includes('REGISTRY_ROLLBACK_DETECTED')) throw hErr;
+          if (
+            hErr.message &&
+            (hErr.message.includes('REGISTRY_ROLLBACK_DETECTED') || hErr.message.includes('HIGH_WATER_MARK_ROLLBACK_DETECTED'))
+          ) {
+            throw hErr;
+          }
         }
       }
 
       // Check for rollback against established revocations in dir (R06 hardening)
       const checkpointPath = getRevocationCheckpointPath(options);
       const journalPath = getRevocationJournalPath(options);
+
+      // Combination attack defense: if history recorded revocations but journal/checkpoint deleted
+      if (highestHistHwmIndex >= 0 && (!fs.existsSync(journalPath) || !fs.existsSync(checkpointPath))) {
+        const errorMsg = `[JOURNAL_ROLLBACK_DETECTED] Revocation journal or checkpoint deleted in established installation (historical high-water mark index ${highestHistHwmIndex} exists)`;
+        if (options.failClosed !== false) {
+          throw new Error(errorMsg);
+        }
+        return {
+          source: 'PLUGIN_DATA',
+          registry: null,
+          valid: false,
+          error: errorMsg,
+          cryptographicValidity: false,
+          monotonicValidity: false,
+          ancestryContinuity: false
+        };
+      }
       let establishedHeadIndex = -1;
       if (fs.existsSync(checkpointPath)) {
         try {
@@ -1484,13 +1580,31 @@ function doLoadRevocationJournal(options = {}) {
     const trustedKeys = new Map();
 
     if (trustRegistryLoad.valid && trustRegistryLoad.registry) {
-      const revokedSet = new Set(trustRegistryLoad.registry.revokedKeyIds || []);
       for (const k of trustRegistryLoad.registry.keys || []) {
-        if (['ACTIVE_PINNED_ROOT', 'ACTIVE', 'RETIRED'].includes(k.status) && !revokedSet.has(k.keyId)) {
+        if (['ACTIVE_PINNED_ROOT', 'ACTIVE', 'RETIRED'].includes(k.status)) {
           trustedKeys.set(k.keyId, k.publicKeyPem);
         }
       }
     }
+
+    // Historical key lifecycle resolution: load historical public keys from history/
+    const histDir = path.join(path.dirname(journalPath), 'history');
+    if (fs.existsSync(histDir)) {
+      try {
+        const histFiles = fs.readdirSync(histDir).filter(f => /^trust-registry\.v(\d+)\.json$/.test(f));
+        for (const hf of histFiles) {
+          try {
+            const hReg = JSON.parse(fs.readFileSync(path.join(histDir, hf), 'utf8'));
+            for (const hk of hReg.keys || []) {
+              if (hk.keyId && hk.publicKeyPem && !trustedKeys.has(hk.keyId)) {
+                trustedKeys.set(hk.keyId, hk.publicKeyPem);
+              }
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     // Always include genesis root anchor
     const rootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
     const rootPem = options.trustedRootPublicKeyPem || DEFAULT_SUPERVISOR_PUBLIC_PEM;
@@ -1649,6 +1763,63 @@ export function appendRevocationEntry(entryInput, options = {}) {
     assertSafeStorageTarget(checkpointPath, options);
     assertSafeStorageTarget(regPath, options);
 
+    let regObj = null;
+    if (fs.existsSync(regPath)) {
+      const regLoad = loadTrustRegistry({ ...options, failClosed: true });
+      regObj = regLoad.registry;
+    } else {
+      const rootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+      const rootPem = options.trustedRootPublicKeyPem || DEFAULT_SUPERVISOR_PUBLIC_PEM;
+      const rootFp = options.trustedRootFingerprint || DEFAULT_SUPERVISOR_FINGERPRINT;
+      regObj = {
+        schemaVersion: '1.0.0',
+        registryVersion: 1,
+        authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+        activeKeyId: rootId,
+        activeKeyFingerprint: rootFp,
+        activePublicKeyPem: rootPem,
+        keyType: 'ed25519',
+        pinnedSince: new Date().toISOString(),
+        rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+        revokedKeyIds: [],
+        keys: [
+          {
+            keyId: rootId,
+            keyFingerprint: rootFp,
+            publicKeyPem: rootPem,
+            status: 'ACTIVE_PINNED_ROOT',
+            issuedAt: new Date().toISOString()
+          }
+        ]
+      };
+    }
+
+    const signedBy = options.signerKeyId || (regObj ? regObj.activeKeyId : DEFAULT_SUPERVISOR_KEY_ID);
+
+    // Validate signer authority for NEW writes (R06 hardening)
+    if (regObj) {
+      if (Array.isArray(regObj.revokedKeyIds) && regObj.revokedKeyIds.includes(signedBy)) {
+        throw new Error(`[REVOKED_SIGNER_REJECTED] Signer '${signedBy}' has been revoked in trust registry`);
+      }
+      const signerKey = regObj.keys.find(k => k.keyId === signedBy);
+      if (!signerKey) {
+        throw new Error(`[UNKNOWN_SIGNER_REJECTED] Signer '${signedBy}' is not recognized in trust registry keys`);
+      }
+      if (signerKey.status !== 'ACTIVE_PINNED_ROOT' && signerKey.status !== 'ACTIVE') {
+        throw new Error(`[INACTIVE_SIGNER_REJECTED] Signer '${signedBy}' has status '${signerKey.status}'; only ACTIVE or ACTIVE_PINNED_ROOT keys may issue new revocations`);
+      }
+      try {
+        const testPayload = Buffer.from('three-lens-signer-verification', 'utf8');
+        const testSig = crypto.sign(null, testPayload, options.signerPrivateKey);
+        const matches = crypto.verify(null, testPayload, signerKey.publicKeyPem, testSig);
+        if (!matches) {
+          throw new Error('Key mismatch');
+        }
+      } catch (keyErr) {
+        throw new Error(`[KEY_MISMATCH_REJECTED] options.signerPrivateKey does not match public key for '${signedBy}' in trust registry`);
+      }
+    }
+
     const journal = loadRevocationJournal({ ...options, failClosed: true, skipLock: true });
     const entryIndex = journal.entries.length;
 
@@ -1658,7 +1829,6 @@ export function appendRevocationEntry(entryInput, options = {}) {
     }
 
     const timestamp = options.timestamp || new Date().toISOString();
-    const signedBy = options.signerKeyId || DEFAULT_SUPERVISOR_KEY_ID;
     const reason = entryInput.reason || 'MANUAL_REVOCATION';
 
     const unsignedRecord = {
@@ -1681,9 +1851,14 @@ export function appendRevocationEntry(entryInput, options = {}) {
 
     const line = JSON.stringify(record) + '\n';
 
-    // R05-B03: Transactional multi-file commit with rollback on failure
-    const initialStat = fs.existsSync(journalPath) ? fs.statSync(journalPath) : null;
-    const initialSize = initialStat ? initialStat.size : 0;
+    // R05-B03: Full transactional multi-file snapshot for atomic rollback on failure
+    const initialJournalStat = fs.existsSync(journalPath) ? fs.statSync(journalPath) : null;
+    const initialJournalSize = initialJournalStat ? initialJournalStat.size : 0;
+    const initialCheckpointRaw = fs.existsSync(checkpointPath) ? fs.readFileSync(checkpointPath) : null;
+    const initialRegistryRaw = fs.existsSync(regPath) ? fs.readFileSync(regPath) : null;
+    const regHistDir = path.join(path.dirname(regPath), 'history');
+    const histPath = regObj ? path.join(regHistDir, `trust-registry.v${regObj.registryVersion}.json`) : null;
+    const initialHistRaw = histPath && fs.existsSync(histPath) ? fs.readFileSync(histPath) : null;
 
     try {
       // 1. Safe append to journal with descriptor inspection (R05-B04)
@@ -1706,36 +1881,6 @@ export function appendRevocationEntry(entryInput, options = {}) {
       safeWriteFileSync(checkpointPath, JSON.stringify(checkpointData, null, 2) + '\n', options);
 
       // 3. Anchor cryptographically signed revocation high-water mark into trust registry (R05-B01 & R05-B03)
-      let regObj = null;
-      if (fs.existsSync(regPath)) {
-        regObj = JSON.parse(fs.readFileSync(regPath, 'utf8'));
-      } else {
-        const rootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
-        const rootPem = options.trustedRootPublicKeyPem || DEFAULT_SUPERVISOR_PUBLIC_PEM;
-        const rootFp = options.trustedRootFingerprint || DEFAULT_SUPERVISOR_FINGERPRINT;
-        regObj = {
-          schemaVersion: '1.0.0',
-          registryVersion: 1,
-          authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
-          activeKeyId: rootId,
-          activeKeyFingerprint: rootFp,
-          activePublicKeyPem: rootPem,
-          keyType: 'ed25519',
-          pinnedSince: new Date().toISOString(),
-          rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
-          revokedKeyIds: [],
-          keys: [
-            {
-              keyId: rootId,
-              keyFingerprint: rootFp,
-              publicKeyPem: rootPem,
-              status: 'ACTIVE_PINNED_ROOT',
-              issuedAt: new Date().toISOString()
-            }
-          ]
-        };
-      }
-
       const hwmPayload = Buffer.from(canonicalJsonStringify({
         headIndex: entryIndex,
         headDigest: entryDigest,
@@ -1752,25 +1897,8 @@ export function appendRevocationEntry(entryInput, options = {}) {
         signature: hwmSignature
       };
 
-      const expectedRootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
-      const canUpdateAuthProof = (
-        !regObj.authorizationProof ||
-        regObj.authorizationProof.authorizedBy === signedBy ||
-        signedBy === expectedRootId
-      );
-
-      if (canUpdateAuthProof) {
-        const regAuthPayload = Buffer.from(computeRegistryAuthorizationPayload(regObj), 'utf8');
-        regObj.authorizationProof = {
-          authorizedBy: signedBy,
-          signature: crypto.sign(null, regAuthPayload, options.signerPrivateKey).toString('hex'),
-          timestamp: record.timestamp
-        };
-      }
-
       safeWriteFileSync(regPath, JSON.stringify(regObj, null, 2) + '\n', options);
 
-      const regHistDir = path.join(path.dirname(regPath), 'history');
       if (!fs.existsSync(regHistDir)) fs.mkdirSync(regHistDir, { recursive: true });
       safeWriteFileSync(path.join(regHistDir, `trust-registry.v${regObj.registryVersion}.json`), JSON.stringify(regObj, null, 2) + '\n', options);
 
@@ -1781,11 +1909,27 @@ export function appendRevocationEntry(entryInput, options = {}) {
         path: normalizePath(journalPath)
       };
     } catch (txErr) {
+      // R05-B03: Complete transactional multi-file rollback
       try {
-        if (initialStat) {
-          fs.truncateSync(journalPath, initialSize);
+        if (initialJournalStat) {
+          fs.truncateSync(journalPath, initialJournalSize);
         } else if (fs.existsSync(journalPath)) {
           fs.unlinkSync(journalPath);
+        }
+        if (initialCheckpointRaw !== null) {
+          fs.writeFileSync(checkpointPath, initialCheckpointRaw);
+        } else if (fs.existsSync(checkpointPath)) {
+          fs.unlinkSync(checkpointPath);
+        }
+        if (initialRegistryRaw !== null) {
+          fs.writeFileSync(regPath, initialRegistryRaw);
+        } else if (fs.existsSync(regPath)) {
+          fs.unlinkSync(regPath);
+        }
+        if (initialHistRaw !== null && histPath) {
+          fs.writeFileSync(histPath, initialHistRaw);
+        } else if (histPath && fs.existsSync(histPath)) {
+          fs.unlinkSync(histPath);
         }
       } catch (_) {}
       throw txErr;

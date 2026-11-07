@@ -2966,7 +2966,11 @@ export function finalizeScan({
   if (compactedAuditContent || compactedAuditEnvelope || isCompactedSessionEffective) {
     let env = compactedAuditEnvelope;
     if (!env && compactedAuditContent) {
-      const extracted = extractCompactedAuditHeader(compactedAuditContent, { failClosed: false });
+      const extracted = extractCompactedAuditHeader(compactedAuditContent, {
+        failClosed: false,
+        verifierPublicKey: compactOptions?.verifierPublicKey,
+        requireSignature: compactOptions?.requireSignature
+      });
       if (!extracted.valid) {
         compactGuardResult = { valid: false, error: extracted.error, status: 'UNCHECKABLE' };
       } else {
@@ -2979,8 +2983,10 @@ export function finalizeScan({
       const expectedContext = {
         scanRunId: executionRunId || manifestRunId || preCompactionState?.scanRunId || null,
         executionNonce: effectiveNonce || preCompactionState?.executionNonce || null,
-        toolManifestDigest: preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null,
-        repoRootFingerprint: preCompactionState?.repoRootFingerprint || (compactOptions?.requireRepoRootFingerprint ? expectedRepoRootFp : (env?.repoRootFingerprint ? expectedRepoRootFp : null))
+        toolManifestDigest: compactOptions?.expectedToolManifestDigest || preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null,
+        repoRootFingerprint: compactOptions?.requireRepoRootFingerprint
+          ? expectedRepoRootFp
+          : (env?.repoRootFingerprint ? expectedRepoRootFp : (preCompactionState?.repoRootFingerprint || null))
       };
       if (preCompactionState?.persistedState !== undefined) {
         expectedContext.persistedState = preCompactionState.persistedState;

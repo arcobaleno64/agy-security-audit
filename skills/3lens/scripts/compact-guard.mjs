@@ -39,10 +39,13 @@ export function canonicalJsonStringify(obj) {
   if (obj === null || typeof obj !== 'object') {
     return JSON.stringify(obj);
   }
-  if (Array.isArray(obj)) {
-    return '[' + obj.map(canonicalJsonStringify).join(',') + ']';
+  if (obj instanceof Date) {
+    return JSON.stringify(obj.toISOString());
   }
-  const keys = Object.keys(obj).sort();
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => item === undefined ? 'null' : canonicalJsonStringify(item)).join(',') + ']';
+  }
+  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
   const pairs = keys.map(k => JSON.stringify(k) + ':' + canonicalJsonStringify(obj[k]));
   return '{' + pairs.join(',') + '}';
 }

@@ -38,7 +38,7 @@
         },
         {
           "path": "skills/3lens/tool-integrity-manifest.json",
-          "sha256": "d45f02209d57ecbd6cf57568c3be05342d12e92ad5d87ff00976b527317aa83b",
+          "sha256": "e7ac12b0229faabacf54776dcc5970ee75b57b0ca7699a21a142a54aba3f171b",
           "description": "Cryptographic TCB integrity manifest pinning critical script hashes"
         },
         {
@@ -48,12 +48,12 @@
         },
         {
           "path": "skills/3lens/scripts/adapters/plugin-data-adapter.mjs",
-          "sha256": "1d81a82cacc2c8b0ee6dd907ef33764b878c12fd0412d525097fb0851bf78658",
+          "sha256": "13838b66fe5bef743bfc4ad93b78a7f16df328006ee9af0858f9211eaf8da4fd",
           "description": "Persistent Plugin Data Storage and Trust Registry Adapter (atomic mutual exclusion, root authorization chain)"
         },
         {
           "path": "skills/3lens/scripts/compact-guard.mjs",
-          "sha256": "dd473535ea1a35ef4720cb11f692fa83574289fe7a628d9289ac0f53241c5a00",
+          "sha256": "5e796b6c01868db075174d1c68f8b98c2c12428c752c01731e7f5af1e8ab9219",
           "description": "Compacted Audit State Envelope (CASE) Guard and Context Invariant Preservation"
         },
         {

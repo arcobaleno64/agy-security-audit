@@ -752,7 +752,7 @@ test('PLUGIN_DATA Governance: R04-B01 - Dual-file deletion fails closed in isRev
   // Invariant R04-B01: Must NEVER return revoked: false; must fail closed
   assert.equal(checkAfter.revoked, true);
   assert.ok(
-    checkAfter.reason.includes('JOURNAL_CORRUPTED_FAIL_CLOSED') &&
+    (checkAfter.reason.includes('JOURNAL_CORRUPTED_FAIL_CLOSED') || checkAfter.reason.includes('REGISTRY_CORRUPTED_FAIL_CLOSED')) &&
     checkAfter.reason.includes('JOURNAL_ROLLBACK_DETECTED'),
     `Expected JOURNAL_ROLLBACK_DETECTED in fail-closed reason, got: ${checkAfter.reason}`
   );
@@ -1177,6 +1177,129 @@ test('PLUGIN_DATA Governance: R06 Hardening - loadTrustRegistry and saveTrustReg
   assert.throws(
     () => saveTrustRegistry(rawGenesis, opts),
     /REGISTRY_ROLLBACK_DETECTED/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R06 Combination Attack - History v1 with HWM survives deletion of journal and checkpoint and enforces Fail-Closed in isRevoked', () => {
+  const tempDir = createTempDir('r06-combo-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerKeyId: auth.keyId,
+    signerPrivateKey: auth.privateKey
+  };
+
+  const targetNonce = 'NONCE-TARGET-COMBO';
+  const appendRes = appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: targetNonce },
+    opts
+  );
+  assert.equal(appendRes.success, true);
+
+  // Combination attack execution:
+  // 1. Replace current registry with unadorned Genesis v1
+  const rawGenesis = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+  fs.writeFileSync(getTrustRegistryPath(opts), JSON.stringify(rawGenesis, null, 2) + '\n', 'utf8');
+
+  // 2. Simultaneously delete journal and checkpoint, preserving history/trust-registry.v1.json
+  const journalPath = getRevocationJournalPath(opts);
+  const checkpointPath = getRevocationCheckpointPath(opts);
+  if (fs.existsSync(journalPath)) fs.unlinkSync(journalPath);
+  if (fs.existsSync(checkpointPath)) fs.unlinkSync(checkpointPath);
+
+  // 3. loadTrustRegistry MUST detect that history v1 recorded HWM and fail closed
+  assert.throws(
+    () => loadTrustRegistry(opts),
+    /REGISTRY_ROLLBACK_DETECTED|JOURNAL_ROLLBACK_DETECTED/
+  );
+
+  // 4. isRevoked MUST fail closed (revoked: true)
+  const isRev = isRevoked(targetNonce, opts);
+  assert.equal(isRev.revoked, true);
+  assert.ok(isRev.reason.includes('REGISTRY_CORRUPTED_FAIL_CLOSED') || isRev.reason.includes('JOURNAL_CORRUPTED_FAIL_CLOSED'));
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R05-B01 - Stripping signature or authorizedBy from HWM triggers HIGH_WATER_MARK_SIGNATURE_MISSING', () => {
+  const auth = generateTestAuthority();
+  const v1 = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }],
+    revocationHighWaterMark: {
+      headIndex: 0,
+      headDigest: 'a'.repeat(64),
+      updatedAt: new Date().toISOString()
+      // Stripped authorizedBy and signature
+    }
+  };
+
+  const validation = validateTrustRegistry(v1, {
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp
+  });
+  assert.equal(validation.valid, false);
+  assert.ok(validation.error.includes('HIGH_WATER_MARK_SIGNATURE_MISSING'));
+});
+
+test('PLUGIN_DATA Governance: R06 Signer Authority - appendRevocationEntry rejects unknown or inactive signers or key mismatch', () => {
+  const tempDir = createTempDir('r06-signer-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerKeyId: auth.keyId,
+    signerPrivateKey: auth.privateKey
+  };
+
+  // 1. Unknown signer
+  assert.throws(
+    () => appendRevocationEntry(
+      { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-1' },
+      { ...opts, signerKeyId: 'UNKNOWN-ROGUE-KEY' }
+    ),
+    /UNKNOWN_SIGNER_REJECTED/
+  );
+
+  // 2. Mismatched private key
+  const rogueAuth = generateTestAuthority('ROGUE');
+  assert.throws(
+    () => appendRevocationEntry(
+      { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-1' },
+      { ...opts, signerPrivateKey: rogueAuth.privateKey }
+    ),
+    /KEY_MISMATCH_REJECTED/
   );
 
   fs.rmSync(tempDir, { recursive: true, force: true });
