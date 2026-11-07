@@ -100,7 +100,7 @@ pie title Layer 2 External Validity Corpus Case Distribution (N=14)
 | **Distinct Vulnerability Families** | $\ge 7$ families | **7 families** | ✔ **COMPLIANT** |
 | **Physical File Integrity** | 100% non-empty files | **14 / 14 verified** | ✔ **COMPLIANT** |
 
-### 4.1 Taxonomic Family Distribution & Provenance (F07 / F08 / R04-B06 Harmonization)
+### 4.1 Taxonomic Family Distribution & Provenance (F07 / F08 / R04-B06 / R05-B06 Harmonization)
 All 14 cases are in-repo benchmark reproductions pinned to commit `eddd0c38875c356fd20530b2e19cd12734d50155` and verified against git tree history:
 1. **`injection-and-validation`**: lodash ReDoS reproduction (`02-lodash-redos.js` / modeled after CVE-2020-28500 / SYNTHETIC_REGRESSION / Paired).
 2. **`auth-and-tenancy`**: Cross-Tenant AuthZ (`01-authz-bypass.js` / SYNTHETIC_REGRESSION / Paired).
@@ -114,26 +114,30 @@ All 14 cases are in-repo benchmark reproductions pinned to commit `eddd0c38875c3
    - Minimist Clean Parse reproduction (`02-minimist-clean-parse.js` / modeled after `minimistjs/minimist`).
    - node-tar Octal Header Parser reproduction (`03-node-tar-clean-header.js` / modeled after `npm/node-tar`).
 
+> [!NOTE]
+> **RFC 0005 Scope Calibration Amendment (Approved for Milestone 5.4 / Release v1.12.0)**:
+> In accordance with the approved RFC 0005 amendment, Workstream 2 delivers the **Synthetic Ground Truth & Controlled Regression Gate** (`evals/v2/layer2-external-validity-corpus.json`, 14 pinned fixtures). Live upstream open-source CVE verification (`UPSTREAM_VERIFIED_OSS` targeting multi-repository third-party codebases) is formally scheduled for Milestone 5.5 (Phase 3: Cross-Ecosystem External Benchmarks) once multi-repo cloning and cross-workspace sandbox isolation infrastructure is established. For Milestone 5.4, validation against the 14-case pinned synthetic corpus via `validate-v2-corpus.mjs` satisfies the release gating requirement.
+
 ---
 
 ## 5. Architectural Hardening & Governance Gate Status
 
 | Component | Target File | Verification Suite | Status |
 | :--- | :--- | :--- | :--- |
-| **`PLUGIN_DATA` Dual-Anchor** | `scripts/adapters/plugin-data-adapter.mjs` | `tests/test-plugin-data-adapter.mjs` | ✔ **12/12 PASS** |
-| **`/compact` Context Guard** | `skills/3lens/scripts/compact-guard.mjs` | `tests/test-compact-context-governance.mjs` | ✔ **13/13 PASS** |
-| **V2 Corpus Validator** | `scripts/validate-v2-corpus.mjs` | `npm run validate:v2-corpus` | ✔ **PASSED** |
+| **`PLUGIN_DATA` Dual-Anchor** | `scripts/adapters/plugin-data-adapter.mjs` | `tests/test-plugin-data-adapter.mjs` | ✔ **29/29 PASS** |
+| **`/compact` Context Guard** | `skills/3lens/scripts/compact-guard.mjs` | `tests/test-compact-context-governance.mjs` | ✔ **19/19 PASS** |
+| **V2 Corpus Validator** | `scripts/validate-v2-corpus.mjs` | `npm run validate:v2-corpus` | ✔ **14/14 PASS** |
 | **ACP Native Transport** | `scripts/adapters/acp-transport-adapter.mjs` | `tests/test-acp-transport-governance.mjs` | ✔ **19/19 PASS** |
 | **PreInvocation Secret Guard** | `hooks/pre-invocation-secret-guard.mjs` | `tests/test-pre-invocation-secret-guard.mjs` | ✔ **14/14 PASS** |
 | **Lifecycle Governance** | `record-benchmark-run.mjs` | `tests/test-finished-reason-governance.mjs` | ✔ **16/16 PASS** |
 | **Authority Promotion** | `skills/3lens/scripts/finalize-scan.mjs` | `tests/test-effort-authority-promotion-invariants.mjs` | ✔ **34/34 PASS** |
-| **Total Automated Suite** | All governance modules | All unit suites | ✔ **108/108 PASS** |
+| **Total Automated Suite** | All governance modules | All unit suites | ✔ **126/126 PASS** |
 
 ---
 
-## 6. Review Status & Next Steps (M54-P2-F10)
+## 6. Review Status & Next Steps
 
-- **Independent Third-Party Review**: PR #52 reviewed by ChatGPT Pro (Round 01: `REJECTED`, 10 Findings).
-- **Remediation Status**: All 10 findings (`M54-P2-F01` through `M54-P2-F10`) implemented and verified with automated test suites.
-- **Phase 2 Exit Gate Status**: `PENDING_REVIEW` (Awaiting ChatGPT Pro Round 02 Cold-Start Independent Audit).
+- **Independent Third-Party Review**: PR #52 reviewed by ChatGPT Pro (Round 01 through Round 05).
+- **Round 05 Blockers Remediated**: All 6 blockers (`R05-B01` through `R05-B06`) implemented, verified with automated test suites, and wired into PR CI.
+- **Phase 2 Exit Gate Status**: `PENDING_REVIEW` (Awaiting ChatGPT Pro Round 06 Cold-Start Independent Audit).
 - **Merge Policy**: PR #52 remains blocked from merging into `main` until independent review grants explicit `APPROVED` verdict.

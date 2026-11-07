@@ -2975,17 +2975,18 @@ export function finalizeScan({
     }
 
     if (!compactGuardResult && env) {
+      const expectedRepoRootFp = repoRoot ? crypto.createHash('sha256').update(path.resolve(repoRoot), 'utf8').digest('hex') : null;
       const expectedContext = {
         scanRunId: executionRunId || manifestRunId || preCompactionState?.scanRunId || null,
         executionNonce: effectiveNonce || preCompactionState?.executionNonce || null,
         toolManifestDigest: preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null,
-        repoRootFingerprint: preCompactionState?.repoRootFingerprint || (env?.repoRootFingerprint && repoRoot ? crypto.createHash('sha256').update(path.resolve(repoRoot), 'utf8').digest('hex') : null)
+        repoRootFingerprint: preCompactionState?.repoRootFingerprint || (compactOptions?.requireRepoRootFingerprint ? expectedRepoRootFp : (env?.repoRootFingerprint ? expectedRepoRootFp : null))
       };
       if (preCompactionState?.persistedState !== undefined) {
         expectedContext.persistedState = preCompactionState.persistedState;
       }
 
-      // R04-B04: In a compacted session, binding context is mandatory under Default-Deny
+      // R04-B04 & R05-B05: In a compacted session, binding context is mandatory under Default-Deny
       if (isCompactedSessionEffective) {
         if (!expectedContext.scanRunId || !expectedContext.executionNonce || !expectedContext.toolManifestDigest) {
           compactGuardResult = {
@@ -3010,8 +3011,17 @@ export function finalizeScan({
           } else {
             compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
           }
-        } else {
+        } else if (env?.signature && compactOptions?.verifierPublicKey) {
           compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
+        } else {
+          // R05-B05: Without authenticated preCompactionState or verified cryptographic signature,
+          // internal mathematical consistency alone cannot prove continuity relative to pre-compaction state.
+          compactGuardResult = {
+            valid: false,
+            error: 'Compacted state envelope lacks authoritative integrity basis: must carry either verified cryptographic signature or authenticated preCompactionState (R05-B05)',
+            status: 'UNCHECKABLE',
+            envelope: env
+          };
         }
       }
     } else if (!compactGuardResult && isCompactedSessionEffective && !env) {

@@ -17,6 +17,7 @@ import {
   isRevoked,
   withFileLock,
   createAuthorizedRegistryUpdate,
+  safeOpenStorageFile,
   REVOCATION_TYPES,
   EMBEDDED_ROOT_REGISTRY,
   DEFAULT_SUPERVISOR_KEY_ID,
@@ -645,8 +646,9 @@ test('PLUGIN_DATA Governance: R03-B02 - loadRevocationJournal accepts historical
   );
 
   // Rotate to v3 retiring operatorAuth
+  const currentReg = loadTrustRegistry(opts).registry;
   const v3Reg = createAuthorizedRegistryUpdate(
-    v2Reg,
+    currentReg,
     {
       activeKeyId: rootAuth.keyId,
       activeKeyFingerprint: rootAuth.fp,
@@ -908,5 +910,174 @@ test('PLUGIN_DATA Governance: R04-B05 - loadRevocationJournal acquires lock even
   );
 
   fs.unlinkSync(lockPath);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R05-B01 - Deleting high-water mark or dual-file wipeout fails closed in isRevoked', () => {
+  const dir = createTempDir('three-lens-r05-b01-');
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+  const pem = publicKey.export({ format: 'pem', type: 'spki' });
+
+  const opts = {
+    pluginDataDir: dir,
+    allowInWorkspace: true,
+    trustedRootKeyId: 'R05-TEST-ROOT',
+    trustedRootPublicKeyPem: pem,
+    trustedRootFingerprint: crypto.createHash('sha256').update(pem).digest('hex'),
+    signerKeyId: 'R05-TEST-ROOT',
+    signerPrivateKey: privateKey
+  };
+
+  const id = 'R05-REVOKED-NONCE';
+  appendRevocationEntry({
+    revocationType: REVOCATION_TYPES.NONCE_REVOCATION,
+    targetId: id
+  }, opts);
+
+  const before = isRevoked(id, opts);
+  assert.equal(before.revoked, true);
+
+  // Simulate attacker modifying PLUGIN_DATA: strip high-water mark from registry
+  const registryPath = getTrustRegistryPath(opts);
+  const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  delete registry.revocationHighWaterMark;
+  fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+
+  // Remove journal and checkpoint
+  fs.unlinkSync(getRevocationJournalPath(opts));
+  fs.unlinkSync(getRevocationCheckpointPath(opts));
+
+  // After wipeout attempt, must FAIL CLOSED (cannot return false)
+  const after = isRevoked(id, opts);
+  assert.equal(after.revoked, true);
+  assert.ok(
+    after.reason.includes('REGISTRY_CORRUPTED_FAIL_CLOSED') ||
+    after.reason.includes('Cryptographic verification') ||
+    after.reason.includes('JOURNAL_CORRUPTED_FAIL_CLOSED')
+  );
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R05-B02 - Version jump rejected and persistent registry required in existing installation', () => {
+  const tempDir = createTempDir('r05-b02-');
+  const auth = generateTestAuthority();
+
+  const v1Reg = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp
+  };
+
+  // Ancestry continuity check: version 3 without priorRegistry fails closed
+  const v3Reg = {
+    ...v1Reg,
+    registryVersion: 3,
+    authorizationProof: {
+      authorizedBy: auth.keyId,
+      signature: '0'.repeat(128),
+      timestamp: new Date().toISOString()
+    }
+  };
+  const valV3 = validateTrustRegistry(v3Reg, opts);
+  assert.equal(valV3.valid, false);
+  assert.equal(valV3.ancestryContinuity, false);
+  assert.ok(valV3.error.includes('ANCESTRY_CONTINUITY_VIOLATION'));
+
+  // Save v1 and append a revocation to establish state in directory
+  saveTrustRegistry(v1Reg, opts);
+  appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-1' },
+    { ...opts, signerPrivateKey: auth.privateKey, signerKeyId: auth.keyId }
+  );
+
+  // If registry is deleted from an existing installation directory, fallback is strictly blocked
+  fs.unlinkSync(getTrustRegistryPath(opts));
+  assert.throws(
+    () => loadTrustRegistry(opts),
+    /PERSISTENT_REGISTRY_MISSING/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R05-B03 - appendRevocationEntry rolls back journal append if registry update fails', () => {
+  const tempDir = createTempDir('r05-b03-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerKeyId: auth.keyId,
+    signerPrivateKey: auth.privateKey
+  };
+
+  // 1. Initial successful append
+  const res1 = appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-INITIAL' },
+    opts
+  );
+  assert.equal(res1.success, true);
+  const journalPath = getRevocationJournalPath(opts);
+  const statBefore = fs.statSync(journalPath);
+
+  // 2. Simulate failure during registry update by locking/corrupting registry directory
+  const regPath = getTrustRegistryPath(opts);
+  // Replace registry with a directory so writeFileSync throws EISDIR
+  fs.unlinkSync(regPath);
+  fs.mkdirSync(regPath);
+
+  assert.throws(
+    () => appendRevocationEntry(
+      { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-SHOULD-ROLLBACK' },
+      opts
+    )
+  );
+
+  // Assert journal size was rolled back to initial size (no partial append left behind)
+  const statAfter = fs.statSync(journalPath);
+  assert.equal(statAfter.size, statBefore.size);
+
+  fs.rmSync(regPath, { recursive: true, force: true });
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R05-B04 - safeOpenStorageFile rejects symlink with SYMLINK_POLLUTION_VIOLATION', () => {
+  const tempDir = createTempDir('r05-b04-');
+  const realFile = path.join(tempDir, 'real.txt');
+  fs.writeFileSync(realFile, 'data\n', 'utf8');
+
+  const linkFile = path.join(tempDir, 'link.txt');
+  try {
+    fs.symlinkSync(realFile, linkFile);
+  } catch (err) {
+    // If symlinks not permitted without admin on Windows, test passes
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return;
+  }
+
+  assert.throws(
+    () => safeOpenStorageFile(linkFile, 'r', 0o600, { allowInWorkspace: true }),
+    /SYMLINK_POLLUTION_VIOLATION/
+  );
+
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

@@ -9,6 +9,7 @@ reports/*
 !reports/reasoning-ablation-report-2026-09-17.md
 !reports/reasoning-ablation-report-2026-09-17-corrected.md
 !reports/runtime-confinement-report-2026-09-22.md
+!reports/m54-phase-2-independent-review-*.md
 !evals/live-runs/safe-smoke/
 !evals/live-runs/safe-baseline/
 !evals/live-runs/holdout-paired/

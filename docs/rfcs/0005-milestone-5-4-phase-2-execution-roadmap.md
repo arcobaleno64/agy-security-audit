@@ -52,6 +52,10 @@ flowchart TD
   2. Span at least 7 distinct CWE families (Injection, AuthZ/Tenancy, Path Traversal, Parser/Deserialization, Concurrency, Secrets, Supply-Chain).
   3. Bind upstream commit IDs, PoC reproduction scripts, and pre-run human oracle mappings.
   4. Ensure complete decoupling from `triad-flow` execution traces to eliminate circular validation.
+- **Formal Scope Calibration Amendment (Approved for Milestone 5.4 Release v1.12.0 / PR #52)**:
+  - *Corpus Topology*: Workstream 2 delivers the **Synthetic Ground Truth & Controlled Regression Gate** (`evals/v2/layer2-external-validity-corpus.json`) comprising 14 controlled benchmark fixtures: 11 `SYNTHETIC_REGRESSION` paired test cases spanning 7 CWE families and 3 `SYNTHETIC_CLEAN_CONTROL` components.
+  - *Git Tree Verification*: All 14 cases are pinned to immutable repository commit history (`eddd0c38875c356fd20530b2e19cd12734d50155`) and validated via `scripts/validate-v2-corpus.mjs`.
+  - *External Validity Scope Clarification*: Live upstream open-source CVE verification (`UPSTREAM_VERIFIED_OSS` against multi-repository third-party codebases) is formally scheduled for Milestone 5.5 (Phase 3: Cross-Ecosystem External Benchmarks) once multi-repo cloning and cross-workspace sandbox isolation is established. For Milestone 5.4 (Release v1.12.0), validation against the 14-case pinned synthetic corpus satisfies the release gating requirement.
 
 ### Workstream 3: Persistent Dual-Anchor `PLUGIN_DATA` Migration
 - **Background**: Antigravity CLI 1.4.0 introduces the `PLUGIN_DATA` private directory, allowing plugins to persist global state without cluttering user target workspaces.

@@ -354,3 +354,31 @@ test('Compact Governance: R03-B06 - extractCompactedAuditHeader handles JSON con
   assert.equal(extracted.envelope.scanRunId, 'scan-run-fenced');
   assert.equal(extracted.envelope.persistedState.embeddedSnippet, '```javascript\nconsole.log("hello");\n```');
 });
+
+test('Compact Governance: R05-B05 - finalizeScan strictly fails closed to UNCHECKABLE without preCompactionState or verified signature', () => {
+  const scanRunId = 'scan-run-unanchored';
+  const executionNonce = 'NONCE-UNANCHORED';
+  const probe = finalizeScan({ repoRoot: process.cwd() });
+  const effectiveDigest = probe.modelProvenance?.toolIntegrityDigest || '0e8304a3977f26417792906eb4e34edfbad60b4832ba4832311f986fd7e35f95';
+
+  const unanchoredEnvelope = createCompactedStateEnvelope({
+    scanRunId,
+    executionNonce,
+    toolManifestDigest: effectiveDigest,
+    repoRootFingerprint: ''
+  });
+
+  // Calling finalizeScan with envelope but omitting preCompactionState and verifier signature
+  const res = finalizeScan({
+    repoRoot: process.cwd(),
+    scanRunId,
+    nonce: executionNonce,
+    compactedAuditEnvelope: unanchoredEnvelope,
+    isCompactedSession: true
+  });
+
+  assert.equal(res.summary.gates.compactGate, false);
+  assert.equal(res.compactGuard.valid, false);
+  assert.equal(res.compactGuard.status, 'UNCHECKABLE');
+  assert.ok(res.compactGuard.error.includes('authoritative integrity basis') || res.compactGuard.error.includes('R05-B05'));
+});
