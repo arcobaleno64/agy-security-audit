@@ -1,4 +1,4 @@
-# Three-Lens (3lens) v1.10.0
+# Three-Lens (3lens) v1.11.0
 
 three-lens 是以證據為本、多階段的安全保證與弱點驗證外掛，專為 Antigravity CLI（`agy`）打造。
 
@@ -120,14 +120,19 @@ agy --sandbox "audit this repository for security vulnerabilities"
 
 ```text
 three-lens/
-├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.10.0)
+├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.11.0)
 ├── plugin.json                           # Antigravity 外掛清單 (含 schema，無 BOM)
-├── hooks.json                            # Antigravity PreToolUse 生命週期勾點註冊
+├── hooks.json                            # Antigravity hook 註冊（PreInvocation、PreToolUse）
 ├── hooks/                                # 生命週期勾點實作
+│   ├── pre-invocation-secret-guard.mjs   # PreInvocation hook：在送往模型前掃描提示中的機密
 │   └── shadow-context-guard.mjs          # PreToolUse 拒絕未經審核之原庫存取並導向 scratch/context/
 ├── recommended-security-audit-permissions.json # AGY Default-Deny 角色最小權限設定檔
 ├── SECURITY.md                           # 誠實信任模型與沙箱邊界說明
+├── CHANGELOG.md                          # 發行紀錄
+├── CONTRIBUTING.md                       # 貢獻指南
+├── LICENSE                               # MIT 授權
 ├── agents/                               # 專責子代理定義 (位於外掛根目錄)
+│   ├── security-audit-coordinator.md     # 主要協調者代理（mainAgent）
 │   ├── threat-modeler.md                 # 威脅建模專員
 │   ├── discovery-agent.md                # 9x10 矩陣探索專員
 │   ├── verifier-reachability.md          # 3-Lens 可達性檢驗專家
@@ -142,7 +147,15 @@ three-lens/
 │   ├── coverage-gap/                     # 5 大會計覆蓋邊界測試
 │   ├── git-config/                       # 5 大惡意 Git 配置隔離測試
 │   ├── patch-regression/                 # 5 大惡意補丁與陳舊基準測試
-│   └── semantic-benchmark/               # L1.5 配置地面真值基準 (20 對照組：10 弱點 + 10 防禦對照組)
+│   ├── semantic-benchmark/               # L1.5 配置地面真值基準 (20 對照組：10 弱點 + 10 防禦對照組)
+│   ├── holdout-benchmark/                # 保留集基準測試樣本
+│   ├── live-runs/                        # 實機基準測試的錄製結果
+│   ├── micro-corpus/                     # 微型語料與 ground-truth.json
+│   ├── oss-corpus/                       # 開源專案的修復 diff
+│   ├── protocols/                        # 評測協定定義
+│   ├── recorded-runs/                    # 穩定性基準測試用的多輪錄製結果
+│   ├── reproduction-records/             # 重現紀錄
+│   └── test-reports/                     # 測試執行輸出存檔
 ├── schemas/                              # R2-P1-08 版本化 JSON 綱要 (Draft-07)
 │   ├── scan-manifest.schema.json         # 目錄會計清單綱要
 │   ├── threat-model.schema.json          # 威脅模型綱要
@@ -152,12 +165,29 @@ three-lens/
 │   ├── execution-attestation.schema.json # 執行證明綱要 (階段覆蓋完整性)
 │   ├── audit-baseline.schema.json        # 審計歷史基準綱要
 │   ├── empirical-benchmark-run.schema.json # 實證評測 run envelope 綱要
-│   └── permissions-profile.schema.json  # 角色權限設定檔綱要
+│   ├── permissions-profile.schema.json  # 角色權限設定檔綱要
+│   ├── candidate-set.schema.json        # 候選集合 Schema
+│   ├── cross-model-protocol.schema.json # 跨模型協定 Schema
+│   ├── doctor-report.schema.json        # Doctor 報告 Schema
+│   ├── eval-protocol.schema.json        # 評測協定 Schema
+│   ├── evidence-matrix.schema.json      # 證據矩陣 Schema
+│   ├── operator-metrics.schema.json     # 操作者指標 Schema
+│   ├── reproduction-record.schema.json  # 重現紀錄 Schema
+│   ├── shadow-cohort-record.schema.json # Shadow cohort 紀錄 Schema
+│   └── verifier-ballot-set.schema.json  # 驗證者投票集合 Schema
 ├── rules/
 │   └── AGENTS.md                         # 全域零信任與資料審查邊界規則
+├── .github/                              # CI 工作流程（PR CI、發行、Semgrep）
+├── .security-audit/                      # 本 repo 的專案安全脈絡
+├── docs/                                 # 指南、重現說明與 RFC
+├── reports/                              # 含日期的基準測試與重現報告
+├── scripts/                              # 專案工具：doctor、發行來源驗證、基準測試、版本遞增
+├── test/                                 # 測試樣本（例如 Cloudflare adapter）
+├── tests/                                # 治理與不變量測試套件
 └── skills/
     └── 3lens/
         ├── SKILL.md                      # 主技能進入點與工作流程調度
+        ├── tool-integrity-manifest.json  # 關鍵腳本的完整性清單
         ├── standards/                    # R2-P1-01 標準映射層
         │   ├── standards-map.json        # CWE -> ASVS 5.0 / SSDF / OWASP 映射
         │   └── applicability-profiles.json # 專案類型適用性設定檔
@@ -175,7 +205,8 @@ three-lens/
         │   ├── threat-modeling.md        # 威脅建模與 11 維向量基準
         │   ├── verifier-protocol.md      # 檢驗協議與證據綁定不變量
         │   ├── finding-lineage.md        # 弱點血統追蹤與指紋架構
-        │   └── safe-proof-policy.md      # 安全防禦證明政策與禁止指令
+        │   ├── safe-proof-policy.md      # 安全防禦證明政策與禁止指令
+        │   └── model-independence.md     # 模型與供應商獨立性規格
         └── scripts/
             ├── path-containment.mjs      # 權威 TCB 路徑包容與抗 TOCTOU 原子檔案讀取器
             ├── safe-git.mjs              # 強化安全 Git 執行隔離器
@@ -191,6 +222,10 @@ three-lens/
             ├── run-discovery-eval.mjs    # 代理發現評測套件 (Simulated CI / Recorded Agent Run)
             ├── run-stability-eval.mjs    # 發現穩定度與多輪實證基準評測引擎
             ├── record-benchmark-run.mjs  # 真實模型實證基準封套記錄工具
+            ├── prepare-review-context.mjs   # 送入模型前的脈絡準備與機密保護
+            ├── project-context.mjs          # 專案安全脈絡的載入、驗證與漂移偵測
+            ├── adapters/                    # 發現產出者轉接器
+            │   └── cloudflare-adapter.mjs   # Cloudflare security-audit-skill 發現轉接器
             └── check-release-invariants.mjs # Section 24 發行不變量閘門 (62 項規格，40 項安全不變量)
 ```
 
