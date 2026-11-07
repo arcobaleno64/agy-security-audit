@@ -52,6 +52,7 @@
     "test:authority": "node --test tests/test-effort-authority-promotion-invariants.mjs",
     "test:acp": "node --test tests/test-acp-transport-governance.mjs",
     "test:plugin-data": "node --test tests/test-plugin-data-adapter.mjs",
+    "test:compact": "node --test tests/test-compact-context-governance.mjs",
     "benchmark:confinement": "node scripts/run-confinement-matrix.mjs --report reports/runtime-confinement-report-2026-09-22.md",
     "benchmark:live:n3": "node scripts/run-live-model-benchmark.mjs --passes 3 --out-dir evals/live-runs",
     "benchmark:live:n5": "node scripts/run-live-model-benchmark.mjs --passes 5 --out-dir evals/live-runs",
