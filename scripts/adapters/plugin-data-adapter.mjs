@@ -950,6 +950,93 @@ export function loadTrustRegistry(options = {}) {
       const raw = fs.readFileSync(regPath, 'utf8');
       const parsed = JSON.parse(raw);
 
+      // Check for rollback against historical state in dir (R06 hardening)
+      const histDir = path.join(dir, 'history');
+      if (fs.existsSync(histDir)) {
+        try {
+          const histFiles = fs.readdirSync(histDir).filter(f => /^trust-registry\.v(\d+)\.json$/.test(f));
+          let maxHistVersion = 0;
+          for (const hf of histFiles) {
+            const m = hf.match(/^trust-registry\.v(\d+)\.json$/);
+            if (m) {
+              const v = parseInt(m[1], 10);
+              if (v > maxHistVersion) maxHistVersion = v;
+            }
+          }
+          if (maxHistVersion > parsed.registryVersion) {
+            const errorMsg = `[REGISTRY_ROLLBACK_DETECTED] On-disk registry version ${parsed.registryVersion} is less than historical version ${maxHistVersion}`;
+            if (options.failClosed !== false) {
+              throw new Error(errorMsg);
+            }
+            return {
+              source: 'PLUGIN_DATA',
+              registry: null,
+              valid: false,
+              error: errorMsg,
+              cryptographicValidity: false,
+              monotonicValidity: false,
+              ancestryContinuity: false
+            };
+          }
+        } catch (hErr) {
+          if (hErr.message && hErr.message.includes('REGISTRY_ROLLBACK_DETECTED')) throw hErr;
+        }
+      }
+
+      // Check for rollback against established revocations in dir (R06 hardening)
+      const checkpointPath = getRevocationCheckpointPath(options);
+      const journalPath = getRevocationJournalPath(options);
+      let establishedHeadIndex = -1;
+      if (fs.existsSync(checkpointPath)) {
+        try {
+          const cp = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+          if (typeof cp.headIndex === 'number' && cp.headIndex >= 0) {
+            establishedHeadIndex = cp.headIndex;
+          }
+        } catch (_) {}
+      }
+      if (establishedHeadIndex < 0 && fs.existsSync(journalPath)) {
+        try {
+          const stat = fs.statSync(journalPath);
+          if (stat.size > 0) {
+            establishedHeadIndex = 0;
+          }
+        } catch (_) {}
+      }
+
+      if (establishedHeadIndex >= 0) {
+        if (!parsed.revocationHighWaterMark) {
+          const errorMsg = `[REGISTRY_ROLLBACK_DETECTED] Replay of Genesis registry over established installation rejected (revocations present up to index ${establishedHeadIndex})`;
+          if (options.failClosed !== false) {
+            throw new Error(errorMsg);
+          }
+          return {
+            source: 'PLUGIN_DATA',
+            registry: null,
+            valid: false,
+            error: errorMsg,
+            cryptographicValidity: false,
+            monotonicValidity: false,
+            ancestryContinuity: false
+          };
+        }
+        if (parsed.revocationHighWaterMark.headIndex < establishedHeadIndex) {
+          const errorMsg = `[HIGH_WATER_MARK_ROLLBACK_DETECTED] On-disk registry high-water mark (${parsed.revocationHighWaterMark.headIndex}) is behind established checkpoint (${establishedHeadIndex})`;
+          if (options.failClosed !== false) {
+            throw new Error(errorMsg);
+          }
+          return {
+            source: 'PLUGIN_DATA',
+            registry: null,
+            valid: false,
+            error: errorMsg,
+            cryptographicValidity: false,
+            monotonicValidity: false,
+            ancestryContinuity: false
+          };
+        }
+      }
+
       let effectivePriorRegistry = options.priorRegistry || null;
       if (!effectivePriorRegistry && parsed.registryVersion > 1) {
         // Look up historical prior version in history/ directory
@@ -1179,6 +1266,91 @@ export function saveTrustRegistry(registry, options = {}) {
             `[CORRUPT_PRIOR_REGISTRY_DETECTED] Cannot save registry: existing on-disk registry at ${regPath} is corrupt or unreadable (${err.message})`
           );
         }
+      }
+    }
+
+    if (!priorRegistry) {
+      const histDir = path.join(dir, 'history');
+      if (fs.existsSync(histDir)) {
+        try {
+          const histFiles = fs.readdirSync(histDir).filter(f => /^trust-registry\.v(\d+)\.json$/.test(f));
+          let maxHistVersion = 0;
+          let latestHistFile = null;
+          for (const hf of histFiles) {
+            const m = hf.match(/^trust-registry\.v(\d+)\.json$/);
+            if (m) {
+              const v = parseInt(m[1], 10);
+              if (v > maxHistVersion) {
+                maxHistVersion = v;
+                latestHistFile = hf;
+              }
+            }
+          }
+          if (latestHistFile) {
+            priorRegistry = JSON.parse(fs.readFileSync(path.join(histDir, latestHistFile), 'utf8'));
+            if (registry.registryVersion < priorRegistry.registryVersion) {
+              throw new Error(
+                `[REGISTRY_ROLLBACK_DETECTED] Cannot save version ${registry.registryVersion} over historical version ${priorRegistry.registryVersion}`
+              );
+            }
+            if (Array.isArray(priorRegistry.revokedKeyIds)) {
+              for (const revokedId of priorRegistry.revokedKeyIds) {
+                if (!registry.revokedKeyIds.includes(revokedId)) {
+                  throw new Error(`[REVOCATION_STRIP_VIOLATION] Cannot un-revoke previously revoked keyId '${revokedId}'`);
+                }
+              }
+            }
+            if (priorRegistry.revocationHighWaterMark) {
+              if (!registry.revocationHighWaterMark) {
+                throw new Error('[HIGH_WATER_MARK_STRIP_VIOLATION] Cannot strip previously established revocationHighWaterMark');
+              }
+              if (registry.revocationHighWaterMark.headIndex < priorRegistry.revocationHighWaterMark.headIndex) {
+                throw new Error(`[HIGH_WATER_MARK_ROLLBACK_DETECTED] Cannot rollback revocation high-water mark from ${priorRegistry.revocationHighWaterMark.headIndex} to ${registry.revocationHighWaterMark.headIndex}`);
+              }
+            }
+          }
+        } catch (hErr) {
+          if (
+            hErr.message.includes('REGISTRY_ROLLBACK_DETECTED') ||
+            hErr.message.includes('REVOCATION_STRIP_VIOLATION') ||
+            hErr.message.includes('HIGH_WATER_MARK_STRIP_VIOLATION') ||
+            hErr.message.includes('HIGH_WATER_MARK_ROLLBACK_DETECTED')
+          ) {
+            throw hErr;
+          }
+        }
+      }
+    }
+
+    // Check against established revocations in dir (R06 hardening)
+    const checkpointPath = getRevocationCheckpointPath(options);
+    const journalPath = getRevocationJournalPath(options);
+    let establishedHeadIndex = -1;
+    if (fs.existsSync(checkpointPath)) {
+      try {
+        const cp = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+        if (typeof cp.headIndex === 'number' && cp.headIndex >= 0) {
+          establishedHeadIndex = cp.headIndex;
+        }
+      } catch (_) {}
+    }
+    if (establishedHeadIndex < 0 && fs.existsSync(journalPath)) {
+      try {
+        const stat = fs.statSync(journalPath);
+        if (stat.size > 0) establishedHeadIndex = 0;
+      } catch (_) {}
+    }
+
+    if (establishedHeadIndex >= 0) {
+      if (!registry.revocationHighWaterMark) {
+        throw new Error(
+          `[REGISTRY_ROLLBACK_DETECTED] Cannot save unadorned Genesis registry when revocations have been established (headIndex ${establishedHeadIndex})`
+        );
+      }
+      if (registry.revocationHighWaterMark.headIndex < establishedHeadIndex) {
+        throw new Error(
+          `[HIGH_WATER_MARK_ROLLBACK_DETECTED] Cannot save registry high-water mark (${registry.revocationHighWaterMark.headIndex}) behind established checkpoint (${establishedHeadIndex})`
+        );
       }
     }
 

@@ -1081,3 +1081,103 @@ test('PLUGIN_DATA Governance: R05-B04 - safeOpenStorageFile rejects symlink with
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('PLUGIN_DATA Governance: R06 Hardening - loadTrustRegistry rejects Genesis v1 replay over historical progression', () => {
+  const tempDir = createTempDir('r06-h01-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerKeyId: auth.keyId,
+    signerPrivateKey: auth.privateKey
+  };
+
+  // 1. Save v1 then v2
+  const v1 = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+  saveTrustRegistry(v1, opts);
+
+  const v2 = createAuthorizedRegistryUpdate(
+    v1,
+    { revokedKeyIds: ['REVOKED-KEY-001'] },
+    auth.keyId,
+    auth.privateKey
+  );
+  saveTrustRegistry(v2, opts);
+
+  // 2. Attacker replaces supervisor-trust-registry.json with genuine signed Genesis v1
+  fs.writeFileSync(getTrustRegistryPath(opts), JSON.stringify(v1, null, 2) + '\n', 'utf8');
+
+  // 3. loadTrustRegistry MUST detect rollback against history/ directory and fail closed
+  assert.throws(
+    () => loadTrustRegistry(opts),
+    /REGISTRY_ROLLBACK_DETECTED/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R06 Hardening - loadTrustRegistry and saveTrustRegistry reject unadorned Genesis replay when revocations exist', () => {
+  const tempDir = createTempDir('r06-h02-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerKeyId: auth.keyId,
+    signerPrivateKey: auth.privateKey
+  };
+
+  // 1. Initialize registry and append a revocation
+  const appendRes = appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-R06-CHECK' },
+    opts
+  );
+  assert.equal(appendRes.success, true);
+
+  // 2. Attacker attempts to replace supervisor-trust-registry.json with unadorned Genesis v1
+  const rawGenesis = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+  fs.writeFileSync(getTrustRegistryPath(opts), JSON.stringify(rawGenesis, null, 2) + '\n', 'utf8');
+
+  // loadTrustRegistry must detect established revocations and reject unadorned Genesis
+  assert.throws(
+    () => loadTrustRegistry(opts),
+    /REGISTRY_ROLLBACK_DETECTED/
+  );
+
+  // saveTrustRegistry must also reject saving unadorned Genesis over established revocations
+  assert.throws(
+    () => saveTrustRegistry(rawGenesis, opts),
+    /REGISTRY_ROLLBACK_DETECTED/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
