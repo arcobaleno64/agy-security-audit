@@ -18,7 +18,7 @@ Milestone 5.4 Phase 2 evaluates the empirical runtime dynamics of **Multi-Tier R
 1. **72.7% Reduction in Thinking Tokens on Low Tier (Single-Fixture Observation)**: On the `SEM-03` audit fixture, `gemini-3.8-flash-low` expended 2,369 thinking tokens compared to 8,691 on `gemini-3.8-flash-medium`, exceeding the exploratory threshold ($\ge 70\%$ reduction). *Notice (M54-P2-F09)*: This observation is strictly bounded to the single-fixture `SEM-03` test case and must not be extrapolated as a generalized guarantee across full repository scans or heterogeneous languages.
 2. **56.5% Latency Reduction**: Execution wall-clock time dropped from 101.6s (`medium`) to 44.2s (`low`), providing an agile execution path for pre-commit and local smoke scanning.
 3. **100% Semantic Lineage Concordance**: Both effort profiles discovered the identical authentic SSRF vulnerability (`CAND-CWE-918-12`) at `evals/semantic-benchmark/03-confused-deputy.js` targeting the unvalidated `fetch` sink, producing identical deterministic semantic lineages (`62c3cd33c856f5552c7f3547c67ba2d2`).
-4. **V2.0 Layer 2 Corpus Materialization (F07/F08 Closure)**: Curated and froze 14 authoritative Ground Truth Bundles (7 Vulnerable, 4 Fixed, 3 Clean Controls) across 7 distinct CWE families with 100% physical file verification, binding to authentic NVD CVEs (`CVE-2020-28500`, `CVE-2021-32803`, `CVE-2020-7598`, `CVE-2020-28168`) and mature external OSS clean controls (`lodash`, `minimist`, `node-tar`).
+4. **V2.0 Layer 2 Corpus Materialization (F07/F08 Closure & R04-B06 Harmonization)**: Curated and froze 14 authoritative Ground Truth Bundles (7 Vulnerable, 4 Fixed, 3 Clean Controls) across 7 distinct CWE families with 100% physical file verification in git history (`eddd0c38875c356fd20530b2e19cd12734d50155`), transparently categorized as `SYNTHETIC_REGRESSION` (modeled after real-world vulnerability mechanisms from `CVE-2020-28500`, `CVE-2021-32803`, `CVE-2020-7598`, `CVE-2020-28168`) and `SYNTHETIC_CLEAN_CONTROL` (modeled after clean utility patterns from `lodash`, `minimist`, `node-tar`).
 5. **Persistent Dual-Anchor Architecture**: Shipped `scripts/adapters/plugin-data-adapter.mjs` and `skills/3lens/scripts/compact-guard.mjs`, enforcing Zero Workspace Pollution and fail-closed `/compact` state preservation.
 
 ---
@@ -100,18 +100,19 @@ pie title Layer 2 External Validity Corpus Case Distribution (N=14)
 | **Distinct Vulnerability Families** | $\ge 7$ families | **7 families** | ✔ **COMPLIANT** |
 | **Physical File Integrity** | 100% non-empty files | **14 / 14 verified** | ✔ **COMPLIANT** |
 
-### 4.1 Taxonomic Family Distribution & Provenance (F07 / F08)
-1. **`injection-and-validation`**: lodash ReDoS (`02-lodash-redos.js` / CVE-2020-28500 / UPSTREAM_VERIFIED_OSS / Paired).
+### 4.1 Taxonomic Family Distribution & Provenance (F07 / F08 / R04-B06 Harmonization)
+All 14 cases are in-repo benchmark reproductions pinned to commit `eddd0c38875c356fd20530b2e19cd12734d50155` and verified against git tree history:
+1. **`injection-and-validation`**: lodash ReDoS reproduction (`02-lodash-redos.js` / modeled after CVE-2020-28500 / SYNTHETIC_REGRESSION / Paired).
 2. **`auth-and-tenancy`**: Cross-Tenant AuthZ (`01-authz-bypass.js` / SYNTHETIC_REGRESSION / Paired).
-3. **`path-and-filesystem`**: node-tar Path Traversal (`04-tar-path-traversal.js` / CVE-2021-32803 / UPSTREAM_VERIFIED_OSS / Paired).
-4. **`parser-and-deserialization`**: minimist Prototype Pollution (`01-minimist-prototype-pollution.js` / CVE-2020-7598 / UPSTREAM_VERIFIED_OSS / Paired).
+3. **`path-and-filesystem`**: node-tar Path Traversal reproduction (`04-tar-path-traversal.js` / modeled after CVE-2021-32803 / SYNTHETIC_REGRESSION / Paired).
+4. **`parser-and-deserialization`**: minimist Prototype Pollution reproduction (`01-minimist-prototype-pollution.js` / modeled after CVE-2020-7598 / SYNTHETIC_REGRESSION / Paired).
 5. **`concurrency-and-lifecycle`**: TOCTOU Race Condition (`10-toctou-race-condition.js` / SYNTHETIC_REGRESSION).
 6. **`secrets-and-configuration`**: Hardcoded AWS Credentials (`08-hardcoded-credential.js` / SYNTHETIC_REGRESSION).
-7. **`dependency-and-supply-chain`**: axios Header Leakage (`05-axios-ssrf-header-leak.js` / CVE-2020-28168 / UPSTREAM_VERIFIED_OSS).
-8. **Clean External Controls (F08)**:
-   - Lodash Clamp utility (`01-lodash-clamp.js` / `lodash/lodash`).
-   - Minimist Clean Parse (`02-minimist-clean-parse.js` / `minimistjs/minimist`).
-   - node-tar Octal Header Parser (`03-node-tar-clean-header.js` / `npm/node-tar`).
+7. **`dependency-and-supply-chain`**: axios Header Leakage reproduction (`05-axios-ssrf-header-leak.js` / modeled after CVE-2020-28168 / SYNTHETIC_REGRESSION).
+8. **Synthetic Clean Controls (`SYNTHETIC_CLEAN_CONTROL`)**:
+   - Lodash Clamp utility reproduction (`01-lodash-clamp.js` / modeled after `lodash/lodash`).
+   - Minimist Clean Parse reproduction (`02-minimist-clean-parse.js` / modeled after `minimistjs/minimist`).
+   - node-tar Octal Header Parser reproduction (`03-node-tar-clean-header.js` / modeled after `npm/node-tar`).
 
 ---
 

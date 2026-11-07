@@ -5,7 +5,7 @@
   "protocolReference": "evals/protocols/v2.0-three-layer-evaluation-framework.md",
   "acceptanceCriteriaReference": "evals/protocols/v2.0-acceptance-criteria.json",
   "status": "AUTHORITATIVE_FROZEN",
-  "frozenAt": "2026-11-07T10:49:00Z",
+  "frozenAt": "2026-11-07T10:49:35Z",
   "governance": {
     "authority": "Antigravity Security Governance & Assurance Directorate",
     "nonEquivalencePrinciple": "Sample sufficiency != evaluation success",

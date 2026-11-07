@@ -2977,31 +2977,42 @@ export function finalizeScan({
     if (!compactGuardResult && env) {
       const expectedContext = {
         scanRunId: executionRunId || manifestRunId || preCompactionState?.scanRunId || null,
-        executionNonce: effectiveNonce || preCompactionState?.executionNonce || null
+        executionNonce: effectiveNonce || preCompactionState?.executionNonce || null,
+        toolManifestDigest: preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null,
+        repoRootFingerprint: preCompactionState?.repoRootFingerprint || (env?.repoRootFingerprint && repoRoot ? crypto.createHash('sha256').update(path.resolve(repoRoot), 'utf8').digest('hex') : null)
       };
       if (preCompactionState?.persistedState !== undefined) {
         expectedContext.persistedState = preCompactionState.persistedState;
       }
-      if (preCompactionState?.repoRootFingerprint) {
-        expectedContext.repoRootFingerprint = preCompactionState.repoRootFingerprint;
+
+      // R04-B04: In a compacted session, binding context is mandatory under Default-Deny
+      if (isCompactedSessionEffective) {
+        if (!expectedContext.scanRunId || !expectedContext.executionNonce || !expectedContext.toolManifestDigest) {
+          compactGuardResult = {
+            valid: false,
+            error: 'Compacted session requires authoritative scanRunId, executionNonce, and toolManifestDigest context bindings (R04-B04)',
+            status: 'UNCHECKABLE',
+            envelope: env
+          };
+        }
       }
-      if (env.toolManifestDigest || preCompactionState?.toolManifestDigest) {
-        expectedContext.toolManifestDigest = preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null;
-      }
-      const validation = validateCompactedStateEnvelope(env, expectedContext, compactOptions || {});
-      if (!validation.valid) {
-        compactGuardResult = { valid: false, error: validation.error, status: 'UNCHECKABLE', envelope: env };
-      } else if (preCompactionState) {
-        // Enforce end-to-end assertCompactSafe check
-        const rawContent = compactedAuditContent || serializeCompactedAuditHeader(env);
-        const safeCheck = assertCompactSafe(preCompactionState, rawContent, compactOptions || {});
-        if (!safeCheck.safe) {
-          compactGuardResult = { valid: false, error: safeCheck.error, status: 'UNCHECKABLE', envelope: env };
+
+      if (!compactGuardResult) {
+        const validation = validateCompactedStateEnvelope(env, expectedContext, compactOptions || {});
+        if (!validation.valid) {
+          compactGuardResult = { valid: false, error: validation.error, status: 'UNCHECKABLE', envelope: env };
+        } else if (preCompactionState) {
+          // Enforce end-to-end assertCompactSafe check
+          const rawContent = compactedAuditContent || serializeCompactedAuditHeader(env);
+          const safeCheck = assertCompactSafe(preCompactionState, rawContent, compactOptions || {});
+          if (!safeCheck.safe) {
+            compactGuardResult = { valid: false, error: safeCheck.error, status: 'UNCHECKABLE', envelope: env };
+          } else {
+            compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
+          }
         } else {
           compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
         }
-      } else {
-        compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
       }
     } else if (!compactGuardResult && isCompactedSessionEffective && !env) {
       compactGuardResult = {
@@ -5067,6 +5078,9 @@ if (isDirectExecution) {
   const compactContentPathArg = getArg('--compact-content');
   const compactEnvelopePathArg = getArg('--compact-envelope');
   const preCompactionStatePathArg = getArg('--pre-compaction-state');
+  const requireCompactSignatureArg = args.includes('--require-compact-signature');
+  const requireCompactEnvelopeArg = args.includes('--require-compact-envelope');
+  const compactVerifierKeyArg = getArg('--compact-verifier-key');
   const outputJsonPath = getArg('--output') || getArg('--output-json');
   const outputSarifPath = getArg('--output-sarif');
   const outputMdPath = getArg('--output-md');
@@ -5252,6 +5266,15 @@ if (isDirectExecution) {
         } catch {}
       }
 
+      let compactVerifierPublicKey = null;
+      if (compactVerifierKeyArg) {
+        if (fs.existsSync(compactVerifierKeyArg)) {
+          compactVerifierPublicKey = fs.readFileSync(compactVerifierKeyArg, 'utf8');
+        } else {
+          compactVerifierPublicKey = compactVerifierKeyArg;
+        }
+      }
+
       const finalization = finalizeScan({
         candidates,
         manifest,
@@ -5269,7 +5292,12 @@ if (isDirectExecution) {
         compactedAuditEnvelope,
         compactedAuditContent,
         preCompactionState,
-        isCompactedSession: isCompactedSessionArg
+        isCompactedSession: isCompactedSessionArg,
+        compactOptions: {
+          requireSignature: requireCompactSignatureArg,
+          requireCompactEnvelope: requireCompactEnvelopeArg,
+          verifierPublicKey: compactVerifierPublicKey
+        }
       });
 
       if (outputJsonPath) {

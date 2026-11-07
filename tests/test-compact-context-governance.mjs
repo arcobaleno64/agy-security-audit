@@ -237,10 +237,11 @@ test('Compact Governance: F06 - finalizeScan wires CASE guard and fails closed t
 test('Compact Governance: F06 - finalizeScan accepts valid CASE envelope', () => {
   const scanRunId = 'scan-run-valid-999';
   const executionNonce = 'NONCE-LEGAL-777';
+  const toolManifestDigest = '0e8304a3977f26417792906eb4e34edfbad60b4832ba4832311f986fd7e35f95';
   const validEnvelope = createCompactedStateEnvelope({
     scanRunId,
     executionNonce,
-    toolManifestDigest: '',
+    toolManifestDigest,
     repoRootFingerprint: ''
   });
 
@@ -248,7 +249,12 @@ test('Compact Governance: F06 - finalizeScan accepts valid CASE envelope', () =>
     repoRoot: process.cwd(),
     scanRunId,
     nonce: executionNonce,
-    compactedAuditEnvelope: validEnvelope
+    compactedAuditEnvelope: validEnvelope,
+    preCompactionState: {
+      scanRunId,
+      executionNonce,
+      toolManifestDigest
+    }
   });
 
   assert.equal(res.summary.gates.compactGate, true);

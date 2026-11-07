@@ -702,3 +702,211 @@ test('PLUGIN_DATA Governance: R03-B03 - appendRevocationEntry rejects leaf symli
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('PLUGIN_DATA Governance: R04-B01 - Dual-file deletion fails closed in isRevoked without minJournalEntries', () => {
+  const tempDir = createTempDir('dual-delete-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerPrivateKey: auth.privateKey,
+    signerKeyId: auth.keyId
+  };
+
+  // 1. Establish valid revocation
+  const app = appendRevocationEntry(
+    { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-ATTACK-REVOKED' },
+    opts
+  );
+  assert.equal(app.success, true);
+
+  // Verify it is recognized as revoked
+  const checkBefore = isRevoked('NONCE-ATTACK-REVOKED', opts);
+  assert.equal(checkBefore.revoked, true);
+
+  // 2. Adversary wipes BOTH the journal and the checkpoint from disk
+  const journalPath = getRevocationJournalPath(opts);
+  const checkpointPath = getRevocationCheckpointPath(opts);
+  fs.unlinkSync(journalPath);
+  fs.unlinkSync(checkpointPath);
+
+  assert.equal(fs.existsSync(journalPath), false);
+  assert.equal(fs.existsSync(checkpointPath), false);
+
+  // 3. Reader queries without minJournalEntries (default isRevoked call)
+  const defaultQueryOpts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp
+  };
+
+  const checkAfter = isRevoked('NONCE-ATTACK-REVOKED', defaultQueryOpts);
+
+  // Invariant R04-B01: Must NEVER return revoked: false; must fail closed
+  assert.equal(checkAfter.revoked, true);
+  assert.ok(
+    checkAfter.reason.includes('JOURNAL_CORRUPTED_FAIL_CLOSED') &&
+    checkAfter.reason.includes('JOURNAL_ROLLBACK_DETECTED'),
+    `Expected JOURNAL_ROLLBACK_DETECTED in fail-closed reason, got: ${checkAfter.reason}`
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R04-B02 - validateTrustRegistry rejects broken ancestry and non-consecutive versions', () => {
+  const auth = generateTestAuthority();
+  const v1Reg = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+
+  // Attempt to skip from v1 directly to v3 (broken ancestry / gap)
+  const v3RegBrokenAncestry = createAuthorizedRegistryUpdate(
+    { ...v1Reg, registryVersion: 2 }, // crafted so output is v3
+    { revokedKeyIds: [] },
+    auth.keyId,
+    auth.privateKey
+  );
+  assert.equal(v3RegBrokenAncestry.registryVersion, 3);
+
+  const validation = validateTrustRegistry(v3RegBrokenAncestry, {
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    priorRegistry: v1Reg // v1 provided as prior, but target is v3 (gap!)
+  });
+
+  assert.equal(validation.valid, false);
+  assert.equal(validation.ancestryContinuity, false);
+  assert.ok(validation.error.includes('ANCESTRY_CONTINUITY_VIOLATION'));
+
+  // Valid consecutive v2 passes ancestry
+  const v2RegValid = createAuthorizedRegistryUpdate(
+    v1Reg,
+    { revokedKeyIds: [] },
+    auth.keyId,
+    auth.privateKey
+  );
+  assert.equal(v2RegValid.registryVersion, 2);
+
+  const validValidation = validateTrustRegistry(v2RegValid, {
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    priorRegistry: v1Reg
+  });
+
+  assert.equal(validValidation.valid, true);
+  assert.equal(validValidation.ancestryContinuity, true);
+  assert.equal(validValidation.cryptographicValidity, true);
+  assert.equal(validValidation.monotonicValidity, true);
+});
+
+test('PLUGIN_DATA Governance: R04-B03 - Dangling symlink and hard link rejected on journal file', (t) => {
+  const tempDir = createTempDir('symlink-dangling-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerPrivateKey: auth.privateKey,
+    signerKeyId: auth.keyId
+  };
+
+  const journalPath = getRevocationJournalPath(opts);
+  const danglingTarget = path.join(tempDir, 'non-existent-target.txt');
+
+  try {
+    fs.symlinkSync(danglingTarget, journalPath, 'file');
+  } catch {
+    t.skip('Filesystem does not support file symlinks in test context');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return;
+  }
+
+  // Confirm fs.existsSync is false for dangling symlink (R04-B03 root cause)
+  assert.equal(fs.existsSync(journalPath), false);
+
+  // appendRevocationEntry must still detect the dangling symlink via lstatSync
+  assert.throws(
+    () => appendRevocationEntry({ revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-DANGLING' }, opts),
+    /SYMLINK_POLLUTION_VIOLATION/
+  );
+
+  fs.unlinkSync(journalPath);
+
+  // Now test hard link rejection
+  const existingFile = path.join(tempDir, 'existing-inode.txt');
+  fs.writeFileSync(existingFile, 'inode-content\n', 'utf8');
+
+  try {
+    fs.linkSync(existingFile, journalPath);
+  } catch {
+    t.skip('Filesystem does not support hard links in test context');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return;
+  }
+
+  assert.equal(fs.lstatSync(journalPath).nlink > 1, true);
+
+  // appendRevocationEntry without allowInWorkspace must strictly reject nlink > 1
+  assert.throws(
+    () => appendRevocationEntry(
+      { revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-HARDLINK' },
+      { ...opts, allowInWorkspace: false, repoRoot: path.join(tempDir, 'workspace') }
+    ),
+    /HARDLINK_POLLUTION_VIOLATION|ZERO_WORKSPACE_POLLUTION_VIOLATION/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: R04-B05 - loadRevocationJournal acquires lock even when journal does not exist', () => {
+  const tempDir = createTempDir('reader-lock-');
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    lockTimeoutMs: 100,
+    staleLockTimeoutMs: 5000
+  };
+
+  const journalPath = getRevocationJournalPath(opts);
+  assert.equal(fs.existsSync(journalPath), false);
+
+  // Simulate an active writer currently holding the lock while creating journal
+  const lockDir = path.dirname(journalPath);
+  if (!fs.existsSync(lockDir)) fs.mkdirSync(lockDir, { recursive: true });
+  const lockPath = `${journalPath}.lock`;
+
+  const lockContent = JSON.stringify({
+    pid: process.pid,
+    lockId: 'ACTIVE-WRITER-LOCK',
+    createdAt: new Date().toISOString()
+  });
+  fs.writeFileSync(lockPath, lockContent, 'utf8');
+
+  // Reader must NOT bypass lock just because journalPath doesn't exist
+  assert.throws(
+    () => loadRevocationJournal(opts),
+    /LOCK_TIMEOUT|Timeout acquiring lock/
+  );
+
+  fs.unlinkSync(lockPath);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

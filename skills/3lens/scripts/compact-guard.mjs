@@ -267,6 +267,16 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     };
   }
 
+  // R04-B04: toolManifestDigest is mandatory on all envelopes unless explicitly excused
+  if (options.requireToolManifest !== false) {
+    if (!envelope.toolManifestDigest || typeof envelope.toolManifestDigest !== 'string' || !envelope.toolManifestDigest.trim()) {
+      return {
+        valid: false,
+        error: 'Tool manifest mismatch: Compacted state envelope missing mandatory toolManifestDigest (F06 / R04-B04)'
+      };
+    }
+  }
+
   if (expectedContext.toolManifestDigest) {
     if (!envelope.toolManifestDigest || envelope.toolManifestDigest !== expectedContext.toolManifestDigest) {
       return {
@@ -276,11 +286,13 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     }
   }
 
-  if (expectedContext.repoRootFingerprint && envelope.repoRootFingerprint !== expectedContext.repoRootFingerprint) {
-    return {
-      valid: false,
-      error: `Repo root fingerprint mismatch: ${envelope.repoRootFingerprint} != expected ${expectedContext.repoRootFingerprint}`
-    };
+  if (expectedContext.repoRootFingerprint) {
+    if (!envelope.repoRootFingerprint || envelope.repoRootFingerprint !== expectedContext.repoRootFingerprint) {
+      return {
+        valid: false,
+        error: `Repo root fingerprint mismatch: ${envelope.repoRootFingerprint || 'EMPTY'} != expected ${expectedContext.repoRootFingerprint}`
+      };
+    }
   }
 
   // F05: Mandatory signature enforcement if required
@@ -299,8 +311,14 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     }
   }
 
-  // Cryptographic signature verification
-  if (envelope.signature && options.verifierPublicKey) {
+  // Cryptographic signature verification (F05 / R04-B04: signature cannot be unverified)
+  if (envelope.signature) {
+    if (!options.verifierPublicKey) {
+      return {
+        valid: false,
+        error: 'Signature present on envelope but options.verifierPublicKey was not provided for verification (F05 / R04-B04)'
+      };
+    }
     const signPayload = Buffer.from(
       `${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}:${envelope.persistedStateDigest}`,
       'utf8'

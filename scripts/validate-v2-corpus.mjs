@@ -23,6 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,18 +46,35 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
   const errors = [];
   const warnings = [];
 
-  // R03-B07: Validate frozenAt timestamp consistency
+  const cases = corpus.cases || [];
+  const total = cases.length;
+
+  // R03-B07 & R04-B06: Validate frozenAt timestamp consistency against git commit time
   if (corpus.frozenAt) {
     const frozenTime = new Date(corpus.frozenAt).getTime();
     if (isNaN(frozenTime) || frozenTime > Date.now()) {
       errors.push(`frozenAt timestamp '${corpus.frozenAt}' is invalid or from the future`);
+    } else {
+      const representativeCommit = cases[0]?.commitSha;
+      if (representativeCommit) {
+        try {
+          const commitDateStr = execFileSync('git', ['log', '-1', '--format=%cI', representativeCommit], {
+            cwd: REPO_ROOT,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe']
+          }).trim();
+          if (commitDateStr) {
+            const commitTime = new Date(commitDateStr).getTime();
+            if (!isNaN(commitTime) && frozenTime < commitTime - 120000) {
+              errors.push(`frozenAt (${corpus.frozenAt}) predates commitSha date (${commitDateStr})`);
+            }
+          }
+        } catch {}
+      }
     }
   } else {
     errors.push('Missing required frozenAt timestamp in corpus');
   }
-
-  const cases = corpus.cases || [];
-  const total = cases.length;
 
   if (total < l2Criteria.minTotalCases || total > l2Criteria.maxTotalCases) {
     errors.push(`Total cases count (${total}) outside allowed range [${l2Criteria.minTotalCases}, ${l2Criteria.maxTotalCases}]`);
@@ -146,7 +164,7 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
       errors.push(`${prefix}: Non-vulnerable role must have expectedDisposition 'SUPPRESSED', found '${c.expectedDisposition}'`);
     }
 
-    // Physical verification
+    // Physical verification (R04-B06: Disk existence + Git commit tree existence)
     if (c.targetFile) {
       const diskPath = path.resolve(REPO_ROOT, c.targetFile);
       if (!fs.existsSync(diskPath)) {
@@ -155,6 +173,17 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
         const stats = fs.statSync(diskPath);
         if (stats.size === 0) {
           errors.push(`${prefix}: Target file is empty: ${c.targetFile}`);
+        }
+      }
+
+      if (c.commitSha) {
+        try {
+          execFileSync('git', ['cat-file', '-e', `${c.commitSha}:${c.targetFile}`], {
+            cwd: REPO_ROOT,
+            stdio: ['ignore', 'ignore', 'pipe']
+          });
+        } catch {
+          errors.push(`${prefix}: Target file '${c.targetFile}' does not exist in git commit object '${c.commitSha}' (R04-B06)`);
         }
       }
     }
