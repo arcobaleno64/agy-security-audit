@@ -396,3 +396,156 @@ test('PLUGIN_DATA Governance: F04 - withFileLock enforces cross-process mutual e
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('PLUGIN_DATA Governance: F02 - Genesis v1 rejects rogue injected keys in keys array', () => {
+  const auth = generateTestAuthority();
+  const rogueAuth = generateTestAuthority();
+  const injectedV1 = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [
+      { keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' },
+      { keyId: rogueAuth.keyId, keyFingerprint: rogueAuth.fp, publicKeyPem: rogueAuth.pem, status: 'ACTIVE', issuedAt: '2026-10-16T06:55:39.565Z' }
+    ]
+  };
+
+  const validation = validateTrustRegistry(injectedV1, {
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp
+  });
+  assert.equal(validation.valid, false);
+  assert.ok(validation.error.includes('Genesis registry (v1) keys array must contain exactly the pinned root key'));
+});
+
+test('PLUGIN_DATA Governance: F02 - saveTrustRegistry fails closed on corrupted existing file', () => {
+  const tempDir = createTempDir('corrupt-prior-');
+  const auth = generateTestAuthority();
+  const regPath = getTrustRegistryPath({ pluginDataDir: tempDir, allowInWorkspace: true });
+  fs.mkdirSync(path.dirname(regPath), { recursive: true });
+  fs.writeFileSync(regPath, '{ corrupt json !!!', 'utf8');
+
+  const v1Reg = {
+    schemaVersion: '1.0.0',
+    registryVersion: 1,
+    authority: 'IRV_SUPERVISOR_ROOT_AUTHORITY',
+    activeKeyId: auth.keyId,
+    activeKeyFingerprint: auth.fp,
+    activePublicKeyPem: auth.pem,
+    keyType: 'ed25519',
+    pinnedSince: '2026-10-16T06:55:39.565Z',
+    rotationPolicy: 'SINGLE_ACTIVE_PINNED_ROOT',
+    revokedKeyIds: [],
+    keys: [{ keyId: auth.keyId, keyFingerprint: auth.fp, publicKeyPem: auth.pem, status: 'ACTIVE_PINNED_ROOT', issuedAt: '2026-10-16T06:55:39.565Z' }]
+  };
+
+  assert.throws(
+    () => saveTrustRegistry(v1Reg, {
+      pluginDataDir: tempDir,
+      allowInWorkspace: true,
+      trustedRootKeyId: auth.keyId,
+      trustedRootPublicKeyPem: auth.pem,
+      trustedRootFingerprint: auth.fp
+    }),
+    /CORRUPT_PRIOR_REGISTRY_DETECTED/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: F01 - loadRevocationJournal fails closed on corrupt checkpoint file', () => {
+  const tempDir = createTempDir('corrupt-cp-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerPrivateKey: auth.privateKey,
+    signerKeyId: auth.keyId
+  };
+
+  appendRevocationEntry({ revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-1' }, opts);
+  const cpPath = getRevocationCheckpointPath(opts);
+  fs.writeFileSync(cpPath, 'CORRUPT_NOT_JSON', 'utf8');
+
+  assert.throws(
+    () => loadRevocationJournal(opts),
+    /CHECKPOINT_CORRUPTION_DETECTED/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: F01 - Tampering with revocationType or reason triggers signature verification failure', () => {
+  const tempDir = createTempDir('tamper-fields-');
+  const auth = generateTestAuthority();
+  const opts = {
+    pluginDataDir: tempDir,
+    allowInWorkspace: true,
+    trustedRootKeyId: auth.keyId,
+    trustedRootPublicKeyPem: auth.pem,
+    trustedRootFingerprint: auth.fp,
+    signerPrivateKey: auth.privateKey,
+    signerKeyId: auth.keyId
+  };
+
+  appendRevocationEntry({ revocationType: REVOCATION_TYPES.NONCE_REVOCATION, targetId: 'NONCE-SEC', reason: 'REASON_ORIGINAL' }, opts);
+
+  const jPath = getRevocationJournalPath(opts);
+  const raw = fs.readFileSync(jPath, 'utf8');
+  const tampered = raw.replace('REASON_ORIGINAL', 'REASON_ALTERED');
+  fs.writeFileSync(jPath, tampered, 'utf8');
+
+  assert.throws(
+    () => loadRevocationJournal(opts),
+    /Signature verification failed/
+  );
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PLUGIN_DATA Governance: F04 - Multi-process withFileLock competition enforces mutual exclusion', async () => {
+  const tempDir = createTempDir('concurrent-lock-');
+  const lockTarget = path.join(tempDir, 'shared-counter.txt');
+  fs.writeFileSync(lockTarget, '0', 'utf8');
+
+  const { pathToFileURL } = await import('node:url');
+  const adapterUrl = pathToFileURL(path.resolve('scripts/adapters/plugin-data-adapter.mjs')).href;
+  const workerScript = `
+    import fs from 'node:fs';
+    import { withFileLock } from '${adapterUrl}';
+    const target = process.argv[2];
+    for (let i = 0; i < 5; i++) {
+      withFileLock(target, () => {
+        const val = parseInt(fs.readFileSync(target, 'utf8'), 10);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        fs.writeFileSync(target, String(val + 1), 'utf8');
+      }, { staleLockTimeoutMs: 5000, lockTimeoutMs: 15000 });
+    }
+  `;
+  const workerFile = path.join(tempDir, 'worker.mjs');
+  fs.writeFileSync(workerFile, workerScript, 'utf8');
+
+  const { spawn } = await import('node:child_process');
+  const runWorker = () => new Promise((resolve, reject) => {
+    const proc = spawn(process.execPath, [workerFile, lockTarget], { stdio: 'inherit' });
+    proc.on('close', code => code === 0 ? resolve() : reject(new Error('Worker exited with code ' + code)));
+  });
+
+  await Promise.all([runWorker(), runWorker(), runWorker()]);
+
+  const finalVal = parseInt(fs.readFileSync(lockTarget, 'utf8'), 10);
+  assert.equal(finalVal, 15);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

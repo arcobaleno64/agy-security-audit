@@ -5,12 +5,12 @@
   "protocolReference": "evals/protocols/v2.0-three-layer-evaluation-framework.md",
   "acceptanceCriteriaReference": "evals/protocols/v2.0-acceptance-criteria.json",
   "status": "AUTHORITATIVE_FROZEN",
-  "frozenAt": "2026-11-07T07:52:00Z",
+  "frozenAt": "2026-11-07T18:25:00Z",
   "governance": {
     "authority": "Antigravity Security Governance & Assurance Directorate",
     "nonEquivalencePrinciple": "Sample sufficiency != evaluation success",
     "dispositionConjunctiveContract": "Unanimous 3-Lens panel required for REPORTABLE; decisive counterevidence suppresses to FALSE_POSITIVE",
-    "provenanceDiscipline": "All external cases must bind to authentic NVD CVEs and upstream git commits; internal tests reclassified as SYNTHETIC_REGRESSION (F07/F08 Closure)"
+    "provenanceDiscipline": "All in-repo benchmark fixtures are transparently classified as SYNTHETIC_REGRESSION or SYNTHETIC_CLEAN_CONTROL bound to arcobaleno64/three-lens base commit 143446bb932787cd64577135975fe1bdb73b52fe (F07/F08 Closure)"
   },
   "metricsSummary": {
     "totalCases": 14,
@@ -39,14 +39,15 @@
   "cases": [
     {
       "caseId": "L2-01-VULN-INJECTION",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "injection-and-validation",
       "role": "VULNERABLE",
       "cwe": "CWE-1333",
-      "title": "lodash ReDoS in String Trimming via Catastrophic Regex Backtracking",
-      "upstreamRepo": "https://github.com/lodash/lodash.git",
-      "commitSha": "d501b38",
-      "cveId": "CVE-2020-28500",
+      "title": "ReDoS in String Trimming via Catastrophic Regex Backtracking (CWE-1333 Benchmark Reproduction)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2020-28500",
       "targetFile": "evals/oss-corpus/pre-fix/02-lodash-redos.js",
       "targetSink": "toNumber(value) at line 13",
       "expectedDisposition": "REPORTABLE",
@@ -56,19 +57,20 @@
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Authentic NVD CVE-2020-28500 in upstream lodash; unanchored greedy whitespace repetition."
+        "rationale": "Authentic benchmark reproduction modeled after CWE-1333 and inspired by CVE-2020-28500; unanchored greedy whitespace repetition."
       }
     },
     {
       "caseId": "L2-02-FIX-INJECTION",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "injection-and-validation",
       "role": "FIXED_COUNTERPART",
       "cwe": "CWE-1333",
-      "title": "lodash ReDoS Remediated with Linear Loop-Based Trimming",
-      "upstreamRepo": "https://github.com/lodash/lodash.git",
-      "commitSha": "c7e47a9",
-      "cveId": "CVE-2020-28500",
+      "title": "Linear Loop-Based Trimming Neutralizing ReDoS (CWE-1333 Fixed Benchmark)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2020-28500",
       "targetFile": "evals/oss-corpus/post-fix/02-lodash-redos.js",
       "targetSink": "linearTrim(str) at line 24",
       "expectedDisposition": "SUPPRESSED",
@@ -78,7 +80,7 @@
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Upstream fix commit validates complete elimination of regex backtracking mechanism."
+        "rationale": "Fixed benchmark counterpart validates complete elimination of regex backtracking mechanism."
       }
     },
     {
@@ -87,9 +89,9 @@
       "family": "auth-and-tenancy",
       "role": "VULNERABLE",
       "cwe": "CWE-863",
-      "title": "Cross-Tenant Authorization Bypass in Organization Settings API (Internal Benchmark)",
+      "title": "Cross-Tenant Authorization Bypass in Organization Settings API (CWE-863 Benchmark Reproduction)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
-      "commitSha": "46c6c2f9b7bb7ad7d7acbee0cd5ab2c5b3015c83",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/semantic-benchmark/01-authz-bypass.js",
       "targetSink": "updateOrgSettings() at line 22",
@@ -109,9 +111,9 @@
       "family": "auth-and-tenancy",
       "role": "FIXED_COUNTERPART",
       "cwe": "CWE-863",
-      "title": "Cross-Tenant Authorization Remediated with Scoped Tenancy Guard (Internal Benchmark)",
+      "title": "Cross-Tenant Authorization Remediated with Scoped Tenancy Guard (CWE-863 Fixed Benchmark)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
-      "commitSha": "46c6c2f9b7bb7ad7d7acbee0cd5ab2c5b3015c83",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/semantic-benchmark/safe/01-authz-bypass.js",
       "targetSink": "assertTenantMembership(req.user, targetOrgId) at line 18",
@@ -127,14 +129,15 @@
     },
     {
       "caseId": "L2-05-VULN-PATHTRAVERSAL",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "path-and-filesystem",
       "role": "VULNERABLE",
       "cwe": "CWE-22",
-      "title": "node-tar Arbitrary File Overwrite via Unsanitized Archive Entry Unpacking",
-      "upstreamRepo": "https://github.com/npm/node-tar.git",
-      "commitSha": "c5651ee",
-      "cveId": "CVE-2021-32803",
+      "title": "Arbitrary File Overwrite via Unsanitized Archive Entry Extraction (CWE-22 Benchmark Reproduction)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2021-32803",
       "targetFile": "evals/oss-corpus/pre-fix/04-tar-path-traversal.js",
       "targetSink": "fs.writeFileSync(entryPath) at line 10",
       "expectedDisposition": "REPORTABLE",
@@ -144,19 +147,20 @@
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Path traversal confirmed by upstream advisory and reproducible zip-slip exploit."
+        "rationale": "Benchmark reproduction of path traversal and zip-slip directory escape."
       }
     },
     {
       "caseId": "L2-06-FIX-PATHTRAVERSAL",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "path-and-filesystem",
       "role": "FIXED_COUNTERPART",
       "cwe": "CWE-22",
-      "title": "node-tar Path Traversal Remediated with Canonical Directory Containment Assertion",
-      "upstreamRepo": "https://github.com/npm/node-tar.git",
-      "commitSha": "9f2b84f",
-      "cveId": "CVE-2021-32803",
+      "title": "Path Traversal Remediated with Canonical Directory Containment Assertion (CWE-22 Fixed Benchmark)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2021-32803",
       "targetFile": "evals/oss-corpus/post-fix/04-tar-path-traversal.js",
       "targetSink": "assertWithinRoot(targetDir, entryPath) at line 15",
       "expectedDisposition": "SUPPRESSED",
@@ -171,14 +175,15 @@
     },
     {
       "caseId": "L2-07-VULN-PROTOTYPEPOLLUTION",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "parser-and-deserialization",
       "role": "VULNERABLE",
       "cwe": "CWE-1321",
-      "title": "minimist Prototype Pollution via Recursive Object Property Assignment",
-      "upstreamRepo": "https://github.com/minimistjs/minimist.git",
-      "commitSha": "4cf1354",
-      "cveId": "CVE-2020-7598",
+      "title": "Prototype Pollution via Recursive Object Property Assignment (CWE-1321 Benchmark Reproduction)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2020-7598",
       "targetFile": "evals/oss-corpus/pre-fix/01-minimist-prototype-pollution.js",
       "targetSink": "setKey(obj, keys, value) at line 13",
       "expectedDisposition": "REPORTABLE",
@@ -193,14 +198,15 @@
     },
     {
       "caseId": "L2-08-FIX-PROTOTYPEPOLLUTION",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "parser-and-deserialization",
       "role": "FIXED_COUNTERPART",
       "cwe": "CWE-1321",
-      "title": "minimist Prototype Pollution Remediated with __proto__ Key Filtering",
-      "upstreamRepo": "https://github.com/minimistjs/minimist.git",
-      "commitSha": "4637f1a",
-      "cveId": "CVE-2020-7598",
+      "title": "Prototype Pollution Remediated with __proto__ Key Filtering (CWE-1321 Fixed Benchmark)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2020-7598",
       "targetFile": "evals/oss-corpus/post-fix/01-minimist-prototype-pollution.js",
       "targetSink": "if (key === '__proto__') return; at line 10",
       "expectedDisposition": "SUPPRESSED",
@@ -210,7 +216,7 @@
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Upstream fix commit validates effective sanitization."
+        "rationale": "Fixed benchmark counterpart validates effective key sanitization."
       }
     },
     {
@@ -219,9 +225,9 @@
       "family": "concurrency-and-lifecycle",
       "role": "VULNERABLE",
       "cwe": "CWE-362",
-      "title": "TOCTOU Race Condition in One-Time Promotional Voucher Redemption (Internal Benchmark)",
+      "title": "TOCTOU Race Condition in One-Time Promotional Voucher Redemption (CWE-362 Benchmark Reproduction)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
-      "commitSha": "46c6c2f9b7bb7ad7d7acbee0cd5ab2c5b3015c83",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/semantic-benchmark/10-toctou-race-condition.js",
       "targetSink": "checkStatus() then claimVoucher() across async gap at lines 15-28",
@@ -241,9 +247,9 @@
       "family": "secrets-and-configuration",
       "role": "VULNERABLE",
       "cwe": "CWE-798",
-      "title": "Hardcoded Production AWS Access Key & Secret in S3 Upload Utility (Internal Benchmark)",
+      "title": "Hardcoded Production AWS Access Key & Secret in S3 Upload Utility (CWE-798 Benchmark Reproduction)",
       "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
-      "commitSha": "46c6c2f9b7bb7ad7d7acbee0cd5ab2c5b3015c83",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/vulnerable/08-hardcoded-credential.js",
       "targetSink": "AWS_SECRET_ACCESS_KEY assignment at line 6",
@@ -259,14 +265,15 @@
     },
     {
       "caseId": "L2-11-VULN-SUPPLYCHAIN",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_REGRESSION",
       "family": "dependency-and-supply-chain",
       "role": "VULNERABLE",
-      "cwe": "CWE-918",
-      "title": "axios Credential and Authorization Header Leakage on Cross-Origin Redirects",
-      "upstreamRepo": "https://github.com/axios/axios.git",
-      "commitSha": "24479e0",
-      "cveId": "CVE-2020-28168",
+      "cwe": "CWE-200",
+      "title": "Confidential Authorization Header Leakage on Cross-Origin Redirect (CWE-200 / CWE-918 Benchmark Reproduction)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
+      "cveId": null,
+      "modeledAfterCve": "CVE-2020-28168",
       "targetFile": "evals/oss-corpus/pre-fix/05-axios-ssrf-header-leak.js",
       "targetSink": "forwardHeaders(redirectUrl) at line 10",
       "expectedDisposition": "REPORTABLE",
@@ -276,18 +283,18 @@
       "humanOracle": {
         "status": "CONFIRMED_VALID",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "Supply-chain HTTP client library blindly forwards confidential headers across origin boundaries."
+        "rationale": "Supply-chain HTTP client benchmark reproduction blindly forwarding confidential headers across origin boundaries."
       }
     },
     {
       "caseId": "L2-12-CLEAN-LODASH-CLAMP",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_CLEAN_CONTROL",
       "family": "injection-and-validation",
       "role": "CLEAN_CONTROL",
       "cwe": "CWE-1333",
-      "title": "Clean Negative Control: Lodash Clamp Utility Function (Mature External OSS)",
-      "upstreamRepo": "https://github.com/lodash/lodash.git",
-      "commitSha": "4a4f6d895521e64e5659846b0a8f7c9e0a0559f2",
+      "title": "Clean Negative Control: Mathematical Clamp Utility Function (Synthetic Control Fixture)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/oss-corpus/clean-controls/01-lodash-clamp.js",
       "targetSink": "clamp(number, lower, upper) at line 8",
@@ -298,18 +305,18 @@
       "humanOracle": {
         "status": "CONFIRMED_CLEAN",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "External mature OSS control verifying false-positive suppression on clean code (F08 Closure)."
+        "rationale": "Synthetic negative control fixture verifying false-positive suppression on clean code (F08 Closure)."
       }
     },
     {
       "caseId": "L2-13-CLEAN-MINIMIST-PARSE",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_CLEAN_CONTROL",
       "family": "parser-and-deserialization",
       "role": "CLEAN_CONTROL",
       "cwe": "CWE-1321",
-      "title": "Clean Negative Control: Minimist Clean Option Parsing (Mature External OSS)",
-      "upstreamRepo": "https://github.com/minimistjs/minimist.git",
-      "commitSha": "6457d7440a47f329c12c4a5abfbce211c4235b93",
+      "title": "Clean Negative Control: Option Parsing with Sanitized Prototype (Synthetic Control Fixture)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/oss-corpus/clean-controls/02-minimist-clean-parse.js",
       "targetSink": "parseCleanArgs(args) at line 8",
@@ -320,18 +327,18 @@
       "humanOracle": {
         "status": "CONFIRMED_CLEAN",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "External mature OSS control verifying parser lens recognizes Object.create(null) sanitization (F08 Closure)."
+        "rationale": "Synthetic negative control fixture verifying parser lens recognizes Object.create(null) sanitization (F08 Closure)."
       }
     },
     {
       "caseId": "L2-14-CLEAN-TAR-HEADER",
-      "provenanceType": "UPSTREAM_VERIFIED_OSS",
+      "provenanceType": "SYNTHETIC_CLEAN_CONTROL",
       "family": "path-and-filesystem",
       "role": "CLEAN_CONTROL",
       "cwe": "CWE-22",
-      "title": "Clean Negative Control: node-tar Numeric Octal Header Parser (Mature External OSS)",
-      "upstreamRepo": "https://github.com/npm/node-tar.git",
-      "commitSha": "9f2b84f3e69f88325a7a3e7e22129a65d5dfa701",
+      "title": "Clean Negative Control: Numeric Octal Header Parser (Synthetic Control Fixture)",
+      "upstreamRepo": "https://github.com/arcobaleno64/three-lens.git",
+      "commitSha": "143446bb932787cd64577135975fe1bdb73b52fe",
       "cveId": null,
       "targetFile": "evals/oss-corpus/clean-controls/03-node-tar-clean-header.js",
       "targetSink": "parseNumeric(buf, offset, length) at line 8",
@@ -342,7 +349,7 @@
       "humanOracle": {
         "status": "CONFIRMED_CLEAN",
         "adjudicatedBy": "AppSec Audit Panel",
-        "rationale": "External mature OSS control ensuring filesystem lens does not flag purely in-memory buffer operations as path risks (F08 Closure)."
+        "rationale": "Synthetic negative control fixture ensuring filesystem lens does not flag purely in-memory buffer operations as path risks (F08 Closure)."
       }
     }
   ]

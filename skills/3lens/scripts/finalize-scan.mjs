@@ -39,7 +39,8 @@ import { validateThreatModel } from './build-threat-model.mjs';
 import {
   validateCompactedStateEnvelope,
   extractCompactedAuditHeader,
-  assertCompactSafe
+  assertCompactSafe,
+  serializeCompactedAuditHeader
 } from './compact-guard.mjs';
 export {
   loadProjectSecurityContext,
@@ -52,7 +53,8 @@ export {
   validateThreatModel,
   validateCompactedStateEnvelope,
   extractCompactedAuditHeader,
-  assertCompactSafe
+  assertCompactSafe,
+  serializeCompactedAuditHeader
 };
 
 
@@ -2924,7 +2926,9 @@ export function finalizeScan({
   cloudflareCoverage = null,
   compactedAuditEnvelope = null,
   compactedAuditContent = null,
-  compactOptions = null
+  compactOptions = null,
+  preCompactionState = null,
+  isCompactedSession = false
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -2951,8 +2955,15 @@ export function finalizeScan({
   let effectiveNonce = nonce || (isManifestRunBound ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
 
   // M54-P2-F06: CASE Compacted Audit State Envelope verification
+  const isCompactedSessionEffective = Boolean(
+    isCompactedSession ||
+    compactOptions?.requireCompactEnvelope ||
+    manifest?.isCompacted === true ||
+    preCompactionState
+  );
+
   let compactGuardResult = null;
-  if (compactedAuditContent || compactedAuditEnvelope || compactOptions?.requireCompactEnvelope) {
+  if (compactedAuditContent || compactedAuditEnvelope || isCompactedSessionEffective) {
     let env = compactedAuditEnvelope;
     if (!env && compactedAuditContent) {
       const extracted = extractCompactedAuditHeader(compactedAuditContent, { failClosed: false });
@@ -2965,20 +2976,39 @@ export function finalizeScan({
 
     if (!compactGuardResult && env) {
       const expectedContext = {
-        scanRunId: executionRunId || manifestRunId || null,
-        executionNonce: effectiveNonce || null
+        scanRunId: executionRunId || manifestRunId || preCompactionState?.scanRunId || null,
+        executionNonce: effectiveNonce || preCompactionState?.executionNonce || null
       };
-      if (env.toolManifestDigest) {
-        expectedContext.toolManifestDigest = effectiveToolProvenance?.toolIntegrityDigest || null;
+      if (preCompactionState?.persistedState !== undefined) {
+        expectedContext.persistedState = preCompactionState.persistedState;
+      }
+      if (preCompactionState?.repoRootFingerprint) {
+        expectedContext.repoRootFingerprint = preCompactionState.repoRootFingerprint;
+      }
+      if (env.toolManifestDigest || preCompactionState?.toolManifestDigest) {
+        expectedContext.toolManifestDigest = preCompactionState?.toolManifestDigest || effectiveToolProvenance?.toolIntegrityDigest || null;
       }
       const validation = validateCompactedStateEnvelope(env, expectedContext, compactOptions || {});
       if (!validation.valid) {
         compactGuardResult = { valid: false, error: validation.error, status: 'UNCHECKABLE', envelope: env };
+      } else if (preCompactionState) {
+        // Enforce end-to-end assertCompactSafe check
+        const rawContent = compactedAuditContent || serializeCompactedAuditHeader(env);
+        const safeCheck = assertCompactSafe(preCompactionState, rawContent, compactOptions || {});
+        if (!safeCheck.safe) {
+          compactGuardResult = { valid: false, error: safeCheck.error, status: 'UNCHECKABLE', envelope: env };
+        } else {
+          compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
+        }
       } else {
         compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
       }
-    } else if (!compactGuardResult && compactOptions?.requireCompactEnvelope && !env) {
-      compactGuardResult = { valid: false, error: 'Mandatory compacted audit state envelope missing', status: 'UNCHECKABLE' };
+    } else if (!compactGuardResult && isCompactedSessionEffective && !env) {
+      compactGuardResult = {
+        valid: false,
+        error: 'Mandatory compacted audit state envelope missing in compacted session (F06)',
+        status: 'UNCHECKABLE'
+      };
     }
   }
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];

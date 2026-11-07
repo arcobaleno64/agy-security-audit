@@ -100,7 +100,7 @@ export function createCompactedStateEnvelope(state, options = {}) {
   };
 
   if (options.signerPrivateKey) {
-    const signPayload = Buffer.from(`${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}`, 'utf8');
+    const signPayload = Buffer.from(`${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}:${envelope.persistedStateDigest}`, 'utf8');
     envelope.signature = crypto.sign(null, signPayload, options.signerPrivateKey).toString('hex');
     envelope.signedBy = options.signerKeyId || 'SUPERVISOR_ROOT';
   }
@@ -208,17 +208,20 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     return { valid: false, error: 'Missing or invalid executionNonce' };
   }
 
+  // F05: persistedStateDigest is mandatory
+  if (!envelope.persistedStateDigest || typeof envelope.persistedStateDigest !== 'string') {
+    return { valid: false, error: 'Missing or invalid persistedStateDigest' };
+  }
+
   // Verify internal state digest
   const statePayload = {
     scanRunId: envelope.scanRunId,
     executionNonce: envelope.executionNonce,
     toolManifestDigest: envelope.toolManifestDigest || '',
     repoRootFingerprint: envelope.repoRootFingerprint || '',
+    persistedStateDigest: envelope.persistedStateDigest,
     persistedState: envelope.persistedState || {}
   };
-  if (envelope.persistedStateDigest) {
-    statePayload.persistedStateDigest = envelope.persistedStateDigest;
-  }
 
   const computedDigest = sha256Digest(canonicalJsonStringify(statePayload));
   if (computedDigest !== envelope.stateDigest) {
@@ -230,7 +233,7 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
 
   // F05: Verify internal persistedState digest
   const computedPersistedDigest = sha256Digest(canonicalJsonStringify(envelope.persistedState || {}));
-  if (envelope.persistedStateDigest && computedPersistedDigest !== envelope.persistedStateDigest) {
+  if (computedPersistedDigest !== envelope.persistedStateDigest) {
     return {
       valid: false,
       error: `Tamper detected: computed persistedStateDigest ${computedPersistedDigest} does not match ${envelope.persistedStateDigest}`
@@ -286,11 +289,20 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
         error: 'Compacted state envelope missing required cryptographic signature (F05)'
       };
     }
+    if (!options.verifierPublicKey) {
+      return {
+        valid: false,
+        error: 'options.verifierPublicKey is required when requireSignature is enabled (F05)'
+      };
+    }
   }
 
   // Cryptographic signature verification
   if (envelope.signature && options.verifierPublicKey) {
-    const signPayload = Buffer.from(`${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}`, 'utf8');
+    const signPayload = Buffer.from(
+      `${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}:${envelope.persistedStateDigest}`,
+      'utf8'
+    );
     const isValidSig = crypto.verify(
       null,
       signPayload,

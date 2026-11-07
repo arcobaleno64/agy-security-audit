@@ -41,6 +41,13 @@ Milestone 5.4 Phase 2 evaluates the empirical runtime dynamics of **Multi-Tier R
 ### 2.1 Environmental Calibration & `toolDirty` Clarification (M54-P2-F09)
 In `evals/live-runs/m54-pilot/medium/run-pass-1.json`, the field `environment.toolDirty` was set to `true`. This occurred because ephemeral working artifacts (scratch execution logs and uncommitted baseline files) were present in the local workspace when `git status --porcelain` was queried during benchmark recordation. The tool revision SHA (`87173d84...`) and codebase integrity digest (`0e8304a3...`) remained strictly identical across both Low and Medium runs, confirming that no tool code alterations biased the comparative evaluation.
 
+### 2.2 Tool Invocation Divergence & Behavioral Dynamics (M54-P2-F09 Closure)
+Audit of the raw execution traces reveals an important behavioral distinction between the reasoning tiers:
+- **`gemini-3.8-flash-low`**: Executed a streamlined single-turn static audit pattern using exclusively `read_file` (`toolsUsed: ["read_file"]`, duration: 44.198s, totalTokens: 21,643).
+- **`gemini-3.8-flash-medium`**: Autonomously expanded its verification trajectory by invoking both `read_file` and terminal environment inspection via `run_command` (`toolsUsed: ["read_file", "run_command"]`, duration: 101.648s, totalTokens: 43,491).
+
+This agentic trajectory divergence directly accounts for a significant portion of the observed input token difference (34,127 vs. 19,014) and cache re-read volume (123,156 vs. 14,361), in addition to the model's internal thinking depth (8,691 vs. 2,369 thinking tokens). Consequently, the 72.7% thinking token delta represents an aggregate system effect of both heightened internal deliberation and extended autonomous tool exploration on the Medium tier. This finding reinforces why this data point is strictly cataloged as an exploratory pilot observation and must not be conflated with an isolated hyperparameter ablation on fixed prompts.
+
 ---
 
 ## 3. Empirical Comparative Metrics

@@ -255,3 +255,60 @@ test('Compact Governance: F06 - finalizeScan accepts valid CASE envelope', () =>
   assert.equal(res.compactGuard.valid, true);
   assert.equal(res.compactGuard.status, 'VERIFIED');
 });
+
+test('Compact Governance: F05 - requireSignature fails closed when verifierPublicKey is omitted', () => {
+  const { privateKey } = crypto.generateKeyPairSync('ed25519');
+  const signedEnv = createCompactedStateEnvelope(VALID_SAMPLE_STATE, {
+    signerPrivateKey: privateKey,
+    signerKeyId: 'KEY-TEST'
+  });
+
+  const res = validateCompactedStateEnvelope(signedEnv, {}, { requireSignature: true });
+  assert.equal(res.valid, false);
+  assert.ok(res.error.includes('options.verifierPublicKey is required when requireSignature is enabled'));
+});
+
+test('Compact Governance: F06 - finalizeScan fails closed when isCompactedSession is true and envelope is missing', () => {
+  const res = finalizeScan({
+    repoRoot: process.cwd(),
+    isCompactedSession: true
+  });
+
+  assert.equal(res.coverageStatus, 'UNCHECKABLE');
+  assert.equal(res.summary.gates.compactGate, false);
+  assert.equal(res.compactGuard.valid, false);
+  assert.ok(res.compactGuard.error.includes('Mandatory compacted audit state envelope missing'));
+});
+
+test('Compact Governance: F06 - finalizeScan detects preCompactionState tampering across compaction', () => {
+  const originalState = {
+    ...VALID_SAMPLE_STATE,
+    persistedState: { targetDirectories: ['src'], scannedFilesCount: 10 }
+  };
+  const env = createCompactedStateEnvelope(originalState);
+  const tamperedEnv = JSON.parse(JSON.stringify(env));
+  tamperedEnv.persistedState.scannedFilesCount = 999;
+  tamperedEnv.persistedStateDigest = sha256Digest(canonicalJsonStringify(tamperedEnv.persistedState));
+  const payload = {
+    scanRunId: tamperedEnv.scanRunId,
+    executionNonce: tamperedEnv.executionNonce,
+    toolManifestDigest: tamperedEnv.toolManifestDigest,
+    repoRootFingerprint: tamperedEnv.repoRootFingerprint,
+    persistedStateDigest: tamperedEnv.persistedStateDigest,
+    persistedState: tamperedEnv.persistedState
+  };
+  tamperedEnv.stateDigest = sha256Digest(canonicalJsonStringify(payload));
+
+  const res = finalizeScan({
+    repoRoot: process.cwd(),
+    scanRunId: originalState.scanRunId,
+    nonce: originalState.executionNonce,
+    preCompactionState: originalState,
+    compactedAuditEnvelope: tamperedEnv
+  });
+
+  assert.equal(res.coverageStatus, 'UNCHECKABLE');
+  assert.equal(res.summary.gates.compactGate, false);
+  assert.equal(res.compactGuard.valid, false);
+  assert.ok(res.compactGuard.error.includes('persistedState tamper detected') || res.compactGuard.error.includes('deep immutable comparison failed'));
+});

@@ -79,20 +79,41 @@ export function normalizePath(p) {
 
 /**
  * Resolves real physical path resolving symlinks and Windows junctions.
+ * Resolves M54-P2-F03: Traverses up to the deepest existing ancestor to neutralize
+ * intermediate uncreated symlink directories.
  */
 export function toRealNormalizedPath(p) {
   if (typeof p !== 'string' || !p.trim()) return '';
   const abs = path.resolve(p);
+  let current = abs;
+  const uncreatedSuffix = [];
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    uncreatedSuffix.unshift(path.basename(current));
+    current = parent;
+  }
   try {
-    if (fs.existsSync(abs)) {
-      return normalizePath(fs.realpathSync(abs));
-    }
-    const parent = path.dirname(abs);
-    if (fs.existsSync(parent)) {
-      return normalizePath(path.join(fs.realpathSync(parent), path.basename(abs)));
+    if (fs.existsSync(current)) {
+      const realAncestor = fs.realpathSync(current);
+      return normalizePath(uncreatedSuffix.length > 0 ? path.join(realAncestor, ...uncreatedSuffix) : realAncestor);
     }
   } catch {}
   return normalizePath(abs);
+}
+
+/**
+ * Checks whether a process PID is currently alive on the host.
+ * Resolves M54-P2-F04.
+ */
+export function isPidAlive(pid) {
+  if (!pid || typeof pid !== 'number' || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // EPERM means process exists but belongs to another user
+  }
 }
 
 /**
@@ -119,7 +140,8 @@ export function canonicalJsonStringify(obj) {
 
 /**
  * Cross-process file locking primitive using exclusive file creation.
- * Resolves M54-P2-F04.
+ * Resolves M54-P2-F04: Lock info contains PID and unique lockId; stale lock
+ * reclamation strictly verifies PID liveness; lock release verifies lockId ownership.
  *
  * @param {string} targetFile - Path to file needing mutual exclusion
  * @param {Function} fn - Operation to execute while lock is held
@@ -132,12 +154,13 @@ export function withFileLock(targetFile, fn, options = {}) {
   const pollIntervalMs = 15;
   const staleTimeoutMs = options.staleLockTimeoutMs || 30000;
   const start = Date.now();
+  const lockId = crypto.randomBytes(8).toString('hex');
 
   let lockFd = null;
   while (Date.now() - start < timeoutMs) {
     try {
       lockFd = fs.openSync(lockFile, 'wx');
-      const info = JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+      const info = JSON.stringify({ pid: process.pid, timestamp: Date.now(), lockId });
       fs.writeFileSync(lockFd, info, 'utf8');
       break;
     } catch (err) {
@@ -145,8 +168,18 @@ export function withFileLock(targetFile, fn, options = {}) {
         try {
           const stats = fs.statSync(lockFile);
           if (Date.now() - stats.mtimeMs > staleTimeoutMs) {
-            fs.unlinkSync(lockFile);
-            continue;
+            let canRecover = true;
+            try {
+              const content = fs.readFileSync(lockFile, 'utf8');
+              const parsed = JSON.parse(content);
+              if (parsed.pid && isPidAlive(parsed.pid)) {
+                canRecover = false;
+              }
+            } catch {}
+            if (canRecover) {
+              fs.unlinkSync(lockFile);
+              continue;
+            }
           }
         } catch {}
         // Sleep briefly
@@ -169,14 +202,20 @@ export function withFileLock(targetFile, fn, options = {}) {
       fs.closeSync(lockFd);
     } catch {}
     try {
-      if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile);
+      if (fs.existsSync(lockFile)) {
+        const content = fs.readFileSync(lockFile, 'utf8');
+        const parsed = JSON.parse(content);
+        if (parsed.lockId === lockId) {
+          fs.unlinkSync(lockFile);
+        }
+      }
     } catch {}
   }
 }
 
 /**
  * Resolves the persistent plugin data directory location.
- * Resolves M54-P2-F03: Enforces realpath resolution against symlink/junction bypass.
+ * Resolves M54-P2-F03: Enforces realpath resolution and post-creation validation against symlink/junction bypass.
  *
  * @param {object} [options={}]
  * @returns {string} Normalized absolute path to plugin data directory
@@ -214,8 +253,10 @@ export function resolvePluginDataDir(options = {}) {
       }
     }
 
+    const normLower = normalized.toLowerCase();
     for (const forbidden of forbiddenPaths) {
-      if (forbidden && (normalized === forbidden || normalized.startsWith(forbidden + '/'))) {
+      const fLower = forbidden.toLowerCase();
+      if (forbidden && (normLower === fLower || normLower.startsWith(fLower + '/'))) {
         throw new Error(
           `[ZERO_WORKSPACE_POLLUTION_VIOLATION] PLUGIN_DATA (${normalized}) must not reside inside target workspace (${forbidden})`
         );
@@ -226,6 +267,23 @@ export function resolvePluginDataDir(options = {}) {
   if (options.ensureDir !== false) {
     if (!fs.existsSync(normalized)) {
       fs.mkdirSync(normalized, { recursive: true });
+    }
+    // Post-creation physical verification (F03 Closure)
+    if (options.allowInWorkspace !== true && fs.existsSync(normalized)) {
+      const postReal = normalizePath(fs.realpathSync(normalized)).toLowerCase();
+      const checkRoots = [
+        options.repoRoot ? toRealNormalizedPath(options.repoRoot) : null,
+        toRealNormalizedPath(process.cwd()),
+        process.env.INIT_CWD ? toRealNormalizedPath(process.env.INIT_CWD) : null
+      ].filter(Boolean);
+      for (const root of checkRoots) {
+        const rLower = root.toLowerCase();
+        if (postReal === rLower || postReal.startsWith(rLower + '/')) {
+          throw new Error(
+            `[ZERO_WORKSPACE_POLLUTION_VIOLATION] Post-creation check: physical realpath (${postReal}) resides inside target workspace (${root})`
+          );
+        }
+      }
     }
   }
 
@@ -248,9 +306,35 @@ export function getRevocationCheckpointPath(options = {}) {
 }
 
 /**
+ * Computes canonical payload for revocation record signature.
+ * Resolves M54-P2-F01: Signs all canonical fields to prevent field tampering.
+ */
+export function computeRevocationEntrySignPayload(record) {
+  return canonicalJsonStringify({
+    entryIndex: record.entryIndex,
+    timestamp: record.timestamp,
+    revocationType: record.revocationType,
+    targetId: record.targetId,
+    reason: record.reason || 'MANUAL_REVOCATION',
+    prevEntryDigest: record.prevEntryDigest,
+    signedBy: record.signedBy
+  });
+}
+
+/**
  * Computes canonical payload for trust registry authorization signature.
+ * Resolves M54-P2-F02: Enforces canonical signing over keys array as well as root identity.
  */
 export function computeRegistryAuthorizationPayload(registry) {
+  const normalizedKeys = Array.isArray(registry.keys)
+    ? registry.keys.map(k => ({
+        keyId: k.keyId,
+        keyFingerprint: k.keyFingerprint,
+        publicKeyPem: k.publicKeyPem,
+        status: k.status,
+        issuedAt: k.issuedAt || ''
+      })).sort((a, b) => a.keyId.localeCompare(b.keyId))
+    : [];
   return canonicalJsonStringify({
     schemaVersion: registry.schemaVersion,
     registryVersion: registry.registryVersion,
@@ -258,6 +342,7 @@ export function computeRegistryAuthorizationPayload(registry) {
     activeKeyId: registry.activeKeyId,
     activeKeyFingerprint: registry.activeKeyFingerprint,
     activePublicKeyPem: registry.activePublicKeyPem,
+    keys: normalizedKeys,
     revokedKeyIds: Array.isArray(registry.revokedKeyIds) ? [...registry.revokedKeyIds].sort() : []
   });
 }
@@ -265,6 +350,8 @@ export function computeRegistryAuthorizationPayload(registry) {
 /**
  * Validates the schema and cryptographic integrity of a trust registry object.
  * Resolves M54-P2-F02: Enforces root authorization chain verification.
+ * - Genesis v1: keys array must contain strictly the genesis root anchor (anti-rogue injection).
+ * - Version > 1: Signer public key MUST originate from root anchor or an authenticated priorRegistry (no self-signed loop).
  *
  * @param {object} registry
  * @param {object} [options={}]
@@ -327,6 +414,13 @@ export function validateTrustRegistry(registry, options = {}) {
         error: `Genesis registry (v1) activeKeyId/fingerprint must match embedded root anchor (${expectedRootId})`
       };
     }
+    // F02 Closure: Genesis registry keys must contain ONLY the genesis root anchor (strictly reject rogue key injection)
+    if (registry.keys.length !== 1 || registry.keys[0].keyId !== expectedRootId || registry.keys[0].keyFingerprint !== expectedRootFp) {
+      return {
+        valid: false,
+        error: `Genesis registry (v1) keys array must contain exactly the pinned root key (${expectedRootId})`
+      };
+    }
   } else {
     // Version > 1 MUST carry a cryptographic authorizationProof signed by an authorized key
     if (!registry.authorizationProof || typeof registry.authorizationProof !== 'object') {
@@ -341,7 +435,7 @@ export function validateTrustRegistry(registry, options = {}) {
       return { valid: false, error: 'authorizationProof missing authorizedBy or signature' };
     }
 
-    // Determine signer public key (must be embedded root or in allowed trust keys from prior registry)
+    // Signer public key MUST originate from root anchor or an authenticated priorRegistry (NO self-signed lookup)
     let signerPem = null;
     if (proof.authorizedBy === expectedRootId) {
       signerPem = expectedRootPem;
@@ -352,17 +446,13 @@ export function validateTrustRegistry(registry, options = {}) {
       if (priorKey) {
         signerPem = priorKey.publicKeyPem;
       }
-    } else {
-      const keyObj = registry.keys.find(
-        k => k.keyId === proof.authorizedBy && (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE')
-      );
-      if (keyObj && proof.authorizedBy === registry.activeKeyId) {
-        signerPem = keyObj.publicKeyPem;
-      }
     }
 
     if (!signerPem) {
-      return { valid: false, error: `Signer key '${proof.authorizedBy}' for authorizationProof not found in trusted keys` };
+      return {
+        valid: false,
+        error: `Signer key '${proof.authorizedBy}' for authorizationProof not found in trusted authority root or prior registry`
+      };
     }
 
     const payload = Buffer.from(computeRegistryAuthorizationPayload(registry), 'utf8');
@@ -482,6 +572,11 @@ export function saveTrustRegistry(registry, options = {}) {
         if (err.message.includes('REGISTRY_ROLLBACK_DETECTED') || err.message.includes('REVOCATION_STRIP_VIOLATION')) {
           throw err;
         }
+        if (options.forceOverwrite !== true) {
+          throw new Error(
+            `[CORRUPT_PRIOR_REGISTRY_DETECTED] Cannot save registry: existing on-disk registry at ${regPath} is corrupt or unreadable (${err.message})`
+          );
+        }
       }
     }
 
@@ -521,7 +616,16 @@ export function loadRevocationJournal(options = {}) {
   if (fs.existsSync(checkpointPath)) {
     try {
       checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
-    } catch {}
+      if (typeof checkpoint.headIndex !== 'number' || typeof checkpoint.headDigest !== 'string') {
+        const msg = `[CHECKPOINT_CORRUPTION_DETECTED] Checkpoint file missing headIndex or headDigest at ${checkpointPath}`;
+        if (options.failClosed !== false) throw new Error(msg);
+        return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
+      }
+    } catch (err) {
+      const msg = `[CHECKPOINT_CORRUPTION_DETECTED] Failed to parse revocation checkpoint at ${checkpointPath}: ${err.message}`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
+    }
   }
 
   if (!fs.existsSync(journalPath)) {
@@ -605,7 +709,7 @@ export function loadRevocationJournal(options = {}) {
         return { valid: false, entries: [], error: msg, count: i };
       }
 
-      const signPayload = Buffer.from(`${parsed.targetId}:${parsed.entryIndex}:${parsed.prevEntryDigest}`, 'utf8');
+      const signPayload = Buffer.from(computeRevocationEntrySignPayload(parsed), 'utf8');
       const isValid = crypto.verify(null, signPayload, signerPem, Buffer.from(parsed.signature, 'hex'));
       if (!isValid) {
         const msg = `Signature verification failed for revocation record at line ${i + 1} (targetId: ${parsed.targetId})`;
@@ -677,18 +781,25 @@ export function appendRevocationEntry(entryInput, options = {}) {
       prevEntryDigest = sha256Digest(canonicalJsonStringify(journal.entries[entryIndex - 1]));
     }
 
-    const signPayload = Buffer.from(`${entryInput.targetId}:${entryIndex}:${prevEntryDigest}`, 'utf8');
-    const signature = crypto.sign(null, signPayload, options.signerPrivateKey).toString('hex');
+    const timestamp = options.timestamp || new Date().toISOString();
     const signedBy = options.signerKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+    const reason = entryInput.reason || 'MANUAL_REVOCATION';
 
-    const record = {
+    const unsignedRecord = {
       entryIndex,
-      timestamp: options.timestamp || new Date().toISOString(),
+      timestamp,
       revocationType: entryInput.revocationType,
       targetId: entryInput.targetId,
-      reason: entryInput.reason || 'MANUAL_REVOCATION',
+      reason,
       prevEntryDigest,
-      signedBy,
+      signedBy
+    };
+
+    const signPayload = Buffer.from(computeRevocationEntrySignPayload(unsignedRecord), 'utf8');
+    const signature = crypto.sign(null, signPayload, options.signerPrivateKey).toString('hex');
+
+    const record = {
+      ...unsignedRecord,
       signature
     };
 
@@ -697,13 +808,15 @@ export function appendRevocationEntry(entryInput, options = {}) {
 
     const entryDigest = sha256Digest(canonicalJsonStringify(record));
 
-    // Update persistent checkpoint for anti-rollback protection (F01)
+    // Update persistent checkpoint for anti-rollback protection (F01) via atomic write
     const checkpointData = {
       headIndex: entryIndex,
       headDigest: entryDigest,
       updatedAt: record.timestamp
     };
-    fs.writeFileSync(checkpointPath, JSON.stringify(checkpointData, null, 2) + '\n', 'utf8');
+    const cpTmpPath = path.join(dir, `.tmp.cp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`);
+    fs.writeFileSync(cpTmpPath, JSON.stringify(checkpointData, null, 2) + '\n', 'utf8');
+    fs.renameSync(cpTmpPath, checkpointPath);
 
     return {
       success: true,

@@ -75,6 +75,7 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
 
   const requiredFields = [
     'caseId',
+    'provenanceType',
     'family',
     'role',
     'cwe',
@@ -90,6 +91,7 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
   ];
 
   const seenIds = new Set();
+  const validProvenanceTypes = new Set(['SYNTHETIC_REGRESSION', 'SYNTHETIC_CLEAN_CONTROL', 'UPSTREAM_VERIFIED_OSS']);
 
   for (let i = 0; i < cases.length; i++) {
     const c = cases[i];
@@ -104,6 +106,22 @@ export function validateV2Corpus(corpusPath = path.join(REPO_ROOT, 'evals/v2-cor
       if (c[f] === undefined || c[f] === null || c[f] === '') {
         errors.push(`${prefix}: Missing required field '${f}'`);
       }
+    }
+
+    if (c.provenanceType && !validProvenanceTypes.has(c.provenanceType)) {
+      errors.push(`${prefix}: Invalid provenanceType '${c.provenanceType}'`);
+    }
+
+    if (c.commitSha && !/^[0-9a-f]{40}$/i.test(c.commitSha)) {
+      errors.push(`${prefix}: commitSha must be a 40-character git commit hash, found '${c.commitSha}'`);
+    }
+
+    if (c.provenanceType === 'SYNTHETIC_CLEAN_CONTROL' && c.role !== 'CLEAN_CONTROL') {
+      errors.push(`${prefix}: SYNTHETIC_CLEAN_CONTROL must have role CLEAN_CONTROL`);
+    }
+
+    if (c.provenanceType === 'SYNTHETIC_REGRESSION' && !['VULNERABLE', 'FIXED_COUNTERPART'].includes(c.role)) {
+      errors.push(`${prefix}: SYNTHETIC_REGRESSION must have role VULNERABLE or FIXED_COUNTERPART`);
     }
 
     if (!['VULNERABLE', 'FIXED_COUNTERPART', 'CLEAN_CONTROL'].includes(c.role)) {
