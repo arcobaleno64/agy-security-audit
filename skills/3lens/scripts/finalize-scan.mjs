@@ -36,6 +36,11 @@ import {
   persistBaselineContext
 } from './project-context.mjs';
 import { validateThreatModel } from './build-threat-model.mjs';
+import {
+  validateCompactedStateEnvelope,
+  extractCompactedAuditHeader,
+  assertCompactSafe
+} from './compact-guard.mjs';
 export {
   loadProjectSecurityContext,
   detectContextDrift,
@@ -44,7 +49,10 @@ export {
   initProjectContext,
   loadBaselineContext,
   persistBaselineContext,
-  validateThreatModel
+  validateThreatModel,
+  validateCompactedStateEnvelope,
+  extractCompactedAuditHeader,
+  assertCompactSafe
 };
 
 
@@ -2913,7 +2921,10 @@ export function finalizeScan({
   contextPrep = null,
   scanRunId = null,
   nonce = null,
-  cloudflareCoverage = null
+  cloudflareCoverage = null,
+  compactedAuditEnvelope = null,
+  compactedAuditContent = null,
+  compactOptions = null
 } = {}) {
   const effectiveToolProvenance = toolProvenance || getToolProvenance(toolRoot);
   const safeVotes = Array.isArray(votes) ? votes : [];
@@ -2938,6 +2949,38 @@ export function finalizeScan({
     executionRunId === manifestRunId
   );
   let effectiveNonce = nonce || (isManifestRunBound ? (manifest?.taskCorrelationNonce || manifest?.nonce || null) : null);
+
+  // M54-P2-F06: CASE Compacted Audit State Envelope verification
+  let compactGuardResult = null;
+  if (compactedAuditContent || compactedAuditEnvelope || compactOptions?.requireCompactEnvelope) {
+    let env = compactedAuditEnvelope;
+    if (!env && compactedAuditContent) {
+      const extracted = extractCompactedAuditHeader(compactedAuditContent, { failClosed: false });
+      if (!extracted.valid) {
+        compactGuardResult = { valid: false, error: extracted.error, status: 'UNCHECKABLE' };
+      } else {
+        env = extracted.envelope;
+      }
+    }
+
+    if (!compactGuardResult && env) {
+      const expectedContext = {
+        scanRunId: executionRunId || manifestRunId || null,
+        executionNonce: effectiveNonce || null
+      };
+      if (env.toolManifestDigest) {
+        expectedContext.toolManifestDigest = effectiveToolProvenance?.toolIntegrityDigest || null;
+      }
+      const validation = validateCompactedStateEnvelope(env, expectedContext, compactOptions || {});
+      if (!validation.valid) {
+        compactGuardResult = { valid: false, error: validation.error, status: 'UNCHECKABLE', envelope: env };
+      } else {
+        compactGuardResult = { valid: true, error: null, status: 'VERIFIED', envelope: env };
+      }
+    } else if (!compactGuardResult && compactOptions?.requireCompactEnvelope && !env) {
+      compactGuardResult = { valid: false, error: 'Mandatory compacted audit state envelope missing', status: 'UNCHECKABLE' };
+    }
+  }
   const validIntents = ['DISCOVERY', 'VALIDATION', 'REGRESSION'];
   const safeAuditIntent = validIntents.includes(String(auditIntent).toUpperCase())
     ? String(auditIntent).toUpperCase()
@@ -3430,8 +3473,9 @@ export function finalizeScan({
     (contextDrift && contextDrift.hasDrift && ['THREAT_MODEL_REVIEW_REQUIRED', 'CONTEXT_DRIFT'].includes(contextDrift.status))
   );
 
-  // R6-P0-01 & R11-P0-01: Six-Pillar Assurance Gates
-  const coverageGate = (coverageStatus === 'COMPLETE');
+  // R6-P0-01 & R11-P0-01: Six-Pillar Assurance Gates (extended with M54-P2-F06 compactGate)
+  const compactGate = !compactGuardResult || compactGuardResult.valid === true;
+  const coverageGate = (coverageStatus === 'COMPLETE') && compactGate;
   const matrixGate = Boolean(matrixValidation.valid && isMatrixComplete);
   const findingGate = (confirmedCount === 0 && deferredCount === 0 && acceptedRiskCount === 0);
   const contextGate = Boolean(
@@ -3460,12 +3504,17 @@ export function finalizeScan({
     && contextGate
     && executionGate
     && toolIntegrityGate
+    && compactGate
   );
 
-  const canDeclareClean = Boolean(baseCleanEligible && !driftBlocksClean);
+  let canDeclareClean = Boolean(baseCleanEligible && !driftBlocksClean);
 
   let assuranceLabel = 'NON_CLEAN';
-  if (canDeclareClean) {
+  if (!compactGate) {
+    assuranceLabel = 'UNCHECKABLE';
+    coverageStatus = 'UNCHECKABLE';
+    canDeclareClean = false;
+  } else if (canDeclareClean) {
     if (toolIntegrity.status === 'SELF_AUDIT_MODE') {
       assuranceLabel = 'SELF_AUDIT_BOUNDED_CLEAN';
     } else if (!hasConfirmedProjectContext) {
@@ -3581,8 +3630,10 @@ export function finalizeScan({
       findingGate,
       contextGate,
       executionGate,
-      toolIntegrityGate
+      toolIntegrityGate,
+      compactGate
     },
+    compactGuard: compactGuardResult || { valid: true, status: 'NOT_APPLICABLE' },
     discoveryMatrixValid: matrixValidation.valid,
     discoveryCellsSummary: {
       total: safeMatrix.length,
@@ -3634,6 +3685,7 @@ export function finalizeScan({
     summary,
     coverageStatus,
     coverageMode,
+    compactGuard: compactGuardResult || { valid: true, status: 'NOT_APPLICABLE' },
     manifest: updatedManifest,
     manifestValidation: coverageReconciliation,
     provenance: provenance || getHardenedGitProvenance(repoRoot),

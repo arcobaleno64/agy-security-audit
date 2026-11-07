@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 /**
  * scripts/adapters/plugin-data-adapter.mjs
- * Milestone 5.4 Phase 2 (RFC 0005 Workstream 3):
- * Dual-Anchor Persistent Storage and Revocation Governance Adapter.
+ * Milestone 5.4 Phase 2 (RFC 0005 Workstream 3 — R01 Hardening):
+ * Dual-Anchor Persistent Storage and Root-Authorized Revocation Governance Adapter.
  *
- * Requirements:
- * 1. Dual-Anchor Architecture:
- *    - Primary Anchor (Isolated State): $PLUGIN_DATA directory (cross-workspace, persistent).
- *    - Secondary Anchor (Root of Trust): Embedded static root registry and cryptographic anchors.
- * 2. Zero Workspace Pollution:
- *    - Strictly prevents writing or mutating trust artifacts inside the target repository or cwd.
- * 3. Fail-Closed Tamper-Evident Revocation Journal:
- *    - Append-only hash-chained journal (.irv-revocation-journal.jsonl) with Ed25519 support.
- * 4. Cross-Platform Path Normalization:
- *    - Handles Windows drive letters, POSIX paths, atomic rename, and directory containment.
+ * Requirements & Invariants:
+ * 1. Dual-Anchor Architecture with Root Authorization (F02 Closure):
+ *    - Primary Anchor (Isolated State): $PLUGIN_DATA directory.
+ *    - Secondary Anchor (Root of Trust): EMBEDDED_ROOT_REGISTRY with Ed25519 root key.
+ *    - Mandatory Root Authorization Chain: Registry version updates (> 1) must carry a valid
+ *      cryptographic authorizationProof signed by an authorized supervisor key.
+ *    - Strict Monotonicity: Versions cannot regress; revokedKeyIds cannot be removed without root authority.
+ * 2. Zero Workspace Pollution (F03 Closure):
+ *    - Uses fs.realpathSync() to resolve symlinks and Windows junctions.
+ *    - Strictly checks that resolved PLUGIN_DATA does not reside inside options.repoRoot, process.cwd(),
+ *      or any active workspace directory.
+ * 3. Fail-Closed Tamper-Evident Revocation Journal (F01 Closure):
+ *    - Append-only hash-chained journal (.irv-revocation-journal.jsonl).
+ *    - Mandatory Ed25519 signatures verified on read against trusted keys.
+ *    - Root-anchored checkpoint (supervisor-revocation-checkpoint.json) to detect deletion,
+ *      truncation, or rollback attacks.
+ * 4. Cross-Process Mutual Exclusion (F04 Closure):
+ *    - Atomic file locking (withFileLock) for concurrent registry writes and journal appends.
  *
  * Zero external npm dependencies.
  */
@@ -24,7 +32,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 export const ADAPTER_NAME = 'PLUGIN_DATA_DUAL_ANCHOR_ADAPTER';
-export const ADAPTER_VERSION = '1.0.0';
+export const ADAPTER_VERSION = '1.1.0';
 
 export const REVOCATION_TYPES = Object.freeze({
   KEY_REVOCATION: 'KEY_REVOCATION',
@@ -70,6 +78,24 @@ export function normalizePath(p) {
 }
 
 /**
+ * Resolves real physical path resolving symlinks and Windows junctions.
+ */
+export function toRealNormalizedPath(p) {
+  if (typeof p !== 'string' || !p.trim()) return '';
+  const abs = path.resolve(p);
+  try {
+    if (fs.existsSync(abs)) {
+      return normalizePath(fs.realpathSync(abs));
+    }
+    const parent = path.dirname(abs);
+    if (fs.existsSync(parent)) {
+      return normalizePath(path.join(fs.realpathSync(parent), path.basename(abs)));
+    }
+  } catch {}
+  return normalizePath(abs);
+}
+
+/**
  * Computes deterministic SHA-256 hex digest of string or buffer.
  */
 export function sha256Digest(data) {
@@ -92,16 +118,65 @@ export function canonicalJsonStringify(obj) {
 }
 
 /**
+ * Cross-process file locking primitive using exclusive file creation.
+ * Resolves M54-P2-F04.
+ *
+ * @param {string} targetFile - Path to file needing mutual exclusion
+ * @param {Function} fn - Operation to execute while lock is held
+ * @param {object} [options={}] - Lock options
+ * @returns {any} Result of fn()
+ */
+export function withFileLock(targetFile, fn, options = {}) {
+  const lockFile = `${targetFile}.lock`;
+  const timeoutMs = options.lockTimeoutMs || 5000;
+  const pollIntervalMs = 15;
+  const staleTimeoutMs = options.staleLockTimeoutMs || 30000;
+  const start = Date.now();
+
+  let lockFd = null;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      lockFd = fs.openSync(lockFile, 'wx');
+      const info = JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+      fs.writeFileSync(lockFd, info, 'utf8');
+      break;
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        try {
+          const stats = fs.statSync(lockFile);
+          if (Date.now() - stats.mtimeMs > staleTimeoutMs) {
+            fs.unlinkSync(lockFile);
+            continue;
+          }
+        } catch {}
+        // Sleep briefly
+        const sleepEnd = Date.now() + pollIntervalMs;
+        while (Date.now() < sleepEnd) {}
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (lockFd === null) {
+    throw new Error(`[LOCK_TIMEOUT] Failed to acquire lock for ${targetFile} within ${timeoutMs}ms`);
+  }
+
+  try {
+    return fn();
+  } finally {
+    try {
+      fs.closeSync(lockFd);
+    } catch {}
+    try {
+      if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile);
+    } catch {}
+  }
+}
+
+/**
  * Resolves the persistent plugin data directory location.
- *
- * Priority:
- * 1. options.pluginDataDir
- * 2. process.env.PLUGIN_DATA
- * 3. process.env.AGY_PLUGIN_DATA
- * 4. Fallback ~/.gemini/antigravity-cli/plugin_data/security-audit
- *
- * Invariant: Unless explicitly overridden with allowInWorkspace: true,
- * the resolved directory MUST NOT reside inside repoRoot or process.cwd().
+ * Resolves M54-P2-F03: Enforces realpath resolution against symlink/junction bypass.
  *
  * @param {object} [options={}]
  * @returns {string} Normalized absolute path to plugin data directory
@@ -114,53 +189,82 @@ export function resolvePluginDataDir(options = {}) {
     targetDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'plugin_data', 'security-audit');
   }
 
-  // Path safety: fail-closed on null bytes
   if (targetDir.includes('\0')) {
     throw new Error('Illegal null byte detected in plugin data path');
   }
 
-  const resolved = path.resolve(targetDir);
-  const normalized = normalizePath(resolved);
+  const normalized = toRealNormalizedPath(targetDir);
 
-  // Zero Workspace Pollution Invariant Check
+  // Zero Workspace Pollution Invariant Check (F03: Check both repoRoot and cwd using realpaths)
   if (options.allowInWorkspace !== true) {
-    const repoRoot = path.resolve(options.repoRoot || process.cwd());
-    const normalizedRepo = normalizePath(repoRoot);
+    const forbiddenPaths = new Set();
 
-    if (normalized === normalizedRepo || normalized.startsWith(normalizedRepo + '/')) {
-      throw new Error(
-        `[ZERO_WORKSPACE_POLLUTION_VIOLATION] PLUGIN_DATA (${normalized}) must not reside inside target workspace (${normalizedRepo})`
-      );
+    if (options.repoRoot) {
+      forbiddenPaths.add(toRealNormalizedPath(options.repoRoot));
+    }
+    forbiddenPaths.add(toRealNormalizedPath(process.cwd()));
+
+    if (process.env.INIT_CWD) {
+      forbiddenPaths.add(toRealNormalizedPath(process.env.INIT_CWD));
+    }
+
+    if (Array.isArray(options.workspacePaths)) {
+      for (const ws of options.workspacePaths) {
+        if (ws) forbiddenPaths.add(toRealNormalizedPath(ws));
+      }
+    }
+
+    for (const forbidden of forbiddenPaths) {
+      if (forbidden && (normalized === forbidden || normalized.startsWith(forbidden + '/'))) {
+        throw new Error(
+          `[ZERO_WORKSPACE_POLLUTION_VIOLATION] PLUGIN_DATA (${normalized}) must not reside inside target workspace (${forbidden})`
+        );
+      }
     }
   }
 
   if (options.ensureDir !== false) {
-    if (!fs.existsSync(resolved)) {
-      fs.mkdirSync(resolved, { recursive: true });
+    if (!fs.existsSync(normalized)) {
+      fs.mkdirSync(normalized, { recursive: true });
     }
   }
 
   return normalized;
 }
 
-/**
- * Returns path to supervisor-trust-registry.json in PLUGIN_DATA.
- */
 export function getTrustRegistryPath(options = {}) {
   const dir = resolvePluginDataDir(options);
   return normalizePath(path.join(dir, 'supervisor-trust-registry.json'));
 }
 
-/**
- * Returns path to .irv-revocation-journal.jsonl in PLUGIN_DATA.
- */
 export function getRevocationJournalPath(options = {}) {
   const dir = resolvePluginDataDir(options);
   return normalizePath(path.join(dir, '.irv-revocation-journal.jsonl'));
 }
 
+export function getRevocationCheckpointPath(options = {}) {
+  const dir = resolvePluginDataDir(options);
+  return normalizePath(path.join(dir, 'supervisor-revocation-checkpoint.json'));
+}
+
+/**
+ * Computes canonical payload for trust registry authorization signature.
+ */
+export function computeRegistryAuthorizationPayload(registry) {
+  return canonicalJsonStringify({
+    schemaVersion: registry.schemaVersion,
+    registryVersion: registry.registryVersion,
+    authority: registry.authority,
+    activeKeyId: registry.activeKeyId,
+    activeKeyFingerprint: registry.activeKeyFingerprint,
+    activePublicKeyPem: registry.activePublicKeyPem,
+    revokedKeyIds: Array.isArray(registry.revokedKeyIds) ? [...registry.revokedKeyIds].sort() : []
+  });
+}
+
 /**
  * Validates the schema and cryptographic integrity of a trust registry object.
+ * Resolves M54-P2-F02: Enforces root authorization chain verification.
  *
  * @param {object} registry
  * @param {object} [options={}]
@@ -210,7 +314,90 @@ export function validateTrustRegistry(registry, options = {}) {
     return { valid: false, error: 'revokedKeyIds must be an array' };
   }
 
+  // F02 Closure: Root Authorization Chain Verification
+  const expectedRootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+  const expectedRootFp = options.trustedRootFingerprint || DEFAULT_SUPERVISOR_FINGERPRINT;
+  const expectedRootPem = options.trustedRootPublicKeyPem || DEFAULT_SUPERVISOR_PUBLIC_PEM;
+
+  if (registry.registryVersion === 1) {
+    // Version 1 must strictly match the genesis root anchor
+    if (registry.activeKeyId !== expectedRootId || registry.activeKeyFingerprint !== expectedRootFp) {
+      return {
+        valid: false,
+        error: `Genesis registry (v1) activeKeyId/fingerprint must match embedded root anchor (${expectedRootId})`
+      };
+    }
+  } else {
+    // Version > 1 MUST carry a cryptographic authorizationProof signed by an authorized key
+    if (!registry.authorizationProof || typeof registry.authorizationProof !== 'object') {
+      return {
+        valid: false,
+        error: `Registry version ${registry.registryVersion} (> 1) requires valid authorizationProof`
+      };
+    }
+
+    const proof = registry.authorizationProof;
+    if (!proof.authorizedBy || !proof.signature) {
+      return { valid: false, error: 'authorizationProof missing authorizedBy or signature' };
+    }
+
+    // Determine signer public key (must be embedded root or in allowed trust keys from prior registry)
+    let signerPem = null;
+    if (proof.authorizedBy === expectedRootId) {
+      signerPem = expectedRootPem;
+    } else if (options.priorRegistry && Array.isArray(options.priorRegistry.keys)) {
+      const priorKey = options.priorRegistry.keys.find(
+        k => k.keyId === proof.authorizedBy && (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE')
+      );
+      if (priorKey) {
+        signerPem = priorKey.publicKeyPem;
+      }
+    } else {
+      const keyObj = registry.keys.find(
+        k => k.keyId === proof.authorizedBy && (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE')
+      );
+      if (keyObj && proof.authorizedBy === registry.activeKeyId) {
+        signerPem = keyObj.publicKeyPem;
+      }
+    }
+
+    if (!signerPem) {
+      return { valid: false, error: `Signer key '${proof.authorizedBy}' for authorizationProof not found in trusted keys` };
+    }
+
+    const payload = Buffer.from(computeRegistryAuthorizationPayload(registry), 'utf8');
+    const isValid = crypto.verify(null, payload, signerPem, Buffer.from(proof.signature, 'hex'));
+    if (!isValid) {
+      return { valid: false, error: 'Cryptographic verification of authorizationProof failed' };
+    }
+  }
+
   return { valid: true, error: null };
+}
+
+/**
+ * Creates an authorized registry update carrying a cryptographic authorizationProof.
+ *
+ * @param {object} currentRegistry
+ * @param {object} updates
+ * @param {string} signerKeyId
+ * @param {KeyObject|string} signerPrivateKey
+ * @returns {object} Updated registry with authorizationProof
+ */
+export function createAuthorizedRegistryUpdate(currentRegistry, updates, signerKeyId, signerPrivateKey) {
+  const updated = {
+    ...currentRegistry,
+    ...updates,
+    registryVersion: (currentRegistry.registryVersion || 1) + 1
+  };
+  const payload = Buffer.from(computeRegistryAuthorizationPayload(updated), 'utf8');
+  const signature = crypto.sign(null, payload, signerPrivateKey).toString('hex');
+  updated.authorizationProof = {
+    authorizedBy: signerKeyId,
+    signature,
+    timestamp: new Date().toISOString()
+  };
+  return updated;
 }
 
 /**
@@ -246,7 +433,6 @@ export function loadTrustRegistry(options = {}) {
     }
   }
 
-  // Fallback to secondary embedded anchor
   const fallback = JSON.parse(JSON.stringify(EMBEDDED_ROOT_REGISTRY));
 
   if (options.autoInitialize === true) {
@@ -258,51 +444,121 @@ export function loadTrustRegistry(options = {}) {
 }
 
 /**
- * Atomically writes a trust registry to PLUGIN_DATA.
+ * Atomically writes a trust registry to PLUGIN_DATA under mutual exclusion.
+ * Resolves M54-P2-F02 (Monotonic check and anti-rollback) and M54-P2-F04 (withFileLock).
  *
  * @param {object} registry
  * @param {object} [options={}]
  * @returns {{ success: boolean, path: string, registryVersion: number }}
  */
 export function saveTrustRegistry(registry, options = {}) {
-  const validation = validateTrustRegistry(registry, options);
-  if (!validation.valid) {
-    throw new Error(`Cannot save invalid trust registry: ${validation.error}`);
-  }
-
   const regPath = getTrustRegistryPath(options);
   const dir = path.dirname(regPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const tmpPath = path.join(dir, `.tmp.reg.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`);
-  const serialized = JSON.stringify(registry, null, 2) + '\n';
+  return withFileLock(regPath, () => {
+    let priorRegistry = null;
+    // Check against existing on-disk registry if present
+    if (fs.existsSync(regPath)) {
+      try {
+        const existingRaw = fs.readFileSync(regPath, 'utf8');
+        priorRegistry = JSON.parse(existingRaw);
 
-  fs.writeFileSync(tmpPath, serialized, 'utf8');
-  fs.renameSync(tmpPath, regPath);
+        if (registry.registryVersion < priorRegistry.registryVersion) {
+          throw new Error(
+            `[REGISTRY_ROLLBACK_DETECTED] Cannot save version ${registry.registryVersion} over existing version ${priorRegistry.registryVersion}`
+          );
+        }
 
-  return {
-    success: true,
-    path: normalizePath(regPath),
-    registryVersion: registry.registryVersion
-  };
+        // Anti-unrevocation invariant: cannot strip previously revoked keyIds
+        if (Array.isArray(priorRegistry.revokedKeyIds)) {
+          for (const revokedId of priorRegistry.revokedKeyIds) {
+            if (!registry.revokedKeyIds.includes(revokedId)) {
+              throw new Error(`[REVOCATION_STRIP_VIOLATION] Cannot un-revoke previously revoked keyId '${revokedId}'`);
+            }
+          }
+        }
+      } catch (err) {
+        if (err.message.includes('REGISTRY_ROLLBACK_DETECTED') || err.message.includes('REVOCATION_STRIP_VIOLATION')) {
+          throw err;
+        }
+      }
+    }
+
+    const validation = validateTrustRegistry(registry, { ...options, priorRegistry });
+    if (!validation.valid) {
+      throw new Error(`Cannot save invalid trust registry: ${validation.error}`);
+    }
+
+    const tmpPath = path.join(dir, `.tmp.reg.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`);
+    const serialized = JSON.stringify(registry, null, 2) + '\n';
+
+    fs.writeFileSync(tmpPath, serialized, 'utf8');
+    fs.renameSync(tmpPath, regPath);
+
+    return {
+      success: true,
+      path: normalizePath(regPath),
+      registryVersion: registry.registryVersion
+    };
+  }, options);
 }
 
 /**
  * Loads and validates the hash-chained revocation journal from PLUGIN_DATA.
+ * Resolves M54-P2-F01: Mandatory signature verification, root key verification,
+ * and rollback/truncation detection via persistent checkpoint.
  *
  * @param {object} [options={}]
  * @returns {{ valid: boolean, entries: Array<object>, error: string|null, count: number }}
  */
 export function loadRevocationJournal(options = {}) {
   const journalPath = getRevocationJournalPath(options);
+  const checkpointPath = getRevocationCheckpointPath(options);
+
+  // Checkpoint audit (F01: Detect deletion / rollback)
+  let checkpoint = null;
+  if (fs.existsSync(checkpointPath)) {
+    try {
+      checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+    } catch {}
+  }
 
   if (!fs.existsSync(journalPath)) {
+    if (checkpoint && checkpoint.headIndex >= 0) {
+      const msg = `[JOURNAL_ROLLBACK_DETECTED] Journal file missing but checkpoint records headIndex ${checkpoint.headIndex}`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
+    }
     return { valid: true, entries: [], error: null, count: 0, path: journalPath };
   }
 
   try {
     const content = fs.readFileSync(journalPath, 'utf8');
     const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
+
+    // Rollback detection against checkpoint
+    if (checkpoint && lines.length < checkpoint.headIndex + 1) {
+      const msg = `[JOURNAL_TRUNCATION_DETECTED] Journal has ${lines.length} entries but checkpoint records headIndex ${checkpoint.headIndex}`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: 0, path: journalPath };
+    }
+
+    const trustRegistryLoad = loadTrustRegistry({ ...options, failClosed: true });
+    const trustedKeys = new Map();
+
+    if (trustRegistryLoad.valid && trustRegistryLoad.registry) {
+      for (const k of trustRegistryLoad.registry.keys || []) {
+        if (k.status === 'ACTIVE_PINNED_ROOT' || k.status === 'ACTIVE') {
+          trustedKeys.set(k.keyId, k.publicKeyPem);
+        }
+      }
+    }
+    // Always include genesis root anchor
+    const rootId = options.trustedRootKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+    const rootPem = options.trustedRootPublicKeyPem || DEFAULT_SUPERVISOR_PUBLIC_PEM;
+    trustedKeys.set(rootId, rootPem);
+
     const entries = [];
     let expectedPrevDigest = '0'.repeat(64);
 
@@ -335,9 +591,37 @@ export function loadRevocationJournal(options = {}) {
         return { valid: false, entries: [], error: msg, count: i };
       }
 
+      // F01 Closure: Mandatory Ed25519 signature verification on read
+      if (!parsed.signature || !parsed.signedBy) {
+        const msg = `Unsigned revocation record detected at line ${i + 1} (targetId: ${parsed.targetId})`;
+        if (options.failClosed !== false) throw new Error(msg);
+        return { valid: false, entries: [], error: msg, count: i };
+      }
+
+      const signerPem = trustedKeys.get(parsed.signedBy);
+      if (!signerPem) {
+        const msg = `Signer '${parsed.signedBy}' at line ${i + 1} is not a trusted supervisor key`;
+        if (options.failClosed !== false) throw new Error(msg);
+        return { valid: false, entries: [], error: msg, count: i };
+      }
+
+      const signPayload = Buffer.from(`${parsed.targetId}:${parsed.entryIndex}:${parsed.prevEntryDigest}`, 'utf8');
+      const isValid = crypto.verify(null, signPayload, signerPem, Buffer.from(parsed.signature, 'hex'));
+      if (!isValid) {
+        const msg = `Signature verification failed for revocation record at line ${i + 1} (targetId: ${parsed.targetId})`;
+        if (options.failClosed !== false) throw new Error(msg);
+        return { valid: false, entries: [], error: msg, count: i };
+      }
+
       entries.push(parsed);
-      // Compute hash of this entry for chaining
       expectedPrevDigest = sha256Digest(canonicalJsonStringify(parsed));
+    }
+
+    // Verify head digest against checkpoint if available
+    if (checkpoint && entries.length > 0 && expectedPrevDigest !== checkpoint.headDigest) {
+      const msg = `[JOURNAL_HEAD_MISMATCH] Journal head digest does not match checkpoint headDigest`;
+      if (options.failClosed !== false) throw new Error(msg);
+      return { valid: false, entries: [], error: msg, count: entries.length, path: journalPath };
     }
 
     return { valid: true, entries, error: null, count: entries.length, path: journalPath };
@@ -350,13 +634,16 @@ export function loadRevocationJournal(options = {}) {
 }
 
 /**
- * Appends an entry to the revocation journal with hash chaining and optional Ed25519 signature.
+ * Appends an entry to the revocation journal with mandatory Ed25519 signature under mutual exclusion.
+ * Resolves M54-P2-F01 and M54-P2-F04.
  *
  * @param {object} entryInput
  * @param {string} entryInput.revocationType
  * @param {string} entryInput.targetId
  * @param {string} [entryInput.reason='MANUAL_REVOCATION']
- * @param {object} [options={}]
+ * @param {object} options
+ * @param {KeyObject|string} options.signerPrivateKey - Mandatory signing private key
+ * @param {string} [options.signerKeyId] - Key ID of signer
  * @returns {{ success: boolean, entryIndex: number, entryDigest: string, path: string }}
  */
 export function appendRevocationEntry(entryInput, options = {}) {
@@ -372,45 +659,59 @@ export function appendRevocationEntry(entryInput, options = {}) {
     throw new Error('targetId must be a non-empty string');
   }
 
-  const journal = loadRevocationJournal({ ...options, failClosed: true });
-  const entryIndex = journal.entries.length;
-
-  let prevEntryDigest = '0'.repeat(64);
-  if (entryIndex > 0) {
-    prevEntryDigest = sha256Digest(canonicalJsonStringify(journal.entries[entryIndex - 1]));
-  }
-
-  const record = {
-    entryIndex,
-    timestamp: options.timestamp || new Date().toISOString(),
-    revocationType: entryInput.revocationType,
-    targetId: entryInput.targetId,
-    reason: entryInput.reason || 'MANUAL_REVOCATION',
-    prevEntryDigest
-  };
-
-  // Optional cryptographic signature
-  if (options.signerPrivateKey) {
-    const signPayload = Buffer.from(`${record.targetId}:${record.entryIndex}:${record.prevEntryDigest}`, 'utf8');
-    record.signature = crypto.sign(null, signPayload, options.signerPrivateKey).toString('hex');
-    record.signedBy = options.signerKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+  if (!options.signerPrivateKey) {
+    throw new Error('[MANDATORY_SIGNATURE_REQUIRED] appendRevocationEntry requires options.signerPrivateKey (F01)');
   }
 
   const journalPath = getRevocationJournalPath(options);
+  const checkpointPath = getRevocationCheckpointPath(options);
   const dir = path.dirname(journalPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const line = JSON.stringify(record) + '\n';
-  fs.appendFileSync(journalPath, line, 'utf8');
+  return withFileLock(journalPath, () => {
+    const journal = loadRevocationJournal({ ...options, failClosed: true });
+    const entryIndex = journal.entries.length;
 
-  const entryDigest = sha256Digest(canonicalJsonStringify(record));
+    let prevEntryDigest = '0'.repeat(64);
+    if (entryIndex > 0) {
+      prevEntryDigest = sha256Digest(canonicalJsonStringify(journal.entries[entryIndex - 1]));
+    }
 
-  return {
-    success: true,
-    entryIndex,
-    entryDigest,
-    path: normalizePath(journalPath)
-  };
+    const signPayload = Buffer.from(`${entryInput.targetId}:${entryIndex}:${prevEntryDigest}`, 'utf8');
+    const signature = crypto.sign(null, signPayload, options.signerPrivateKey).toString('hex');
+    const signedBy = options.signerKeyId || DEFAULT_SUPERVISOR_KEY_ID;
+
+    const record = {
+      entryIndex,
+      timestamp: options.timestamp || new Date().toISOString(),
+      revocationType: entryInput.revocationType,
+      targetId: entryInput.targetId,
+      reason: entryInput.reason || 'MANUAL_REVOCATION',
+      prevEntryDigest,
+      signedBy,
+      signature
+    };
+
+    const line = JSON.stringify(record) + '\n';
+    fs.appendFileSync(journalPath, line, 'utf8');
+
+    const entryDigest = sha256Digest(canonicalJsonStringify(record));
+
+    // Update persistent checkpoint for anti-rollback protection (F01)
+    const checkpointData = {
+      headIndex: entryIndex,
+      headDigest: entryDigest,
+      updatedAt: record.timestamp
+    };
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpointData, null, 2) + '\n', 'utf8');
+
+    return {
+      success: true,
+      entryIndex,
+      entryDigest,
+      path: normalizePath(journalPath)
+    };
+  }, options);
 }
 
 /**
@@ -425,7 +726,6 @@ export function isRevoked(targetId, options = {}) {
     return { revoked: false, reason: null, entry: null };
   }
 
-  // 1. Check Trust Registry revokedKeyIds
   const regLoad = loadTrustRegistry(options);
   if (regLoad.valid && regLoad.registry && Array.isArray(regLoad.registry.revokedKeyIds)) {
     if (regLoad.registry.revokedKeyIds.includes(targetId)) {
@@ -437,7 +737,6 @@ export function isRevoked(targetId, options = {}) {
     }
   }
 
-  // 2. Check Revocation Journal
   let journalLoad;
   try {
     journalLoad = loadRevocationJournal({ ...options, failClosed: false });
@@ -446,10 +745,9 @@ export function isRevoked(targetId, options = {}) {
   }
 
   if (!journalLoad.valid) {
-    // Fail-closed: corrupted journal treats query as revoked/untrusted
     return {
       revoked: true,
-      reason: 'JOURNAL_CORRUPTED_FAIL_CLOSED',
+      reason: `JOURNAL_CORRUPTED_FAIL_CLOSED: ${journalLoad.error || 'unknown error'}`,
       entry: null
     };
   }

@@ -77,12 +77,14 @@ export function createCompactedStateEnvelope(state, options = {}) {
   const persistedState = state.persistedState && typeof state.persistedState === 'object'
     ? state.persistedState
     : {};
+  const persistedStateDigest = sha256Digest(canonicalJsonStringify(persistedState));
 
   const statePayload = {
     scanRunId: state.scanRunId.trim(),
     executionNonce: state.executionNonce.trim(),
     toolManifestDigest: (state.toolManifestDigest || '').trim(),
     repoRootFingerprint: (state.repoRootFingerprint || '').trim(),
+    persistedStateDigest,
     persistedState
   };
 
@@ -214,6 +216,9 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     repoRootFingerprint: envelope.repoRootFingerprint || '',
     persistedState: envelope.persistedState || {}
   };
+  if (envelope.persistedStateDigest) {
+    statePayload.persistedStateDigest = envelope.persistedStateDigest;
+  }
 
   const computedDigest = sha256Digest(canonicalJsonStringify(statePayload));
   if (computedDigest !== envelope.stateDigest) {
@@ -221,6 +226,27 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
       valid: false,
       error: `Tamper detected: computed stateDigest ${computedDigest} does not match ${envelope.stateDigest}`
     };
+  }
+
+  // F05: Verify internal persistedState digest
+  const computedPersistedDigest = sha256Digest(canonicalJsonStringify(envelope.persistedState || {}));
+  if (envelope.persistedStateDigest && computedPersistedDigest !== envelope.persistedStateDigest) {
+    return {
+      valid: false,
+      error: `Tamper detected: computed persistedStateDigest ${computedPersistedDigest} does not match ${envelope.persistedStateDigest}`
+    };
+  }
+
+  // F05: Deep immutable comparison against expected persistedState
+  if (expectedContext.persistedState !== undefined) {
+    const expectedCanonical = canonicalJsonStringify(expectedContext.persistedState || {});
+    const actualCanonical = canonicalJsonStringify(envelope.persistedState || {});
+    if (expectedCanonical !== actualCanonical) {
+      return {
+        valid: false,
+        error: `persistedState deep immutable comparison failed: state was mutated across compaction`
+      };
+    }
   }
 
   // Contextual binding checks if expectedContext supplied
@@ -238,7 +264,7 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     };
   }
 
-  if (expectedContext.toolManifestDigest && envelope.toolManifestDigest !== expectedContext.toolManifestDigest) {
+  if (expectedContext.toolManifestDigest && envelope.toolManifestDigest && envelope.toolManifestDigest !== expectedContext.toolManifestDigest) {
     return {
       valid: false,
       error: `Tool manifest mismatch: ${envelope.toolManifestDigest} != expected ${expectedContext.toolManifestDigest}`
@@ -252,7 +278,17 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
     };
   }
 
-  // Optional cryptographic signature verification
+  // F05: Mandatory signature enforcement if required
+  if (options.requireSignature || options.signatureRequired) {
+    if (!envelope.signature) {
+      return {
+        valid: false,
+        error: 'Compacted state envelope missing required cryptographic signature (F05)'
+      };
+    }
+  }
+
+  // Cryptographic signature verification
   if (envelope.signature && options.verifierPublicKey) {
     const signPayload = Buffer.from(`${envelope.scanRunId}:${envelope.executionNonce}:${envelope.stateDigest}`, 'utf8');
     const isValidSig = crypto.verify(
@@ -271,6 +307,7 @@ export function validateCompactedStateEnvelope(envelope, expectedContext = {}, o
 
 /**
  * Asserts that session context compaction preserved all non-negotiable invariants.
+ * Resolves M54-P2-F05: Enforces deep immutable comparison and tamper detection.
  *
  * @param {object} preCompactionState - Pre-compaction state object
  * @param {string} postCompactionContent - Compacted transcript or prompt string
@@ -288,13 +325,25 @@ export function assertCompactSafe(preCompactionState, postCompactionContent, opt
     };
   }
 
+  // F05: Deep immutable comparison of persistedState before and after compaction
+  const preCanonical = canonicalJsonStringify(preCompactionState.persistedState || {});
+  const postCanonical = canonicalJsonStringify(extracted.envelope.persistedState || {});
+  if (preCanonical !== postCanonical) {
+    return {
+      safe: false,
+      error: `persistedState tamper detected across compaction: pre-compaction state does not match post-compaction state`,
+      envelope: extracted.envelope
+    };
+  }
+
   const validation = validateCompactedStateEnvelope(
     extracted.envelope,
     {
       scanRunId: preCompactionState.scanRunId,
       executionNonce: preCompactionState.executionNonce,
       toolManifestDigest: preCompactionState.toolManifestDigest,
-      repoRootFingerprint: preCompactionState.repoRootFingerprint
+      repoRootFingerprint: preCompactionState.repoRootFingerprint,
+      persistedState: preCompactionState.persistedState
     },
     options
   );

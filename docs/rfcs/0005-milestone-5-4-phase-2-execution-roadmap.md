@@ -106,3 +106,24 @@ $$\text{EXECUTION\_COMPLETE} \ne \text{FINDING\_VERIFIED} \ne \text{RELEASE\_AUT
 | **2.5** | V2.0 Corpus Curation | 12–16 Ground Truth Bundles in `evals/v2-corpus/` | `node scripts/validate-v2-corpus.mjs` |
 | **2.6** | Full Matrix Calibration | Multi-pass live benchmark execution & baseline report | `npm run compare:models` |
 | **2.7** | Release Freeze & Tag | Version bump to `1.12.0` & PR creation | `npm run check:release` |
+
+---
+
+## 5. Review & Remediation Tracking (ChatGPT Pro Independent Audit)
+
+- **Review R01 Status**: `REJECTED` (10 Findings: 2 Critical, 5 High, 3 Medium)
+- **Remediation Status**: `IN_REMEDIATION`
+- **Phase 2 Exit Gate Status**: `PENDING_REVIEW` (Blocked on ChatGPT Pro Round 02 Approval)
+
+| Finding ID | Severity | Category | Description | Remediation Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `M54-P2-F01` | Critical | Storage/Trust | Revocation journal lacks root anchor verification on read & anti-rollback | ✔ Remediated (Ed25519 on read + checkpoint) |
+| `M54-P2-F02` | Critical | Storage/Trust | Registry lacks root authorization chain verification | ✔ Remediated (v1 genesis match + v>1 authorizationProof) |
+| `M54-P2-F03` | High | Security/Containment | Path containment bypass via symlinks/junctions | ✔ Remediated (fs.realpathSync + dual-root containment) |
+| `M54-P2-F04` | High | Concurrency | Missing cross-process concurrency locking | ✔ Remediated (withFileLock atomic lockfile) |
+| `M54-P2-F05` | High | Context/Compaction | CASE allows unsigned state tampering | ✔ Remediated (deep immutable comparison + signature enforcement) |
+| `M54-P2-F06` | High | Integration | finalize-scan.mjs not wired to CASE | ✔ Remediated (wire compact-guard, fail closed to UNCHECKABLE) |
+| `M54-P2-F07` | High | Ground Truth | CVE mismatches & broken provenance in Layer 2 corpus | ✔ Remediated (authentic NVD CVEs & SYNTHETIC_REGRESSION tags) |
+| `M54-P2-F08` | Medium | Ground Truth | Clean controls lack external diversity | ✔ Remediated (external mature OSS clean controls from lodash/minimist/tar) |
+| `M54-P2-F09` | Medium | Report/Metrics | Ablation report claims single-fixture generalization | ✔ Remediated (qualified as pilot observation, toolDirty clarified) |
+| `M54-P2-F10` | Medium | Governance | Premature claim of Phase 2 exit criteria | ✔ Remediated (status set to IN_REMEDIATION, exit gate PENDING_REVIEW) |
