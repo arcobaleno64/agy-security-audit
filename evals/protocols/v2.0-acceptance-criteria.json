@@ -1,0 +1,113 @@
+{
+  "$schema": "https://antigravity.google/schemas/security-audit/acceptance-criteria.schema.json",
+  "protocolId": "v2.0-acceptance-criteria",
+  "protocolVersion": "2.0.0",
+  "frameworkReference": "evals/protocols/v2.0-three-layer-evaluation-framework.md",
+  "status": "FROZEN_BEFORE_RUN",
+  "frozenAt": "2026-10-12T00:00:00Z",
+  "targetSystem": "@arcobaleno64/agy-security-audit",
+  "governance": {
+    "authority": "Antigravity Security Governance & Assurance Directorate",
+    "nonEquivalencePrinciple": "Sample sufficiency != evaluation success",
+    "postHocTuningProhibited": true
+  },
+  "sampleSizeRequirements": {
+    "layer1": {
+      "name": "Deterministic Integrity & Regression",
+      "testPassRateThreshold": 1,
+      "allowedRegressions": 0
+    },
+    "layer2": {
+      "name": "External Validity Corpus",
+      "minTotalCases": 12,
+      "maxTotalCases": 16,
+      "minVulnerableCases": 6,
+      "maxVulnerableCases": 8,
+      "minFixedCounterparts": 3,
+      "maxFixedCounterparts": 4,
+      "minCleanControls": 3,
+      "maxCleanControls": 4,
+      "minVulnerabilityFamilies": 7
+    },
+    "layer3": {
+      "name": "Fresh Shadow Cohort",
+      "minFreshCases": 10,
+      "maxFreshCases": 15,
+      "blockingAuthorityFutureMinCases": 20
+    }
+  },
+  "scorecardThresholds": {
+    "D1_mustDetectRecall": {
+      "description": "Must-detect vulnerability recall across Layer 2 and Layer 3",
+      "minThreshold": 0.85,
+      "targetThreshold": 0.95
+    },
+    "D2_falsePositiveRate": {
+      "description": "False positive rate on clean controls and patched counterparts",
+      "maxThreshold": 0.15,
+      "targetThreshold": 0.05
+    },
+    "D3_severityAgreement": {
+      "description": "Concordance with Ground Truth CVSS severity",
+      "minAgreementRate": 0.8,
+      "criticalDowngradeTolerance": 0
+    },
+    "D4_unverifiedCorrectness": {
+      "description": "Appropriate emission of UNVERIFIED when evidence is incomplete or context is absent",
+      "minCalibrationScore": 0.9,
+      "falseCleanOnIncompleteContextTolerance": 0
+    },
+    "D5_failClosedCorrectness": {
+      "description": "Fail-closed invocation on timeouts, schema errors, or transport aborts",
+      "requiredRate": 1
+    },
+    "D6_findingProvenance": {
+      "description": "Accurate file and line range locator precision",
+      "minLocatorAccuracy": 0.85
+    },
+    "D7_sarifFidelity": {
+      "description": "Valid SARIF 2.1.0 output adhering to SSDF and ASVS mapping rules",
+      "schemaValidationPassRate": 1
+    },
+    "D8_crossProjectGeneralization": {
+      "description": "Consistency of metrics across different language targets",
+      "minLanguagesEvaluated": 3
+    }
+  },
+  "hardStops": [
+    {
+      "id": "HS-01",
+      "name": "False CLEAN on Must-Detect Vulnerability",
+      "enforcement": "IMMEDIATE_FAIL"
+    },
+    {
+      "id": "HS-02",
+      "name": "Incomplete or Unverifiable Evidence Reported as CLEAN",
+      "enforcement": "IMMEDIATE_FAIL"
+    },
+    {
+      "id": "HS-03",
+      "name": "Synthetic Evidence Represented as Live Observation",
+      "enforcement": "IMMEDIATE_FAIL"
+    },
+    {
+      "id": "HS-04",
+      "name": "Security False Advance in Fresh Shadow Cohort",
+      "enforcement": "STOP_COHORT_AND_RCA"
+    },
+    {
+      "id": "HS-05",
+      "name": "Unbound Ground-Truth Provenance",
+      "enforcement": "DISQUALIFY_CASE"
+    }
+  ],
+  "legacyEvidenceReCertificationRules": {
+    "autoQualificationPermitted": false,
+    "reCertificationPrerequisites": [
+      "Must map to one of the 7 defined vulnerability families",
+      "Must have immutable commit SHA and upstream repository link",
+      "Must possess reproducible technical verification evidence",
+      "Must include Human Security Oracle scope and severity mapping"
+    ]
+  }
+}
