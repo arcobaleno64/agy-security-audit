@@ -122,12 +122,17 @@ The role permissions defined in `recommended-security-audit-permissions.json` en
 three-lens/
 ├── package.json                          # npm test, test:evals, test:semantic, test:discovery, test:stability, check:release (1.10.0)
 ├── plugin.json                           # Antigravity plugin manifest (with schema, no BOM)
-├── hooks.json                            # Antigravity PreToolUse lifecycle hook registration
+├── hooks.json                            # Antigravity hook registration (PreInvocation, PreToolUse)
 ├── hooks/                                # Lifecycle hook implementations
+│   ├── pre-invocation-secret-guard.mjs   # PreInvocation hook: scans prompts for secrets before model dispatch
 │   └── shadow-context-guard.mjs          # PreToolUse fail-closed deny with redirection to scratch/context/
 ├── recommended-security-audit-permissions.json # Role-based permissions profile under AGY Default-Deny
 ├── SECURITY.md                           # Honest trust model and sandbox boundary disclosure
+├── CHANGELOG.md                          # Release history
+├── CONTRIBUTING.md                       # Contribution guide
+├── LICENSE                               # MIT License
 ├── agents/                               # Dedicated subagent definitions (at plugin root)
+│   ├── security-audit-coordinator.md     # Primary orchestrator agent (mainAgent)
 │   ├── threat-modeler.md                 # Threat-modeling specialist
 │   ├── discovery-agent.md                # 9x10 discovery matrix specialist
 │   ├── verifier-reachability.md          # 3-Lens reachability verification specialist
@@ -142,7 +147,15 @@ three-lens/
 │   ├── coverage-gap/                     # 5 accounting-coverage boundary tests
 │   ├── git-config/                       # 5 malicious git-config isolation tests
 │   ├── patch-regression/                 # 5 malicious-patch and stale-baseline tests
-│   └── semantic-benchmark/               # L1.5 disposition ground-truth benchmark (20 paired cases: 10 vulnerable, 10 safe controls)
+│   ├── semantic-benchmark/               # L1.5 disposition ground-truth benchmark (20 paired cases: 10 vulnerable, 10 safe controls)
+│   ├── holdout-benchmark/                # Holdout benchmark fixtures
+│   ├── live-runs/                        # Recorded live benchmark runs
+│   ├── micro-corpus/                     # Micro-corpus fixtures with ground-truth.json
+│   ├── oss-corpus/                       # Open-source fix diffs
+│   ├── protocols/                        # Evaluation protocol definitions
+│   ├── recorded-runs/                    # Recorded multi-pass runs for the stability benchmark
+│   ├── reproduction-records/             # Reproduction records
+│   └── test-reports/                     # Captured test-run outputs
 ├── schemas/                              # R2-P1-08 versioned JSON Schemas (Draft-07)
 │   ├── scan-manifest.schema.json         # Directory-accounting manifest schema
 │   ├── threat-model.schema.json          # Threat-model schema
@@ -152,12 +165,29 @@ three-lens/
 │   ├── execution-attestation.schema.json # Execution-attestation schema (stage-coverage completeness)
 │   ├── audit-baseline.schema.json        # Audit-baseline schema (historical state baseline)
 │   ├── empirical-benchmark-run.schema.json # Empirical benchmark run envelope schema
-│   └── permissions-profile.schema.json  # Role-based permissions profile schema
+│   ├── permissions-profile.schema.json  # Role-based permissions profile schema
+│   ├── candidate-set.schema.json        # Candidate-set schema
+│   ├── cross-model-protocol.schema.json # Cross-model protocol schema
+│   ├── doctor-report.schema.json        # Doctor-report schema
+│   ├── eval-protocol.schema.json        # Evaluation protocol schema
+│   ├── evidence-matrix.schema.json      # Evidence-matrix schema
+│   ├── operator-metrics.schema.json     # Operator-metrics schema
+│   ├── reproduction-record.schema.json  # Reproduction-record schema
+│   ├── shadow-cohort-record.schema.json # Shadow-cohort record schema
+│   └── verifier-ballot-set.schema.json  # Verifier-ballot-set schema
 ├── rules/
 │   └── AGENTS.md                         # Global zero-trust and data-review boundary rules
+├── .github/                              # CI workflows (pull-request CI, release, Semgrep)
+├── .security-audit/                      # Project security context for this repository
+├── docs/                                 # Guides, reproduction notes and RFCs
+├── reports/                              # Dated benchmark and replication reports
+├── scripts/                              # Repository tooling: doctor, release provenance, benchmarks, version bump
+├── test/                                 # Test fixtures (e.g. Cloudflare adapter)
+├── tests/                                # Governance and invariant test suites
 └── skills/
     └── 3lens/
         ├── SKILL.md                      # Primary skill entrypoint and workflow orchestration
+        ├── tool-integrity-manifest.json  # Integrity manifest of critical scripts
         ├── standards/                    # R2-P1-01 standards-mapping layer
         │   ├── standards-map.json        # CWE -> ASVS 5.0 / SSDF / OWASP mapping
         │   └── applicability-profiles.json # Project-type applicability profiles
@@ -175,7 +205,8 @@ three-lens/
         │   ├── threat-modeling.md        # Threat-modeling and 11-dimension vector baseline
         │   ├── verifier-protocol.md      # Verification protocol and evidence-binding invariants
         │   ├── finding-lineage.md        # Finding lineage tracking and fingerprinting architecture
-        │   └── safe-proof-policy.md      # Safe defensive-proof policy and prohibited commands
+        │   ├── safe-proof-policy.md      # Safe defensive-proof policy and prohibited commands
+        │   └── model-independence.md     # Model and provider independence specification
         └── scripts/
             ├── path-containment.mjs      # Authoritative TCB path containment & TOCTOU-resistant atomic file reading
             ├── safe-git.mjs              # Hardened, isolated git-execution wrapper
@@ -191,6 +222,10 @@ three-lens/
             ├── run-discovery-eval.mjs    # Agent discovery-evaluation suite (Simulated CI / Recorded Agent Run)
             ├── run-stability-eval.mjs    # Discovery-stability and multi-pass empirical benchmark
             ├── record-benchmark-run.mjs  # Recorded empirical benchmark protocol envelope recorder
+            ├── prepare-review-context.mjs   # Pre-context secret protection and review-context preparation
+            ├── project-context.mjs          # Project security context loader, validator and drift detector
+            ├── adapters/                    # Finding-producer adapters
+            │   └── cloudflare-adapter.mjs   # Cloudflare security-audit-skill findings adapter
             └── check-release-invariants.mjs # Section 24 release-invariant gate (62 specifications, 40 invariants)
 ```
 

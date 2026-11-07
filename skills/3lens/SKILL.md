@@ -36,7 +36,7 @@ external targets or harmful real-world actions.
 When launched, the skill inspects explicit user flags or prompts for customization across core dimensions:
 
 ```text
-/3lens [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--concurrency <N>] [--patch] [--export] [--preflight]
+/3lens [--scope <codebase|changes|secrets|path>] [--intent <discovery|validation|regression>] [--effort <low|medium|high>] [--concurrency <N>] [--patch] [--export] [--preflight]
 ```
 
 ### Dimension 0: Audit Intent (`auditIntent`)
@@ -44,6 +44,12 @@ When executing security review, the skill operates under one of three distinct i
 1. **`DISCOVERY` (Default on initial run)**: Open exploration across declared components and vulnerability families to generate evidence-backed candidate hypotheses. Zero findings is a valid outcome; there is no finding quota.
 2. **`VALIDATION`**: Independent evaluation of candidate hypotheses via the 3-Lens panel (`REACHABILITY`, `DEFENSES`, `IMPACT`) to derive authoritative dispositions (`REPORTABLE`, `SUPPRESSED`, `DEFERRED`).
 3. **`REGRESSION` (Default on rerun / fix verification)**: Targeted verification of remediation patches and focused re-exploration restricted strictly to attack surfaces affected by changes. Reruns on the same scope default to `REGRESSION` to ensure convergence without infinite novelty hunting.
+
+### Dimension 0.5: Reasoning Effort Profile (`--effort`)
+Controls model reasoning depth and token budget allocation (RFC 0004):
+- **`low`**: Smoke & pre-commit checks (0 thinking tokens, fast verification, -70% token consumption).
+- **`medium` (Default)**: Standard CI/CD assurance (balanced reasoning, strict JSON compliance, 100% semantic fidelity).
+- **`high`**: Deep pre-release audit (maximum reasoning depth, exhaustive static trace exploration).
 
 ### Dimension 1: Audit Entry Modes
 1. **`review` (Diff Security Review)**: Focused scan scoped to git working diff, branch PR, or commit hash with 100% changed-file accounting. See [review.md](./jobs/review.md).

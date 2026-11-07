@@ -47,7 +47,7 @@ Evidence Grades:
 
 | Dependency | Minimum Version | Evidence Grade | Failure Status | Failure Impact |
 |---|---|---|---|---|
-| **Node.js** | `>= 20.18.0` | `LIVE_RUNTIME_VALIDATED` | `UNSUPPORTED` | Execution blocked. Built-in crypto and ESM required. |
+| **Node.js** | `>= 20.0.0` (tested up to 20.18.0+) | `LIVE_RUNTIME_VALIDATED` | `UNSUPPORTED` | Execution blocked. Built-in crypto and ESM required. |
 | **Git** | `>= 2.30.0` | `LIVE_RUNTIME_VALIDATED` | `UNSUPPORTED` | Execution blocked. Git diff inspection required. |
 | **Antigravity CLI (`agy`)** | `>= 1.2.0` | `LIVE_RUNTIME_VALIDATED` | `DEGRADED` (Tier 1) / `UNSUPPORTED` (Tier 2) | Tier 1 passes offline; Tier 2 live audit blocked. |
 | **GitHub CLI (`gh`)** | `>= 2.50.0` | `LIVE_RUNTIME_VALIDATED` | `DEGRADED` | Local integrity passes; Sigstore attestation verification disabled. |
@@ -72,5 +72,5 @@ npm run doctor -- --json
 The Doctor automatically maps your host's environment against this compatibility matrix:
 - **`READY`**: Host satisfies all required prerequisites for Tier 1 and Tier 2.
 - **`DEGRADED`**: Host can run Tier 1 deterministic gates, but lacks non-essential tools (e.g. `gh` CLI).
-- **`UNSUPPORTED`**: Host lacks essential prerequisites (e.g. Node.js < 20.18.0 or unsupported OS architecture).
+- **`UNSUPPORTED`**: Host lacks essential prerequisites (e.g. Node.js < 20.0.0 or unsupported OS architecture).
 - **`UNVERIFIABLE`**: Host configuration is present (e.g. sandbox permissions JSON) but live sandbox enforcement has not yet been directly observed.
